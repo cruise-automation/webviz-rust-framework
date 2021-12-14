@@ -1,0 +1,19 @@
+# Copyright (c) 2021-present, Cruise LLC
+#
+# This source code is licensed under the Apache License, Version 2.0,
+# found in the LICENSE-APACHE file in the root directory of this source tree.
+# You may not use this file except in compliance with the License.
+
+[package]
+name = "wrflib_widget"
+version = "0.0.1"
+edition = "2018"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/janpaul123/wrflib"
+repository = "https://github.com/janpaul123/wrflib"
+readme = "README.md"
+description = "The widget toolkit for Wrf"
+
+[dependencies.wrflib]
+path = "../main"
+version = "0.0.1"

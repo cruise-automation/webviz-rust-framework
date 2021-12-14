@@ -1,0 +1,69 @@
+# Copyright (c) 2021-present, Cruise LLC
+#
+# This source code is licensed under the Apache License, Version 2.0,
+# found in the LICENSE-APACHE file in the root directory of this source tree.
+# You may not use this file except in compliance with the License.
+
+[package]
+name = "wrflib"
+version = "0.0.1"
+edition = "2018"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/janpaul123/wrflib"
+repository = "https://github.com/janpaul123/wrflib"
+readme = "README.md"
+description = "🐢⚡ Wrf is a fast, cross-platform (web+native), GPU-based application framework, written in Rust."
+
+[features]
+tls=["ureq/tls"] # TLS (for HTTPS) doesn't currently work with cross-compilation, so we allow disabling it.
+cef=["wrflib_cef"] # Ship a Chromium browser using CEF in the native app.
+cef-dev-tools=["cef"] # Show the Chrome DevTools on startup. TODO(JP): should we move this to a keyboard shortcut or so at some point?
+cef-debug=["wrflib_cef/debug"] # Use the CEF debug build, and extra verbose logging.
+cef-server=["cef"] # Serve web files from the application bundle
+cef-bundle=["cef", "cef-server"] # Used when building the app bundle
+
+[dependencies]
+wrflib_vector = { path = "./vector", version = "0.0.1" }
+wrflib_shader_compiler = { path = "./shader_compiler", version = "0.0.1" }
+wrflib_cef = { path = "./cef", version = "0.0.1", optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+ureq = { version = "2.1.1", default-features = false }
+rand = "0.8.4"
+flate2 = "1"
+
+[target.aarch64-apple-darwin.dependencies]
+wrflib_objc_sys = { path = "./bind/objc-sys", version = "0.0.1" }
+
+[target.x86_64-apple-darwin.dependencies]
+wrflib_objc_sys = { path = "./bind/objc-sys", version = "0.0.1" }
+
+[target.x86_64-unknown-linux-gnu.dependencies]
+wrflib_glx_sys = { path = "./bind/glx-sys", version = "0.0.1" }
+wrflib_x11_sys = { path = "./bind/x11-sys", version = "0.0.1" }
+libc = "0.2"
+gl = "0.14"
+time = "0.1.4"
+
+[target.armv7-unknown-linux-gnueabihf.dependencies]
+wrflib_glx_sys = { path = "./bind/glx-sys", version = "0.0.1" }
+wrflib_x11_sys = { path = "./bind/x11-sys", version = "0.0.1" }
+libc = "0.2"
+gl = "0.14"
+time = "0.1.4"
+
+[target.x86_64-pc-windows-gnu.dependencies]
+wio = "0.2"
+time = "0.1.4"
+
+[target.x86_64-pc-windows-gnu.dependencies.winapi]
+version = "0.3"
+features = ["dwmapi", "libloaderapi", "shellscalingapi", "winuser", "winbase", "d3d11", "d3d11sdklayers", "d3dcommon", "d3dcompiler", "dxgi1_2", "dxgiformat", "dxgitype", "winerror"]
+
+[target.x86_64-pc-windows-msvc.dependencies]
+wio = "0.2"
+time = "0.1.4"
+
+[target.x86_64-pc-windows-msvc.dependencies.winapi]
+version = "0.3"
+features = ["dwmapi","libloaderapi", "shellscalingapi", "winuser", "winbase", "d3d11", "d3d11sdklayers", "d3dcommon", "d3dcompiler", "dxgi1_2", "dxgiformat", "dxgitype", "winerror"]

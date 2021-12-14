@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<!--
+Copyright (c) 2021-present, Cruise LLC
+
+This source code is licensed under the Apache License, Version 2.0,
+found in the LICENSE-APACHE file in the root directory of this source tree.
+You may not use this file except in compliance with the License.
+-->
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="Cache-Control" content="no-cache">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="mobile-web-app-capable" content="yes">
+        <title>Example</title>
+        <base href="../../../" />
+        <script type="text/javascript" src="wrflib/web/dist/wrf_runtime.js"></script>
+        <script type="text/javascript">
+            if (wrf.jsRuntime === "wasm") {
+              wrf.initialize({ targetName: "multithread_example" });
+            } else {
+              wrf.initialize();
+            }
+        </script>
+        <link rel="stylesheet" href="wrflib/main/src/wrf.css">
+    </head>
+</html>

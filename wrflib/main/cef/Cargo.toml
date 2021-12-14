@@ -1,0 +1,17 @@
+[package]
+name = "wrflib_cef"
+version = "0.0.1"
+edition = "2018"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/janpaul123/wrflib"
+repository = "https://github.com/janpaul123/wrflib"
+description = "CEF helpers for Wrf"
+
+[features]
+debug=["wrflib_cef_sys/debug"] # Use a debug build of CEF instead of a release build. Useful for its assertions!
+
+[dependencies]
+widestring = "0.4.0"
+
+[dependencies.wrflib_cef_sys]
+path="../bind/cef-sys"

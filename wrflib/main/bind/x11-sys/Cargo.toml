@@ -1,0 +1,11 @@
+[package]
+name = "wrflib_x11_sys"
+version = "0.0.1"
+edition = "2018"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/janpaul123/wrflib"
+repository = "https://github.com/janpaul123/wrflib"
+readme = "README.md"
+description = "The x11 bindings for Wrf"
+
+[dependencies]

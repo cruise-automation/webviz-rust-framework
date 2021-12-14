@@ -1,0 +1,25 @@
+{
+    "name": "wrflib-web",
+    "version": "0.0.0",
+    "license": "MIT",
+    "private": true,
+    "dependencies": {},
+    "devDependencies": {
+        "@types/offscreencanvas": "^2019.6.4",
+        "@typescript-eslint/eslint-plugin": "^4.33.0",
+        "@typescript-eslint/parser": "^4.33.0",
+        "eslint": "^7.32.0",
+        "eslint-config-prettier": "^8.3.0",
+        "eslint-plugin-prettier": "^4.0.0",
+        "prettier": "^2.4.1",
+        "ts-loader": "^9.2.6",
+        "typescript": "^4.4.3",
+        "webpack": "^5.57.1",
+        "webpack-cli": "^4.8.0"
+    },
+    "scripts": {
+        "build": "webpack --mode production",
+        "watch": "webpack --watch --mode development",
+        "lint": "eslint . --ext .js,.jsx,.ts,.tsx"
+    }
+}
