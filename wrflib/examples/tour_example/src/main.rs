@@ -9,12 +9,16 @@ use wrflib_widget::*;
 
 const TEXT_HEADING: TextInsProps = TextInsProps {
     text_style: TextStyle { font_size: 28.0, line_spacing: 2.0, ..TEXT_STYLE_NORMAL },
+    wrapping: Wrapping::Word,
     color: COLOR_WHITE,
+    padding: Padding::all(10.),
     ..TextInsProps::DEFAULT
 };
 const TEXT_BODY: TextInsProps = TextInsProps {
     text_style: TextStyle { font_size: 14.0, height_factor: 2.0, line_spacing: 3.0, ..TEXT_STYLE_NORMAL },
+    wrapping: Wrapping::Word,
     color: COLOR_WHITE,
+    padding: Padding::all(10.),
     ..TextInsProps::DEFAULT
 };
 
@@ -76,33 +80,20 @@ impl TourExampleApp {
 
     pub fn draw_variable_text(&mut self, cx: &mut Cx) {
         TextIns::draw_walk(cx, "Text", &TEXT_HEADING);
-        {
-            // could be a text container at some point
-            let text = cx.begin_turtle(Layout {
-                walk: Walk { width: Width::Fill, height: Height::Compute, ..Walk::default() },
-                // TODO: consider if we need those properties
-                padding: Padding::all(10.),
-                new_line_padding: 15.,
-                line_wrap: LineWrap::Overflow,
-                ..Layout::default()
-            });
-            TextIns::draw_walk(
-                cx,
-                "Text is probably the most essential widget for your UI. It will try to adapt to the dimensions of its \
-                 container.\nYou can change its size:\n",
-                &TEXT_BODY,
-            );
+        TextIns::draw_walk(
+            cx,
+            "Text is probably the most essential widget for your UI. It will try to adapt to the dimensions of its \
+             container.\nYou can change its size:\n",
+            &TEXT_BODY,
+        );
+        TextIns::draw_walk(
+            cx,
+            &format!("This text is {} pixels\n", self.font_size),
+            // TODO: maybe introduce with_font_size()
+            &TextInsProps { text_style: TextStyle { font_size: self.font_size, ..TEXT_BODY.text_style }, ..TEXT_BODY },
+        );
 
-            TextIns::draw_walk(
-                cx,
-                &format!("This text is {} pixels\n", self.font_size),
-                // TODO: maybe introduce with_font_size()
-                &TextInsProps { text_style: TextStyle { font_size: self.font_size, ..TEXT_BODY.text_style }, ..TEXT_BODY },
-            );
-            cx.end_turtle(text);
-        }
         let row = cx.begin_row_turtle();
-
         let background_ranges = vec![
             FloatSliderBackgroundRange { min_scaled: 0.0, max_scaled: self.font_size, color: COLOR_BLUE800, height_pixels: 10. },
             FloatSliderBackgroundRange { min_scaled: self.font_size, max_scaled: 70.0, color: COLOR_WHITE, height_pixels: 10. },
@@ -129,7 +120,7 @@ impl TourExampleApp {
         // There should always be a outer turtle spanning the whole content as a first turtle
         let window_turtle = cx.begin_turtle(Layout {
             direction: Direction::Down,
-            walk: Walk { width: Width::Fill, height: Height::Fill, ..Walk::default() },
+            walk: Walk { width: Width::Fill, height: Height::Fill },
             ..Layout::default()
         });
 
@@ -155,15 +146,12 @@ impl TourExampleApp {
         cx.begin_bottom_align();
         {
             {
-                let row = cx.begin_row_turtle();
                 TextIns::draw_walk(cx, "And its color:\n", &TEXT_BODY);
-
                 TextIns::draw_walk(
                     cx,
                     &format!("Color: {{r: {:.2}, g: {:.2}, b: {:.2}}}\n", self.color.x, self.color.y, self.color.z),
                     &TextInsProps { color: self.color, ..TEXT_BODY },
                 );
-                cx.end_turtle(row);
             }
             {
                 let row = cx.begin_row_turtle();

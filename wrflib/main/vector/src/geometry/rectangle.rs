@@ -16,7 +16,7 @@ pub struct Rectangle {
 
 impl Rectangle {
     /// Creates a new rectangle with the given minimum and maximum point.
-    pub fn new(p_min: Point, p_max: Point) -> Rectangle {
+    pub(crate) fn new(p_min: Point, p_max: Point) -> Rectangle {
         Rectangle { p_min, p_max }
     }
 }

@@ -259,7 +259,7 @@ impl Cx {
     /// TODO(JP): It's unclear to me if the reusing of GPU resources in this way
     /// is beneficial. And if it is, if it should instead be done in the
     /// platform-specific code instead.
-    fn create_draw_call(&mut self, shader_id: usize, force_new_draw_call: bool) -> &mut DrawCall {
+    fn create_draw_call(&mut self, shader_id: usize, props: DrawCallProps) -> &mut DrawCall {
         assert!(self.in_redraw_cycle, "Must be in redraw cycle to append to draw calls");
 
         let sh = &self.shaders[shader_id];
@@ -269,7 +269,7 @@ impl Cx {
         let draw_call_id = cxview.draw_calls_len;
 
         // Find a draw call to append to.
-        if !force_new_draw_call {
+        if props.is_batchable() {
             let shader_group_size = self.shader_group_instance_offsets.len();
             if shader_group_size > 0 {
                 // If we're in a shader group then the given shader must be part of the group, so we just
@@ -286,13 +286,7 @@ impl Cx {
                 // the shader that we're drawing, and if so, appending to that.
                 if cxview.draw_calls_len > 0 && !self.debug_flags.disable_draw_call_batching {
                     let dc = &mut cxview.draw_calls[cxview.draw_calls_len - 1];
-                    // Let's not append to DrawCalls that are scroll-sticky, since that is generally
-                    // not what you want.
-                    if dc.sub_view_id == 0
-                        && dc.shader_id == shader_id
-                        && !dc.scroll_sticky_horizontal
-                        && !dc.scroll_sticky_vertical
-                    {
+                    if dc.props.is_batchable() && dc.sub_view_id == 0 && dc.shader_id == shader_id {
                         return &mut cxview.draw_calls[cxview.draw_calls_len - 1];
                     }
                 }
@@ -305,12 +299,10 @@ impl Cx {
         // see if we need to add a new one
         if draw_call_id >= cxview.draw_calls.len() {
             cxview.draw_calls.push(DrawCall {
-                geometry: None,
+                props,
                 draw_call_id,
                 view_id: current_view_id,
                 redraw_id: self.redraw_id,
-                scroll_sticky_horizontal: false,
-                scroll_sticky_vertical: false,
                 sub_view_id: 0,
                 shader_id,
                 instances: Vec::new(),
@@ -336,7 +328,7 @@ impl Cx {
         // reuse an older one, keeping all GPU resources attached
         let dc = &mut cxview.draw_calls[draw_call_id];
         dc.shader_id = shader_id;
-        dc.geometry = None;
+        dc.props = props;
         dc.sub_view_id = 0; // make sure its recognised as a draw call
                             // truncate buffers and set update frame
         dc.redraw_id = self.redraw_id;
@@ -347,13 +339,11 @@ impl Cx {
         dc.textures_2d.resize(sh.mapping.textures.len(), 0);
         dc.instance_dirty = true;
         dc.uniforms_dirty = true;
-        dc.scroll_sticky_horizontal = false;
-        dc.scroll_sticky_vertical = false;
         dc
     }
 
     /// Add a slice of instances to [`DrawCall::instances`]. See [`Cx::add_instances`].
-    fn add_instances_internal<T: Sized>(&mut self, shader: &'static Shader, data: &[T], force_new_draw_call: bool) -> Area {
+    fn add_instances_internal<T: Sized>(&mut self, shader: &'static Shader, data: &[T], props: DrawCallProps) -> Area {
         if data.is_empty() {
             // This is important, because otherwise you can call this function with empty data in order to force
             // a particular ordering of `DrawCall`s, and then depend on batching of `DrawCall`s. That should
@@ -363,7 +353,7 @@ impl Cx {
         let shader_id = self.get_shader_id(shader);
         let total_instance_slots = self.shaders[shader_id].mapping.instance_props.total_slots;
         assert_eq!(total_instance_slots * std::mem::size_of::<f32>(), std::mem::size_of::<T>());
-        let dc = self.create_draw_call(shader_id, force_new_draw_call);
+        let dc = self.create_draw_call(shader_id, props);
         let data_f32 = unsafe {
             std::slice::from_raw_parts(
                 data as *const [_] as *const f32,
@@ -393,7 +383,14 @@ impl Cx {
     /// Uses [`Cx::create_draw_call`] under the hood to find the [`DrawCall`]
     /// to add to.
     pub fn add_instances<T: Sized>(&mut self, shader: &'static Shader, data: &[T]) -> Area {
-        self.add_instances_internal(shader, data, false)
+        self.add_instances_internal(shader, data, DrawCallProps::default())
+    }
+
+    /// Add a slice of instances while specifying a custom Geometry
+    pub fn add_mesh_instances<T: Sized>(&mut self, shader: &'static Shader, data: &[T], geometry: Geometry) -> Area {
+        assert!(self.shader_group_instance_offsets.is_empty(), "Can't add mesh instances when in a shader group");
+
+        self.add_instances_internal(shader, data, DrawCallProps { geometry: Some(geometry), ..Default::default() })
     }
 
     /// By default, [`DrawCall`] gets horizontal and vertical scrolling applied to
@@ -422,18 +419,11 @@ impl Cx {
     ) -> Area {
         assert!(self.shader_group_instance_offsets.is_empty(), "Can't add instances with scroll sticky when in a shader group");
 
-        let area = self.add_instances_internal(shader, data, false);
-        match area {
-            Area::InstanceRange(inst) => {
-                let cxview = &mut self.views[inst.view_id];
-                let draw_call = &mut cxview.draw_calls[inst.draw_call_id];
-                draw_call.scroll_sticky_horizontal = horizontal;
-                draw_call.scroll_sticky_vertical = vertical;
-            }
-            Area::Empty => (),
-            _ => panic!("Area must be an Area::InstanceRange or Area::Empty at this point"),
-        }
-        area
+        self.add_instances_internal(
+            shader,
+            data,
+            DrawCallProps { scroll_sticky_horizontal: horizontal, scroll_sticky_vertical: vertical, ..Default::default() },
+        )
     }
 
     /// Start a "shader group", which is a group of [`Shader`]s that will always be drawn in
@@ -473,11 +463,12 @@ impl Cx {
         if self.debug_flags.disable_draw_call_batching
             || cxview.draw_calls_len < shader_group_size
             || shader_ids.iter().enumerate().any(|(index, &shader_id)| {
-                cxview.draw_calls[cxview.draw_calls_len - shader_group_size + index].shader_id != shader_id
+                let dc = &cxview.draw_calls[cxview.draw_calls_len - shader_group_size + index];
+                dc.shader_id != shader_id || dc.sub_view_id != 0
             })
         {
             for shader_id in shader_ids {
-                self.create_draw_call(shader_id, true);
+                self.create_draw_call(shader_id, DrawCallProps::default());
             }
         }
 
@@ -558,6 +549,25 @@ impl DrawUniforms {
     }
 }
 
+/// Some user-defined props to initialize a [`DrawCall`] with.
+#[derive(Default, Clone)]
+pub(crate) struct DrawCallProps {
+    /// The base [`Geometry`] object that will be used for generating the initial
+    /// vertex locations for every instance, such as a rectangle or cube.
+    /// This is currently only used when specifying custom meshes.
+    pub(crate) geometry: Option<Geometry>,
+    /// See [`Cx::add_instances_with_scroll_sticky`].
+    scroll_sticky_vertical: bool,
+    /// See [`Cx::add_instances_with_scroll_sticky`].
+    scroll_sticky_horizontal: bool,
+}
+impl DrawCallProps {
+    /// Whether the draw call can be batched, or if a new one should be created.
+    fn is_batchable(&self) -> bool {
+        self.geometry.is_none() && !self.scroll_sticky_horizontal && !self.scroll_sticky_vertical
+    }
+}
+
 /// This represents an actual call to the GPU, _or_ it can represent a
 /// sub-[`View`], in case [`DrawCall::sub_view_id`] is set. Note that all of this behaves
 /// completely differently if [`DrawCall::sub_view_id`] is set; all regular drawing fields
@@ -602,19 +612,9 @@ pub struct DrawCall {
     pub(crate) uniforms_dirty: bool,
     /// Hardcoded set of uniforms that are present on every [`DrawCall`].
     pub(crate) draw_uniforms: DrawUniforms,
-    /// The base [`Geometry`] object that will be used for generating the initial
-    /// vertex locations for every instance, such as a rectangle or cube.
-    ///
-    /// TODO(JP): This geometry override seems to currently never get used, but
-    /// I can see how it could be potentially useful in the future. However, if
-    /// it doesn't turn out to be useful, let's remove it.
-    pub(crate) geometry: Option<Geometry>,
-    /// See [`Cx::add_instances_with_scroll_sticky`].
-    pub(crate) scroll_sticky_vertical: bool,
-    /// See [`Cx::add_instances_with_scroll_sticky`].
-    pub(crate) scroll_sticky_horizontal: bool,
     /// Platform-specific data for use during painting.
     pub(crate) platform: CxPlatformDrawCall,
+    pub(crate) props: DrawCallProps,
 }
 
 impl DrawCall {
@@ -622,11 +622,11 @@ impl DrawCall {
     /// walking the draw tree during painting.
     pub(crate) fn set_local_scroll(&mut self, scroll: Vec2, local_scroll: Vec2) {
         self.draw_uniforms.draw_scroll_x = scroll.x;
-        if !self.scroll_sticky_horizontal {
+        if !self.props.scroll_sticky_horizontal {
             self.draw_uniforms.draw_scroll_x += local_scroll.x;
         }
         self.draw_uniforms.draw_scroll_y = scroll.y;
-        if !self.scroll_sticky_vertical {
+        if !self.props.scroll_sticky_vertical {
             self.draw_uniforms.draw_scroll_y += local_scroll.y;
         }
         self.draw_uniforms.draw_local_scroll_x = local_scroll.x;
@@ -668,6 +668,8 @@ impl DrawCall {
 /// TODO(JP): Currently empty, but I can see this be potentially useful, so I left
 /// the code around. Might want to either make use of this directly, or expose it
 /// as something users can configure, or just remove altogether.
+///  - This could potentially be used for adding transformations of many instances,
+///    for example translating or rotating, similarly to ThreeJS's Group abstraction.
 #[derive(Default, Clone)]
 #[repr(C)]
 pub struct ViewUniforms {}

@@ -11,6 +11,7 @@
 import * as wasm from "./wrf_wasm_runtime";
 import * as cef from "./wrf_cef_runtime";
 import { jsRuntime } from "./type_of_runtime";
+import "./wrf.css";
 
 const {
   initialize,
@@ -21,6 +22,8 @@ const {
   serializeWrfArrayForPostMessage,
   deserializeWrfArrayFromPostMessage,
   callRustInSameThreadSync,
+  createBuffer,
+  createReadOnlyBuffer,
 } = jsRuntime === "cef" ? cef : wasm;
 
 export {
@@ -33,4 +36,6 @@ export {
   deserializeWrfArrayFromPostMessage,
   callRustInSameThreadSync,
   jsRuntime,
+  createBuffer,
+  createReadOnlyBuffer,
 };

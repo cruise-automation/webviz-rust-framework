@@ -344,25 +344,28 @@ pub struct AppOpenFilesEvent {
     pub user_files: Vec<UserFile>,
 }
 
+/// Events that are handled internally and are not propagated to an application `handle` method.
+#[derive(Debug, Clone)]
+pub enum SystemEvent {
+    /// See [`WebRustCallEvent`]. This event must have a handler registered through [`Cx::on_call_rust`].
+    WebRustCall(Option<WebRustCallEvent>),
+    Draw,
+    /// We're going to repaint our draw tree.
+    Paint,
+    /// The system wants us to set a different mouse cursor.
+    WindowSetHoverCursor(MouseCursor),
+    /// Calls `do_message_loop_work` for CEF.
+    #[cfg(feature = "cef")]
+    CefDoMessageLoopWork,
+}
+
 /// Global event that gets passed into `handle`, and which you can pass down to your own widgets.
-///
-/// TODO(JP): This is kind of a mishmash of events that are communicated between the lower level
-/// windowing layers, and the actual user application. Would be good to split out the low level
-/// events to a `SystemEvent` or `PlatformEvent` or so, and keep [`Event`] as just user-level events.
 #[derive(Clone, Debug)]
 pub enum Event {
     /// No event, to avoid `[Option<Event>]` all over the place.
     None,
     /// App gets started. Should be the very first event that gets fired.
     Construct,
-    /// We're going to call `draw`.
-    ///
-    /// TODO(JP): Seems to be for internal use only; let's maybe not expose this to users?
-    Draw,
-    /// We're going to repaint our draw tree.
-    ///
-    /// TODO(JP): Seems to be for internal use only; let's maybe not expose this to users?
-    Paint,
     /// App gained focus.
     ///
     /// TODO(JP): Rename to `AppFocusGained` to be more symmetric with [`Event::AppFocusLost`]?
@@ -371,10 +374,6 @@ pub enum Event {
     AppFocusLost,
     /// We're going to paint a new frame. Useful for animations; you can request this using [`Cx::request_next_frame`].
     NextFrame,
-    /// The system wants us to set a different mouse cursor.
-    ///
-    /// TODO(JP): Seems to be for internal use only; let's maybe not expose this to users?
-    WindowSetHoverCursor(MouseCursor),
     /// See [`WindowDragQueryEvent`]
     WindowDragQuery(WindowDragQueryEvent),
     /// See [`WindowCloseRequestedEvent`]
@@ -424,13 +423,8 @@ pub enum Event {
     FileDragUpdate(FileDragUpdateEvent),
     /// When a file is being dragged and the mouse moves out of the window
     FileDragCancel,
-    /// See [`WebRustCallEvent`]. This event is not propagated through the main `handle` function
-    /// and instead must have a handler registered through [`Cx::on_call_rust`].
-    #[cfg(any(target_arch = "wasm32", feature = "cef"))]
-    WebRustCall(Option<WebRustCallEvent>),
-    /// For internal use only; calls `do_message_loop_work` for CEF.
-    #[cfg(feature = "cef")]
-    CefDoMessageLoopWork,
+    /// See [`SystemEvent`]. These events are not passed to `handle`.
+    SystemEvent(SystemEvent),
 }
 
 impl Default for Event {

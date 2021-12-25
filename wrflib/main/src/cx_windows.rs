@@ -49,9 +49,6 @@ impl Cx {
             for mut event in events {
                 self.process_pre_event(&mut event);
                 match &event {
-                    Event::WindowSetHoverCursor(mc) => {
-                        self.set_hover_mouse_cursor(mc.clone());
-                    }
                     Event::WindowResizeLoop(wr) => {
                         for d3d11_window in &mut d3d11_windows {
                             if d3d11_window.window_id == wr.window_id {
@@ -98,150 +95,168 @@ impl Cx {
                         }
                         self.call_event_handler(&mut event);
                     }
-                    Event::Paint => {
-                        let vsync = self.process_desktop_paint_callbacks();
+                    Event::SystemEvent(e) => {
+                        match e {
+                            SystemEvent::WindowSetHoverCursor(mc) => {
+                                self.set_hover_mouse_cursor(mc.clone());
+                            }
+                            SystemEvent::Paint => {
+                                let vsync = self.process_desktop_paint_callbacks();
 
-                        // construct or destruct windows
-                        for (index, window) in self.windows.iter_mut().enumerate() {
-                            window.window_state = match &window.window_state {
-                                CxWindowState::Create { inner_size, position, title, .. } => {
-                                    // lets create a platformwindow
-                                    let d3d11_window =
-                                        D3d11Window::new(index, &d3d11_cx, win32_app, *inner_size, *position, &title);
-                                    window.window_geom = d3d11_window.window_geom.clone();
-                                    d3d11_windows.push(d3d11_window);
-                                    for d3d11_window in &mut d3d11_windows {
-                                        d3d11_window.win32_window.update_ptrs();
-                                    }
-                                    CxWindowState::Created
-                                }
-                                CxWindowState::Close => {
-                                    // ok we close the window
-                                    // lets send it a WM_CLOSE event
-                                    for d3d11_window in &mut d3d11_windows {
-                                        if d3d11_window.window_id == index {
-                                            d3d11_window.win32_window.close_window();
-                                            if win32_app.event_loop_running == false {
-                                                return false;
+                                // construct or destruct windows
+                                for (index, window) in self.windows.iter_mut().enumerate() {
+                                    window.window_state = match &window.window_state {
+                                        CxWindowState::Create { inner_size, position, title, .. } => {
+                                            // lets create a platformwindow
+                                            let d3d11_window =
+                                                D3d11Window::new(index, &d3d11_cx, win32_app, *inner_size, *position, &title);
+                                            window.window_geom = d3d11_window.window_geom.clone();
+                                            d3d11_windows.push(d3d11_window);
+                                            for d3d11_window in &mut d3d11_windows {
+                                                d3d11_window.win32_window.update_ptrs();
                                             }
-                                            break;
+                                            CxWindowState::Created
                                         }
-                                    }
-                                    CxWindowState::Closed
-                                }
-                                CxWindowState::Created => CxWindowState::Created,
-                                CxWindowState::Closed => CxWindowState::Closed,
-                            };
-
-                            if let Some(set_position) = window.window_set_position {
-                                for d3d11_window in &mut d3d11_windows {
-                                    if d3d11_window.window_id == index {
-                                        d3d11_window.win32_window.set_position(set_position);
-                                    }
-                                }
-                            }
-
-                            window.window_command = match &window.window_command {
-                                CxWindowCmd::Restore => {
-                                    for d3d11_window in &mut d3d11_windows {
-                                        if d3d11_window.window_id == index {
-                                            d3d11_window.win32_window.restore();
-                                        }
-                                    }
-                                    CxWindowCmd::None
-                                }
-                                CxWindowCmd::Maximize => {
-                                    for d3d11_window in &mut d3d11_windows {
-                                        if d3d11_window.window_id == index {
-                                            d3d11_window.win32_window.maximize();
-                                        }
-                                    }
-                                    CxWindowCmd::None
-                                }
-                                CxWindowCmd::Minimize => {
-                                    for d3d11_window in &mut d3d11_windows {
-                                        if d3d11_window.window_id == index {
-                                            d3d11_window.win32_window.minimize();
-                                        }
-                                    }
-                                    CxWindowCmd::None
-                                }
-                                _ => CxWindowCmd::None,
-                            };
-
-                            window.window_set_position = None;
-
-                            if let Some(topmost) = window.window_topmost {
-                                for d3d11_window in &mut d3d11_windows {
-                                    if d3d11_window.window_id == index {
-                                        d3d11_window.win32_window.set_topmost(topmost);
-                                    }
-                                }
-                            }
-                        }
-
-                        // set a cursor
-                        if !self.down_mouse_cursor.is_none() {
-                            win32_app.set_mouse_cursor(self.down_mouse_cursor.as_ref().unwrap().clone())
-                        } else if !self.hover_mouse_cursor.is_none() {
-                            win32_app.set_mouse_cursor(self.hover_mouse_cursor.as_ref().unwrap().clone())
-                        } else {
-                            win32_app.set_mouse_cursor(MouseCursor::Default)
-                        }
-
-                        if let Some(set_ime_position) = self.platform.set_ime_position {
-                            self.platform.set_ime_position = None;
-                            for d3d11_window in &mut d3d11_windows {
-                                d3d11_window.win32_window.set_ime_spot(set_ime_position);
-                            }
-                        }
-
-                        while self.platform.start_timer.len() > 0 {
-                            let (timer_id, interval, repeats) = self.platform.start_timer.pop().unwrap();
-                            win32_app.start_timer(timer_id, interval, repeats);
-                        }
-
-                        while self.platform.stop_timer.len() > 0 {
-                            let timer_id = self.platform.stop_timer.pop().unwrap();
-                            win32_app.stop_timer(timer_id);
-                        }
-
-                        // build a list of renderpasses to repaint
-                        let mut windows_need_repaint = 0;
-                        self.compute_passes_to_repaint(&mut passes_todo, &mut windows_need_repaint);
-
-                        if passes_todo.len() > 0 {
-                            self.hlsl_compile_shaders(&d3d11_cx);
-                            for pass_id in &passes_todo {
-                                match self.passes[*pass_id].dep_of.clone() {
-                                    CxPassDepOf::Window(window_id) => {
-                                        // find the accompanying render window
-                                        if let Some(d3d11_window) = d3d11_windows.iter_mut().find(|w| w.window_id == window_id) {
-                                            windows_need_repaint -= 1;
-
-                                            let dpi_factor = d3d11_window.window_geom.dpi_factor;
-                                            self.passes[*pass_id].set_dpi_factor(dpi_factor);
-
-                                            d3d11_window.resize_buffers(&d3d11_cx);
-
-                                            self.draw_pass_to_window(*pass_id, vsync, dpi_factor, d3d11_window, &d3d11_cx);
-                                            // call redraw if we guessed the dpi wrong on startup
-                                            if d3d11_window.first_draw {
-                                                d3d11_window.first_draw = false;
-                                                if dpi_factor != self.default_dpi_factor {
-                                                    self.request_draw();
+                                        CxWindowState::Close => {
+                                            // ok we close the window
+                                            // lets send it a WM_CLOSE event
+                                            for d3d11_window in &mut d3d11_windows {
+                                                if d3d11_window.window_id == index {
+                                                    d3d11_window.win32_window.close_window();
+                                                    if win32_app.event_loop_running == false {
+                                                        return false;
+                                                    }
+                                                    break;
                                                 }
                                             }
+                                            CxWindowState::Closed
+                                        }
+                                        CxWindowState::Created => CxWindowState::Created,
+                                        CxWindowState::Closed => CxWindowState::Closed,
+                                    };
+
+                                    if let Some(set_position) = window.window_set_position {
+                                        for d3d11_window in &mut d3d11_windows {
+                                            if d3d11_window.window_id == index {
+                                                d3d11_window.win32_window.set_position(set_position);
+                                            }
                                         }
                                     }
-                                    CxPassDepOf::Pass(parent_pass_id) => {
-                                        let dpi_factor = self.get_delegated_dpi_factor(parent_pass_id);
-                                        self.draw_pass_to_texture(*pass_id, dpi_factor, &d3d11_cx);
-                                    }
-                                    CxPassDepOf::None => {
-                                        self.draw_pass_to_texture(*pass_id, 1.0, &d3d11_cx);
+
+                                    window.window_command = match &window.window_command {
+                                        CxWindowCmd::Restore => {
+                                            for d3d11_window in &mut d3d11_windows {
+                                                if d3d11_window.window_id == index {
+                                                    d3d11_window.win32_window.restore();
+                                                }
+                                            }
+                                            CxWindowCmd::None
+                                        }
+                                        CxWindowCmd::Maximize => {
+                                            for d3d11_window in &mut d3d11_windows {
+                                                if d3d11_window.window_id == index {
+                                                    d3d11_window.win32_window.maximize();
+                                                }
+                                            }
+                                            CxWindowCmd::None
+                                        }
+                                        CxWindowCmd::Minimize => {
+                                            for d3d11_window in &mut d3d11_windows {
+                                                if d3d11_window.window_id == index {
+                                                    d3d11_window.win32_window.minimize();
+                                                }
+                                            }
+                                            CxWindowCmd::None
+                                        }
+                                        _ => CxWindowCmd::None,
+                                    };
+
+                                    window.window_set_position = None;
+
+                                    if let Some(topmost) = window.window_topmost {
+                                        for d3d11_window in &mut d3d11_windows {
+                                            if d3d11_window.window_id == index {
+                                                d3d11_window.win32_window.set_topmost(topmost);
+                                            }
+                                        }
                                     }
                                 }
+
+                                // set a cursor
+                                if !self.down_mouse_cursor.is_none() {
+                                    win32_app.set_mouse_cursor(self.down_mouse_cursor.as_ref().unwrap().clone())
+                                } else if !self.hover_mouse_cursor.is_none() {
+                                    win32_app.set_mouse_cursor(self.hover_mouse_cursor.as_ref().unwrap().clone())
+                                } else {
+                                    win32_app.set_mouse_cursor(MouseCursor::Default)
+                                }
+
+                                if let Some(set_ime_position) = self.platform.set_ime_position {
+                                    self.platform.set_ime_position = None;
+                                    for d3d11_window in &mut d3d11_windows {
+                                        d3d11_window.win32_window.set_ime_spot(set_ime_position);
+                                    }
+                                }
+
+                                while self.platform.start_timer.len() > 0 {
+                                    let (timer_id, interval, repeats) = self.platform.start_timer.pop().unwrap();
+                                    win32_app.start_timer(timer_id, interval, repeats);
+                                }
+
+                                while self.platform.stop_timer.len() > 0 {
+                                    let timer_id = self.platform.stop_timer.pop().unwrap();
+                                    win32_app.stop_timer(timer_id);
+                                }
+
+                                // build a list of renderpasses to repaint
+                                let mut windows_need_repaint = 0;
+                                self.compute_passes_to_repaint(&mut passes_todo, &mut windows_need_repaint);
+
+                                if passes_todo.len() > 0 {
+                                    self.hlsl_compile_shaders(&d3d11_cx);
+                                    for pass_id in &passes_todo {
+                                        match self.passes[*pass_id].dep_of.clone() {
+                                            CxPassDepOf::Window(window_id) => {
+                                                // find the accompanying render window
+                                                if let Some(d3d11_window) =
+                                                    d3d11_windows.iter_mut().find(|w| w.window_id == window_id)
+                                                {
+                                                    windows_need_repaint -= 1;
+
+                                                    let dpi_factor = d3d11_window.window_geom.dpi_factor;
+                                                    self.passes[*pass_id].set_dpi_factor(dpi_factor);
+
+                                                    d3d11_window.resize_buffers(&d3d11_cx);
+
+                                                    self.draw_pass_to_window(
+                                                        *pass_id,
+                                                        vsync,
+                                                        dpi_factor,
+                                                        d3d11_window,
+                                                        &d3d11_cx,
+                                                    );
+                                                    // call redraw if we guessed the dpi wrong on startup
+                                                    if d3d11_window.first_draw {
+                                                        d3d11_window.first_draw = false;
+                                                        if dpi_factor != self.default_dpi_factor {
+                                                            self.request_draw();
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            CxPassDepOf::Pass(parent_pass_id) => {
+                                                let dpi_factor = self.get_delegated_dpi_factor(parent_pass_id);
+                                                self.draw_pass_to_texture(*pass_id, dpi_factor, &d3d11_cx);
+                                            }
+                                            CxPassDepOf::None => {
+                                                self.draw_pass_to_texture(*pass_id, 1.0, &d3d11_cx);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {
+                                self.call_event_handler(&mut event);
                             }
                         }
                     }

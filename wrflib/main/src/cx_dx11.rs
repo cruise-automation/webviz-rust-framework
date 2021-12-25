@@ -92,7 +92,7 @@ impl Cx {
                     continue;
                 }
 
-                let geometry_id = if let Some(geometry) = draw_call.geometry {
+                let geometry_id = if let Some(geometry) = draw_call.props.geometry {
                     geometry.geometry_id
                 } else if let Some(geometry) = sh.default_geometry {
                     geometry.geometry_id

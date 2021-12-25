@@ -69,7 +69,7 @@ impl Popover {
         self.turtle_outer = Some(cx.begin_turtle(Layout {
             direction: Direction::Down,
             absolute: true,
-            walk: Walk { width: Width::Fill, height: Height::Fix(popover_y_bottom), margin: Margin::all(0.) },
+            walk: Walk { width: Width::Fill, height: Height::Fix(popover_y_bottom) },
             ..Layout::default()
         }));
         cx.begin_bottom_align();

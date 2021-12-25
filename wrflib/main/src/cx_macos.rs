@@ -90,206 +90,216 @@ impl Cx {
                         #[cfg(feature = "cef-debug")]
                         wrflib_cef::shutdown();
                     }
-                    Event::Paint => {
-                        let vsync = self.process_desktop_paint_callbacks();
+                    Event::SystemEvent(e) => {
+                        match e {
+                            SystemEvent::Paint => {
+                                let vsync = self.process_desktop_paint_callbacks();
 
-                        // construct or destruct windows
-                        for (index, window) in self.windows.iter_mut().enumerate() {
-                            window.window_state = match &window.window_state {
-                                CxWindowState::Create {
-                                    inner_size,
-                                    position,
-                                    title,
-                                    add_drop_target_for_app_open_files,
-                                    #[cfg(feature = "cef")]
-                                    cef_url,
-                                    #[cfg(feature = "cef-server")]
-                                    get_resource_url_callback,
-                                } => {
-                                    // lets create a platformwindow
-                                    let metal_window = MetalWindow::new(
-                                        index,
-                                        &metal_cx,
-                                        cocoa_app,
-                                        *inner_size,
-                                        *position,
-                                        title,
-                                        *add_drop_target_for_app_open_files,
-                                    );
-                                    window.window_geom = metal_window.window_geom.clone();
-
-                                    #[cfg(feature = "cef")]
-                                    {
-                                        use crate::cx_apple::*;
-                                        if let Some(url) = cef_url {
-                                            let content_view: id =
-                                                unsafe { msg_send![metal_window.cocoa_window.window, contentView] };
-                                            self.cef_browser.initialize(
+                                // construct or destruct windows
+                                for (index, window) in self.windows.iter_mut().enumerate() {
+                                    window.window_state = match &window.window_state {
+                                        CxWindowState::Create {
+                                            inner_size,
+                                            position,
+                                            title,
+                                            add_drop_target_for_app_open_files,
+                                            #[cfg(feature = "cef")]
+                                            cef_url,
+                                            #[cfg(feature = "cef-server")]
+                                            get_resource_url_callback,
+                                        } => {
+                                            // lets create a platformwindow
+                                            let metal_window = MetalWindow::new(
+                                                index,
+                                                &metal_cx,
+                                                cocoa_app,
                                                 *inner_size,
-                                                url,
-                                                content_view as wrflib_cef::WindowHandle,
-                                                #[cfg(feature = "cef-server")]
-                                                *get_resource_url_callback,
+                                                *position,
+                                                title,
+                                                *add_drop_target_for_app_open_files,
                                             );
-                                            unsafe {
-                                                // Put our own NSView on top of CEF.
-                                                let () = msg_send![metal_window.cocoa_window.view, removeFromSuperview];
-                                                let () = msg_send![content_view, addSubview: metal_window.cocoa_window.view];
+                                            window.window_geom = metal_window.window_geom.clone();
 
-                                                if *add_drop_target_for_app_open_files {
-                                                    // See [`disable_cef_dragged_types`] for more information
-                                                    disable_cef_dragged_types(content_view);
+                                            #[cfg(feature = "cef")]
+                                            {
+                                                use crate::cx_apple::*;
+                                                if let Some(url) = cef_url {
+                                                    let content_view: id =
+                                                        unsafe { msg_send![metal_window.cocoa_window.window, contentView] };
+                                                    self.cef_browser.initialize(
+                                                        *inner_size,
+                                                        url,
+                                                        content_view as wrflib_cef::WindowHandle,
+                                                        #[cfg(feature = "cef-server")]
+                                                        *get_resource_url_callback,
+                                                    );
+                                                    unsafe {
+                                                        // Put our own NSView on top of CEF.
+                                                        let () = msg_send![metal_window.cocoa_window.view, removeFromSuperview];
+                                                        let () =
+                                                            msg_send![content_view, addSubview: metal_window.cocoa_window.view];
+
+                                                        if *add_drop_target_for_app_open_files {
+                                                            // See [`disable_cef_dragged_types`] for more information
+                                                            disable_cef_dragged_types(content_view);
+                                                        }
+                                                    }
+                                                    cocoa_app.start_cef_timer();
                                                 }
                                             }
-                                            cocoa_app.start_cef_timer();
+
+                                            metal_windows.push(metal_window);
+                                            for metal_window in &mut metal_windows {
+                                                metal_window.cocoa_window.update_ptrs();
+                                            }
+                                            CxWindowState::Created
                                         }
-                                    }
-
-                                    metal_windows.push(metal_window);
-                                    for metal_window in &mut metal_windows {
-                                        metal_window.cocoa_window.update_ptrs();
-                                    }
-                                    CxWindowState::Created
-                                }
-                                CxWindowState::Close => {
-                                    for metal_window in &mut metal_windows {
-                                        if metal_window.window_id == index {
-                                            metal_window.cocoa_window.close_window();
-                                            break;
+                                        CxWindowState::Close => {
+                                            for metal_window in &mut metal_windows {
+                                                if metal_window.window_id == index {
+                                                    metal_window.cocoa_window.close_window();
+                                                    break;
+                                                }
+                                            }
+                                            CxWindowState::Closed
                                         }
-                                    }
-                                    CxWindowState::Closed
-                                }
-                                CxWindowState::Created => CxWindowState::Created,
-                                CxWindowState::Closed => CxWindowState::Closed,
-                            };
+                                        CxWindowState::Created => CxWindowState::Created,
+                                        CxWindowState::Closed => CxWindowState::Closed,
+                                    };
 
-                            window.window_command = match &window.window_command {
-                                CxWindowCmd::Restore => {
-                                    for metal_window in &mut metal_windows {
-                                        if metal_window.window_id == index {
-                                            metal_window.cocoa_window.restore();
+                                    window.window_command = match &window.window_command {
+                                        CxWindowCmd::Restore => {
+                                            for metal_window in &mut metal_windows {
+                                                if metal_window.window_id == index {
+                                                    metal_window.cocoa_window.restore();
+                                                }
+                                            }
+                                            CxWindowCmd::None
                                         }
-                                    }
-                                    CxWindowCmd::None
-                                }
-                                CxWindowCmd::Maximize => {
-                                    for metal_window in &mut metal_windows {
-                                        if metal_window.window_id == index {
-                                            metal_window.cocoa_window.maximize();
+                                        CxWindowCmd::Maximize => {
+                                            for metal_window in &mut metal_windows {
+                                                if metal_window.window_id == index {
+                                                    metal_window.cocoa_window.maximize();
+                                                }
+                                            }
+                                            CxWindowCmd::None
                                         }
-                                    }
-                                    CxWindowCmd::None
-                                }
-                                CxWindowCmd::Minimize => {
-                                    for metal_window in &mut metal_windows {
-                                        if metal_window.window_id == index {
-                                            metal_window.cocoa_window.minimize();
+                                        CxWindowCmd::Minimize => {
+                                            for metal_window in &mut metal_windows {
+                                                if metal_window.window_id == index {
+                                                    metal_window.cocoa_window.minimize();
+                                                }
+                                            }
+                                            CxWindowCmd::None
                                         }
-                                    }
-                                    CxWindowCmd::None
-                                }
-                                _ => CxWindowCmd::None,
-                            };
+                                        _ => CxWindowCmd::None,
+                                    };
 
-                            if let Some(topmost) = window.window_topmost {
-                                for metal_window in &mut metal_windows {
-                                    if metal_window.window_id == index {
-                                        metal_window.cocoa_window.set_topmost(topmost);
-                                    }
-                                }
-                            }
-                        }
-
-                        // set a cursor
-                        let mouse_cursor = if self.down_mouse_cursor.is_some() {
-                            self.down_mouse_cursor.as_ref().unwrap().clone()
-                        } else if self.hover_mouse_cursor.is_some() {
-                            self.hover_mouse_cursor.as_ref().unwrap().clone()
-                        } else {
-                            MouseCursor::Default
-                        };
-
-                        #[cfg(not(feature = "cef"))]
-                        cocoa_app.set_mouse_cursor(mouse_cursor);
-                        #[cfg(feature = "cef")]
-                        self.cef_browser.set_mouse_cursor(mouse_cursor);
-
-                        #[cfg(not(feature = "cef"))]
-                        if let Some(set_ime_position) = self.platform.set_ime_position {
-                            self.platform.set_ime_position = None;
-                            for metal_window in &mut metal_windows {
-                                metal_window.cocoa_window.set_ime_spot(set_ime_position);
-                            }
-                        }
-
-                        while !self.platform.start_timer.is_empty() {
-                            let (timer_id, interval, repeats) = self.platform.start_timer.pop().unwrap();
-                            cocoa_app.start_timer(timer_id, interval, repeats);
-                        }
-
-                        while !self.platform.stop_timer.is_empty() {
-                            let timer_id = self.platform.stop_timer.pop().unwrap();
-                            cocoa_app.stop_timer(timer_id);
-                        }
-
-                        if self.platform.set_menu {
-                            self.platform.set_menu = false;
-                            if let Some(menu) = &self.platform.last_menu {
-                                cocoa_app.update_app_menu(menu, &self.command_settings)
-                            }
-                        }
-
-                        // build a list of renderpasses to repaint
-                        let mut windows_need_repaint = 0;
-                        self.compute_passes_to_repaint(&mut passes_todo, &mut windows_need_repaint);
-
-                        if !passes_todo.is_empty() {
-                            self.mtl_compile_shaders(&metal_cx);
-
-                            for pass_id in &passes_todo {
-                                match self.passes[*pass_id].dep_of.clone() {
-                                    CxPassDepOf::Window(window_id) => {
-                                        // find the accompanying render window
-                                        // its a render window
-                                        windows_need_repaint -= 1;
+                                    if let Some(topmost) = window.window_topmost {
                                         for metal_window in &mut metal_windows {
-                                            if metal_window.window_id == window_id {
-                                                metal_window.set_vsync_enable(windows_need_repaint == 0 && vsync);
-                                                metal_window.set_buffer_count(if metal_window.window_geom.is_fullscreen {
-                                                    3
-                                                } else {
-                                                    2
-                                                });
+                                            if metal_window.window_id == index {
+                                                metal_window.cocoa_window.set_topmost(topmost);
+                                            }
+                                        }
+                                    }
+                                }
 
-                                                let dpi_factor = metal_window.window_geom.dpi_factor;
+                                // set a cursor
+                                let mouse_cursor = if self.down_mouse_cursor.is_some() {
+                                    self.down_mouse_cursor.as_ref().unwrap().clone()
+                                } else if self.hover_mouse_cursor.is_some() {
+                                    self.hover_mouse_cursor.as_ref().unwrap().clone()
+                                } else {
+                                    MouseCursor::Default
+                                };
 
-                                                metal_window.resize_core_animation_layer(&metal_cx);
+                                #[cfg(not(feature = "cef"))]
+                                cocoa_app.set_mouse_cursor(mouse_cursor);
+                                #[cfg(feature = "cef")]
+                                self.cef_browser.set_mouse_cursor(mouse_cursor);
 
-                                                self.draw_pass_to_layer(
-                                                    *pass_id,
-                                                    dpi_factor,
-                                                    metal_window.ca_layer,
-                                                    &mut metal_cx,
-                                                );
-                                                // call redraw if we guessed the dpi wrong on startup
-                                                if metal_window.first_draw {
-                                                    metal_window.first_draw = false;
-                                                    if dpi_factor != self.default_dpi_factor {
-                                                        self.request_draw();
+                                #[cfg(not(feature = "cef"))]
+                                if let Some(set_ime_position) = self.platform.set_ime_position {
+                                    self.platform.set_ime_position = None;
+                                    for metal_window in &mut metal_windows {
+                                        metal_window.cocoa_window.set_ime_spot(set_ime_position);
+                                    }
+                                }
+
+                                while !self.platform.start_timer.is_empty() {
+                                    let (timer_id, interval, repeats) = self.platform.start_timer.pop().unwrap();
+                                    cocoa_app.start_timer(timer_id, interval, repeats);
+                                }
+
+                                while !self.platform.stop_timer.is_empty() {
+                                    let timer_id = self.platform.stop_timer.pop().unwrap();
+                                    cocoa_app.stop_timer(timer_id);
+                                }
+
+                                if self.platform.set_menu {
+                                    self.platform.set_menu = false;
+                                    if let Some(menu) = &self.platform.last_menu {
+                                        cocoa_app.update_app_menu(menu, &self.command_settings)
+                                    }
+                                }
+
+                                // build a list of renderpasses to repaint
+                                let mut windows_need_repaint = 0;
+                                self.compute_passes_to_repaint(&mut passes_todo, &mut windows_need_repaint);
+
+                                if !passes_todo.is_empty() {
+                                    self.mtl_compile_shaders(&metal_cx);
+
+                                    for pass_id in &passes_todo {
+                                        match self.passes[*pass_id].dep_of.clone() {
+                                            CxPassDepOf::Window(window_id) => {
+                                                // find the accompanying render window
+                                                // its a render window
+                                                windows_need_repaint -= 1;
+                                                for metal_window in &mut metal_windows {
+                                                    if metal_window.window_id == window_id {
+                                                        metal_window.set_vsync_enable(windows_need_repaint == 0 && vsync);
+                                                        metal_window.set_buffer_count(
+                                                            if metal_window.window_geom.is_fullscreen { 3 } else { 2 },
+                                                        );
+
+                                                        let dpi_factor = metal_window.window_geom.dpi_factor;
+
+                                                        metal_window.resize_core_animation_layer(&metal_cx);
+
+                                                        self.draw_pass_to_layer(
+                                                            *pass_id,
+                                                            dpi_factor,
+                                                            metal_window.ca_layer,
+                                                            &mut metal_cx,
+                                                        );
+                                                        // call redraw if we guessed the dpi wrong on startup
+                                                        if metal_window.first_draw {
+                                                            metal_window.first_draw = false;
+                                                            if dpi_factor != self.default_dpi_factor {
+                                                                self.request_draw();
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
+                                            CxPassDepOf::Pass(parent_pass_id) => {
+                                                let dpi_factor = self.get_delegated_dpi_factor(parent_pass_id);
+                                                self.draw_pass_to_texture(*pass_id, dpi_factor, &metal_cx);
+                                            }
+                                            CxPassDepOf::None => {
+                                                self.draw_pass_to_texture(*pass_id, 1.0, &metal_cx);
+                                            }
                                         }
                                     }
-                                    CxPassDepOf::Pass(parent_pass_id) => {
-                                        let dpi_factor = self.get_delegated_dpi_factor(parent_pass_id);
-                                        self.draw_pass_to_texture(*pass_id, dpi_factor, &metal_cx);
-                                    }
-                                    CxPassDepOf::None => {
-                                        self.draw_pass_to_texture(*pass_id, 1.0, &metal_cx);
-                                    }
                                 }
+                            }
+                            #[cfg(feature = "cef")]
+                            SystemEvent::CefDoMessageLoopWork => {
+                                self.cef_do_message_loop_work();
+                            }
+                            _ => {
+                                self.call_event_handler(&mut event);
                             }
                         }
                     }
@@ -297,10 +307,6 @@ impl Cx {
                     Event::Signal { .. } => {
                         self.call_event_handler(&mut event);
                         self.call_signals();
-                    }
-                    #[cfg(feature = "cef")]
-                    Event::CefDoMessageLoopWork => {
-                        self.cef_do_message_loop_work();
                     }
                     _ => {
                         self.call_event_handler(&mut event);

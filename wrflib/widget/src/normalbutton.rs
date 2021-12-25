@@ -110,13 +110,15 @@ impl NormalButton {
 
     pub fn draw(&mut self, cx: &mut Cx, label: &str) {
         cx.begin_shader_group(&[&SHADER, &TEXT_INS_SHADER]);
+        cx.begin_padding_box(Padding::all(1.0));
         let turtle = cx.begin_turtle(Layout {
-            walk: Walk { width: Width::Compute, height: Height::Compute, margin: Margin::all(1.0) },
+            walk: Walk { width: Width::Compute, height: Height::Compute },
             padding: Padding { l: 16.0, t: 12.0, r: 16.0, b: 12.0 },
             ..Layout::default()
         });
         self.text_area = TextIns::draw_walk(cx, label, &TextInsProps::DEFAULT);
         let rect = cx.end_turtle(turtle);
+        cx.end_padding_box();
 
         self.bg_area = cx.add_instances(&SHADER, &[BgIns { base: QuadIns::from_rect(rect), ..Default::default() }]);
         self.component_base.register_component_area(cx, self.bg_area);

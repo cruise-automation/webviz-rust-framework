@@ -256,14 +256,18 @@ impl RenderProcessHandler for MyRenderProcessHandler {
     fn on_context_created(&self, _browser: &Browser, frame: &Frame, context: &V8Context) {
         let window = context.get_global().unwrap();
 
-        // Connect `window.cefCallRust` to `Event::WebRustCall` on the main thread.
+        // Connect `window.cefCallRust` to `SystemEvent::WebRustCall` on the main thread.
         // Note: This is also used in runtime detection for `jsRuntime`. If this is renamed or
         // removed, that must be updated.
         assert!(window.set_fn_value("cefCallRust", (), |_name, _obj, args, _other_data| {
             let name = args[0].get_string_value();
             let params = get_wrf_params(&args[1]);
             let callback_id = args[2].get_uint_value();
-            Cx::send_event_from_any_thread(Event::WebRustCall(Some(WebRustCallEvent { name, params, callback_id })));
+            Cx::send_event_from_any_thread(Event::SystemEvent(SystemEvent::WebRustCall(Some(WebRustCallEvent {
+                name,
+                params,
+                callback_id,
+            }))));
             None
         }));
 
@@ -304,7 +308,13 @@ impl RenderProcessHandler for MyRenderProcessHandler {
             let count = args[0].get_int_value();
             let buffer: Arc<Vec<u8>> = Arc::new(vec![0; count as usize]);
             let callback = Arc::new(MyV8ArrayBufferReleaseCallback { buffer });
-            let value = V8Value::create_array_buffer(callback.buffer.as_ptr(), callback.buffer.len(), callback);
+
+            let value = V8Value::create_array(2);
+            let arc_ptr = V8Value::create_uint(Arc::as_ptr(&callback.buffer) as u32);
+            let v8_buffer = V8Value::create_array_buffer(callback.buffer.as_ptr(), callback.buffer.len(), callback);
+            value.set_value_byindex(0, &v8_buffer);
+            value.set_value_byindex(1, &arc_ptr);
+
             Some(Ok(value))
         }));
 

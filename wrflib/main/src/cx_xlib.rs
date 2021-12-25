@@ -187,7 +187,7 @@ impl XlibApp {
                     as *mut dyn FnMut(&mut XlibApp, &mut Vec<Event>) -> bool,
             );
 
-            self.do_callback(&mut vec![Event::Paint]);
+            self.do_callback(&mut vec![Event::SystemEvent(SystemEvent::Paint)]);
 
             // Record the current time.
             let mut select_time = self.time_now();
@@ -438,28 +438,44 @@ impl XlibApp {
                                 let window_size = window.last_window_geom.inner_size;
                                 if pos.x >= 0.0 && pos.x < 10.0 && pos.y >= 0.0 && pos.y < 10.0 {
                                     window.last_nc_mode = Some(_NET_WM_MOVERESIZE_SIZE_TOPLEFT);
-                                    window.do_callback(&mut vec![Event::WindowSetHoverCursor(MouseCursor::NwResize)]);
+                                    window.do_callback(&mut vec![Event::SystemEvent(SystemEvent::WindowSetHoverCursor(
+                                        MouseCursor::NwResize,
+                                    ))]);
                                 } else if pos.x >= 0.0 && pos.x < 10.0 && pos.y >= window_size.y - 10.0 {
                                     window.last_nc_mode = Some(_NET_WM_MOVERESIZE_SIZE_BOTTOMLEFT);
-                                    window.do_callback(&mut vec![Event::WindowSetHoverCursor(MouseCursor::SwResize)]);
+                                    window.do_callback(&mut vec![Event::SystemEvent(SystemEvent::WindowSetHoverCursor(
+                                        MouseCursor::SwResize,
+                                    ))]);
                                 } else if pos.x >= 0.0 && pos.x < 5.0 {
                                     window.last_nc_mode = Some(_NET_WM_MOVERESIZE_SIZE_LEFT);
-                                    window.do_callback(&mut vec![Event::WindowSetHoverCursor(MouseCursor::WResize)]);
+                                    window.do_callback(&mut vec![Event::SystemEvent(SystemEvent::WindowSetHoverCursor(
+                                        MouseCursor::WResize,
+                                    ))]);
                                 } else if pos.x >= window_size.x - 10.0 && pos.y >= 0.0 && pos.y < 10.0 {
                                     window.last_nc_mode = Some(_NET_WM_MOVERESIZE_SIZE_TOPRIGHT);
-                                    window.do_callback(&mut vec![Event::WindowSetHoverCursor(MouseCursor::NeResize)]);
+                                    window.do_callback(&mut vec![Event::SystemEvent(SystemEvent::WindowSetHoverCursor(
+                                        MouseCursor::NeResize,
+                                    ))]);
                                 } else if pos.x >= window_size.x - 10.0 && pos.y >= window_size.y - 10.0 {
                                     window.last_nc_mode = Some(_NET_WM_MOVERESIZE_SIZE_BOTTOMRIGHT);
-                                    window.do_callback(&mut vec![Event::WindowSetHoverCursor(MouseCursor::SeResize)]);
+                                    window.do_callback(&mut vec![Event::SystemEvent(SystemEvent::WindowSetHoverCursor(
+                                        MouseCursor::SeResize,
+                                    ))]);
                                 } else if pos.x >= window_size.x - 5.0 {
                                     window.last_nc_mode = Some(_NET_WM_MOVERESIZE_SIZE_RIGHT);
-                                    window.do_callback(&mut vec![Event::WindowSetHoverCursor(MouseCursor::EResize)]);
+                                    window.do_callback(&mut vec![Event::SystemEvent(SystemEvent::WindowSetHoverCursor(
+                                        MouseCursor::EResize,
+                                    ))]);
                                 } else if pos.y <= 5.0 {
                                     window.last_nc_mode = Some(_NET_WM_MOVERESIZE_SIZE_TOP);
-                                    window.do_callback(&mut vec![Event::WindowSetHoverCursor(MouseCursor::NResize)]);
+                                    window.do_callback(&mut vec![Event::SystemEvent(SystemEvent::WindowSetHoverCursor(
+                                        MouseCursor::NResize,
+                                    ))]);
                                 } else if pos.y > window_size.y - 5.0 {
                                     window.last_nc_mode = Some(_NET_WM_MOVERESIZE_SIZE_BOTTOM);
-                                    window.do_callback(&mut vec![Event::WindowSetHoverCursor(MouseCursor::SResize)]);
+                                    window.do_callback(&mut vec![Event::SystemEvent(SystemEvent::WindowSetHoverCursor(
+                                        MouseCursor::SResize,
+                                    ))]);
                                 } else {
                                     match &drag_query_events[0] {
                                         Event::WindowDragQuery(wd) => match &wd.response {
@@ -707,7 +723,7 @@ impl XlibApp {
                     self.do_callback(&mut proc_signals);
                 }
 
-                self.do_callback(&mut vec![Event::Paint]);
+                self.do_callback(&mut vec![Event::SystemEvent(SystemEvent::Paint)]);
             }
 
             self.event_callback = None;
@@ -1492,7 +1508,7 @@ impl XlibWindow {
 
         self.do_callback(&mut vec![
             Event::WindowGeomChange(WindowGeomChangeEvent { window_id: self.window_id, old_geom, new_geom }),
-            Event::Paint,
+            Event::SystemEvent(SystemEvent::Paint),
         ]);
     }
 

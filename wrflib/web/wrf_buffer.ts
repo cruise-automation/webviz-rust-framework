@@ -244,10 +244,10 @@ export const allocatedVecs: Record<number, boolean> = {};
 const bufferRegistry = new FinalizationRegistry(
   ({
     arcPtr,
-    deconstructor,
+    destructor,
   }: {
     arcPtr: number;
-    deconstructor?: (arcPtr: number) => void;
+    destructor?: (arcPtr: number) => void;
   }) => {
     if (inTest) {
       if (allocatedArcs[arcPtr] === false) {
@@ -259,17 +259,17 @@ const bufferRegistry = new FinalizationRegistry(
     }
 
     delete bufferCache[arcPtr];
-    if (deconstructor) deconstructor(arcPtr);
+    if (destructor) destructor(arcPtr);
   }
 );
 
 const mutableWrfBufferRegistry = new FinalizationRegistry(
   ({
     bufferData,
-    deconstructor,
+    destructor,
   }: {
     bufferData: BufferData;
-    deconstructor: (bufferData: BufferData) => void;
+    destructor: (bufferData: BufferData) => void;
   }) => {
     if (inTest) {
       const { bufferPtr } = bufferData;
@@ -283,7 +283,7 @@ const mutableWrfBufferRegistry = new FinalizationRegistry(
       allocatedVecs[bufferPtr] = false;
     }
 
-    deconstructor(bufferData);
+    destructor(bufferData);
   }
 );
 
@@ -292,8 +292,8 @@ const mutableWrfBufferRegistry = new FinalizationRegistry(
 export const getWrfBufferWasm = (
   wasmMemory: WebAssembly.Memory,
   bufferData: BufferData,
-  deconstructor: (arcPtr: number) => void,
-  mutableDeconstructor: (bufferData: BufferData) => void
+  destructor: (arcPtr: number) => void,
+  mutableDestructor: (bufferData: BufferData) => void
 ): WrfBuffer => {
   if (bufferData.arcPtr) {
     if (!bufferCache[bufferData.arcPtr]?.deref()) {
@@ -305,14 +305,15 @@ export const getWrfBufferWasm = (
 
       bufferRegistry.register(wrfBuffer, {
         arcPtr: bufferData.arcPtr,
-        deconstructor,
+        destructor,
+        /* no unregisterToken here since we never need to unregister */
       });
 
       bufferCache[bufferData.arcPtr] = new WeakRef(wrfBuffer);
     } else {
       // If we already hold a reference, decrement the Arc we were just given;
       // otherwise we leak memory.
-      deconstructor(bufferData.arcPtr);
+      destructor(bufferData.arcPtr);
     }
 
     return bufferCache[bufferData.arcPtr].deref();
@@ -323,16 +324,20 @@ export const getWrfBufferWasm = (
 
     const wrfBuffer = new WrfBuffer(wasmMemory.buffer, bufferData, false);
 
-    mutableWrfBufferRegistry.register(wrfBuffer, {
-      bufferData: bufferData,
-      deconstructor: mutableDeconstructor,
-    });
+    mutableWrfBufferRegistry.register(
+      wrfBuffer,
+      {
+        bufferData,
+        destructor: mutableDestructor,
+      },
+      wrfBuffer
+    );
 
     return wrfBuffer;
   }
 };
 
-// Remove mutable WrfBuffers without running deconstructors. This is useful
+// Remove mutable WrfBuffers without running destructors. This is useful
 // when transferring ownership of buffers to Rust without deallocating data.
 export const unregisterMutableBuffer = (wrfBuffer: WrfBuffer): void => {
   if (wrfBuffer.readonly) {
@@ -342,6 +347,10 @@ export const unregisterMutableBuffer = (wrfBuffer: WrfBuffer): void => {
   }
 
   mutableWrfBufferRegistry.unregister(wrfBuffer);
+
+  if (inTest) {
+    allocatedVecs[wrfBuffer.__wrflibBufferData.bufferPtr] = false;
+  }
 };
 
 // Return a buffer with a stable identity based on arcPtr

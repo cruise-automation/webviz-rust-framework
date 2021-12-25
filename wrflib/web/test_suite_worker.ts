@@ -4,7 +4,7 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
-import "./wrf_user_worker_runtime";
+import "./wrf_web_worker_runtime";
 import { expect } from "./wrf_test";
 import { Rpc } from "./common";
 import { PostMessageTypedArray } from "./types";
@@ -72,7 +72,7 @@ rpc.receive("test_send_wrf_array_to_main_thread", function () {
   };
 });
 rpc.receive("test_call_rust_in_same_thread_sync_with_wrfbuffer", function () {
-  const [result] = self.callRustInSameThreadSync("make_wrfbuffer");
+  const result = self.createBuffer(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]));
   const [result2] = self.callRustInSameThreadSync("array_multiply", [
     JSON.stringify(10),
     result,

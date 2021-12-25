@@ -35,6 +35,7 @@ pub use crate::events::*;
 pub use crate::fonts::*;
 pub use crate::geometry::*;
 pub use crate::hash::*;
+pub use crate::layout::*;
 pub use crate::macros::*;
 pub use crate::menu::*;
 pub use crate::pass::*;
@@ -278,7 +279,6 @@ pub struct Cx {
 
     pub(crate) next_component_id: u64,
 
-    #[cfg(any(feature = "cef", target_arch = "wasm32"))]
     /// Function registered through [`Cx::on_call_rust`]
     pub call_rust_fn: Option<usize>,
 
@@ -417,7 +417,6 @@ impl Cx {
             debug_logs: Vec::new(),
             next_component_id: 1, // Using 1 instead of 0 to avoid confusion for if someone thinks 0 means empty.
 
-            #[cfg(any(feature = "cef", target_arch = "wasm32"))]
             call_rust_fn: None,
             app_type_id,
         }
@@ -727,7 +726,7 @@ impl Cx {
             self.requested_draw = false;
         }
 
-        self.call_event_handler(&mut Event::Draw);
+        self.call_event_handler(&mut Event::SystemEvent(SystemEvent::Draw));
         self.in_redraw_cycle = false;
         if !self.view_stack.is_empty() {
             panic!("View stack disaligned, forgot an end_view(cx)");
@@ -914,7 +913,6 @@ impl Cx {
     }
 
     /// Register function to handle callRust from JavaScript. Registered function must be a method on the main app.
-    #[cfg(any(target_arch = "wasm32", feature = "cef"))]
     pub fn on_call_rust<T: 'static>(
         &mut self,
         func: fn(this: &mut T, cx: &mut Cx, name: String, params: Vec<WrfParam>) -> Vec<WrfParam>,
@@ -964,7 +962,6 @@ pub trait CxDesktopVsWasmCommon {
     fn call_js(&mut self, name: &str, params: Vec<WrfParam>);
 
     /// Mechanism to communicate back returns values from call_rust functions.
-    #[cfg(any(target_arch = "wasm32", feature = "cef"))]
     fn return_to_js(&mut self, callback_id: u32, params: Vec<WrfParam>);
 
     #[cfg(any(target_arch = "wasm32", feature = "cef"))]

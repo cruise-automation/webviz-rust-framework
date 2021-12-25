@@ -93,9 +93,9 @@ impl TextInput {
                 }
             }
         }
-
+        cx.begin_padding_box(Padding::top(4.0));
         let turtle = cx.begin_turtle(Layout {
-            walk: Walk { width: Width::Compute, height: Height::Compute, margin: Margin::top(4.) },
+            walk: Walk { width: Width::Compute, height: Height::Compute },
             padding: Padding::all(7.),
             ..Layout::default()
         });
@@ -122,6 +122,7 @@ impl TextInput {
 
         self.text_editor.end_text_editor(cx, text_buffer);
         cx.end_turtle(turtle);
+        cx.end_padding_box();
     }
 }
 

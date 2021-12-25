@@ -14,6 +14,7 @@ static SHADER: Shader = Cx::define_shader(
         uniform rect_size: vec2;
         uniform use_screen_space: float;
         uniform point_style: float;
+        uniform vertex_transform: mat4;
 
         geometry geom: vec2;
 
@@ -32,7 +33,7 @@ static SHADER: Shader = Cx::define_shader(
 
         fn vertex() -> vec4 {
             if use_screen_space == 1. {
-                let projected_pos = camera_projection * camera_view * vec4(in_pos, 1.0);
+                let projected_pos = camera_projection * camera_view * vertex_transform * vec4(in_pos, 1.0);
                 let point_size = in_size * dpi_factor;
                 let offset = point_size * vec4((geom - vec2(0.5, 0.5))/rect_size, 0, 0);
 
@@ -40,7 +41,7 @@ static SHADER: Shader = Cx::define_shader(
                 // and then apply the offset.
                 return to_clip_space(projected_pos) + offset;
             } else {
-                let view_pos = camera_view * vec4(in_pos, 1.0);
+                let view_pos = camera_view * vertex_transform * vec4(in_pos, 1.0);
                 let point_size = in_size;
                 let offset = point_size * vec4(geom - vec2(0.5, 0.5), 0, 0);
 
@@ -79,6 +80,7 @@ struct DrawPoints3dUniforms {
     rect_size: Vec2,
     use_screen_space: f32,
     point_style: f32,
+    vertex_transform: Mat4,
 }
 
 #[derive(Debug, Clone)]
@@ -93,11 +95,13 @@ const POINT_STYLE_CIRCLE: f32 = 1.0;
 pub struct DrawPoints3dOptions {
     pub use_screen_space: bool,
     pub point_style: DrawPoints3dStyle,
+    /// Custom transformation to do on all vertices
+    pub vertex_transform: Mat4,
 }
 
 impl Default for DrawPoints3dOptions {
     fn default() -> Self {
-        Self { use_screen_space: false, point_style: DrawPoints3dStyle::Quad }
+        Self { use_screen_space: false, point_style: DrawPoints3dStyle::Quad, vertex_transform: Mat4::identity() }
     }
 }
 
@@ -119,6 +123,7 @@ impl DrawPoints3d {
                     DrawPoints3dStyle::Quad => POINT_STYLE_QUAD,
                     DrawPoints3dStyle::Circle => POINT_STYLE_CIRCLE,
                 },
+                vertex_transform: options.vertex_transform,
             },
         );
 

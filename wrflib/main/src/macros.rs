@@ -22,30 +22,34 @@ macro_rules! main_app {
             let mut cxafterdraw = CxAfterDraw::new(&mut cx);
             cx.event_loop(|cx, mut event| {
                 match event {
-                    Event::Draw => {
-                        app.draw(cx);
-                        cxafterdraw.after_draw(cx);
-                    }
-                    #[cfg(feature = "cef")]
-                    Event::WebRustCall(e) => {
-                        let WebRustCallEvent { name, params, callback_id } = std::mem::take(e).unwrap();
-                        let call_rust_fn = cx.call_rust_fn.expect("call_rust called but no on_call_rust registered");
-                        unsafe {
-                            let func = Box::from_raw(
-                                call_rust_fn
-                                    as *mut fn(
-                                        this: &mut $app,
-                                        cx: &mut Cx,
-                                        name: String,
-                                        params: Vec<WrfParam>,
-                                    ) -> Vec<WrfParam>,
-                            );
-                            let mut return_params = func(&mut app, cx, name, params);
+                    Event::SystemEvent(e) => {
+                        match e {
+                            SystemEvent::Draw => {
+                                app.draw(cx);
+                                cxafterdraw.after_draw(cx);
+                            }
+                            SystemEvent::WebRustCall(e) => {
+                                let WebRustCallEvent { name, params, callback_id } = std::mem::take(e).unwrap();
+                                let call_rust_fn = cx.call_rust_fn.expect("call_rust called but no on_call_rust registered");
+                                unsafe {
+                                    let func = Box::from_raw(
+                                        call_rust_fn
+                                            as *mut fn(
+                                                this: &mut $app,
+                                                cx: &mut Cx,
+                                                name: String,
+                                                params: Vec<WrfParam>,
+                                            ) -> Vec<WrfParam>,
+                                    );
+                                    let mut return_params = func(&mut app, cx, name, params);
 
-                            // Prevent call_rust_fn from getting dropped
-                            Box::into_raw(func);
+                                    // Prevent call_rust_fn from getting dropped
+                                    Box::into_raw(func);
 
-                            cx.return_to_js(callback_id, return_params);
+                                    cx.return_to_js(callback_id, return_params);
+                                }
+                            }
+                            _ => {}
                         }
                     }
                     _ => {
@@ -75,23 +79,33 @@ macro_rules! main_app {
             let appcx = &*(appcx as *mut (*mut $app, *mut Cx, *mut CxAfterDraw));
             (*appcx.1).process_wasm_events(msg_bytes, |cx, mut event| {
                 match event {
-                    Event::Draw => {
-                        (*appcx.0).draw(cx);
-                        (*appcx.2).after_draw(cx);
-                    }
-                    Event::WebRustCall(e) => {
-                        let WebRustCallEvent { name, params, callback_id } = std::mem::take(e).unwrap();
+                    Event::SystemEvent(e) => {
+                        match e {
+                            SystemEvent::Draw => {
+                                (*appcx.0).draw(cx);
+                                (*appcx.2).after_draw(cx);
+                            }
+                            SystemEvent::WebRustCall(e) => {
+                                let WebRustCallEvent { name, params, callback_id } = std::mem::take(e).unwrap();
 
-                        let call_rust_fn = cx.call_rust_fn.expect("call_rust called but no on_call_rust registered");
-                        let func = Box::from_raw(
-                            call_rust_fn
-                                as *mut fn(this: &mut $app, cx: &mut Cx, name: String, params: Vec<WrfParam>) -> Vec<WrfParam>,
-                        );
-                        let mut return_params = func(&mut *appcx.0, cx, name, params);
-                        // Prevent call_rust_fn from getting dropped
-                        Box::into_raw(func);
+                                let call_rust_fn = cx.call_rust_fn.expect("call_rust called but no on_call_rust registered");
+                                let func = Box::from_raw(
+                                    call_rust_fn
+                                        as *mut fn(
+                                            this: &mut $app,
+                                            cx: &mut Cx,
+                                            name: String,
+                                            params: Vec<WrfParam>,
+                                        ) -> Vec<WrfParam>,
+                                );
+                                let mut return_params = func(&mut *appcx.0, cx, name, params);
+                                // Prevent call_rust_fn from getting dropped
+                                Box::into_raw(func);
 
-                        cx.return_to_js(callback_id, return_params);
+                                cx.return_to_js(callback_id, return_params);
+                            }
+                            _ => {}
+                        }
                     }
                     _ => {
                         (*appcx.0).handle(cx, event);

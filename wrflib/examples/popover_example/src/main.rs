@@ -50,7 +50,7 @@ impl PopoverExampleApp {
                 COLOR_BLACK,
                 Layout {
                     direction: Direction::Right,
-                    walk: Walk { width: Width::Compute, height: Height::Compute, margin: Margin::ZERO },
+                    walk: Walk { width: Width::Compute, height: Height::Compute },
                     padding: Padding::all(10.),
                     ..Layout::default()
                 },

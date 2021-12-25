@@ -8,6 +8,6 @@
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(C)]
 pub struct Trapezoid {
-    pub xs: [f32; 2],
-    pub ys: [f32; 4],
+    pub(crate) xs: [f32; 2],
+    pub(crate) ys: [f32; 4],
 }

@@ -117,6 +117,9 @@ impl CxDesktopVsWasmCommon for Cx {
     fn return_to_js(&mut self, callback_id: u32, params: Vec<WrfParam>) {
         self.cef_browser.return_to_js(callback_id, params);
     }
+    /// This never gets called if cef is not enabled, but we need it to pass compilation.
+    #[cfg(not(feature = "cef"))]
+    fn return_to_js(&mut self, _callback_id: u32, _params: Vec<WrfParam>) {}
 
     /// See [`CxDesktopVsWasmCommon::register_call_rust_in_same_thread_sync_fn`] for documentation.
     #[cfg(feature = "cef")]

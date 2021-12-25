@@ -101,7 +101,7 @@ Compile this into a WebAssembly binary by calling:
 ```
 <!--- TODO(Paras): Not sure what the path will be for this script. -->
 
-You'll now see a binary placed in `target/wasm32-unknown-unknown/release/sum_example-xform.wasm`.
+You'll now see a binary placed in `target/wasm32-unknown-unknown/release/sum_example.wasm`.
 
 ### Serving
 To load this file on the Web, we'll need an HTTP server. There's no strict requirement on the backend, as long as:

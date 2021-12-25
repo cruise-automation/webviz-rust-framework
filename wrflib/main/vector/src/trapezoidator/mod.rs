@@ -361,7 +361,115 @@ struct Region {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::path::{Path, PathIterator};
+    use crate::geometry::{Point, Transform, Transformation};
+    use crate::path::PathCommand;
+    use crate::path::PathIterator;
+    use std::iter::Cloned;
+    use std::slice::Iter;
+
+    /// A sequence of commands that defines a set of contours, each of which consists of a sequence of
+    /// curve segments. Each contour is either open or closed.
+    #[derive(Clone, Debug, Default, PartialEq)]
+    pub(crate) struct Path {
+        verbs: Vec<Verb>,
+        points: Vec<Point>,
+    }
+
+    impl Path {
+        /// Creates a new empty path.
+
+        // /// Returns a slice of the points that make up `self`.
+        // pub(crate) fn points(&self) -> &[Point] {
+        //     &self.points
+        // }
+
+        /// Returns an iterator over the commands that make up `self`.
+        pub(crate) fn commands(&self) -> Commands {
+            Commands { verbs: self.verbs.iter().cloned(), points: self.points.iter().cloned() }
+        }
+
+        /// Returns a mutable slice of the points that make up `self`.
+        pub(crate) fn points_mut(&mut self) -> &mut [Point] {
+            &mut self.points
+        }
+
+        /// Adds a new contour, starting at the given point.
+        pub(crate) fn move_to(&mut self, p: Point) {
+            self.verbs.push(Verb::MoveTo);
+            self.points.push(p);
+        }
+
+        // /// Adds a line segment to the current contour, starting at the current point.
+        // pub(crate) fn line_to(&mut self, p: Point) {
+        //     self.verbs.push(Verb::LineTo);
+        //     self.points.push(p);
+        // }
+
+        // Adds a quadratic Bezier curve segment to the current contour, starting at the current point.
+        pub(crate) fn quadratic_to(&mut self, p1: Point, p: Point) {
+            self.verbs.push(Verb::QuadraticTo);
+            self.points.push(p1);
+            self.points.push(p);
+        }
+
+        /// Closes the current contour.
+        pub(crate) fn close(&mut self) {
+            self.verbs.push(Verb::Close);
+        }
+
+        // /// Clears `self`.
+        // pub(crate) fn clear(&mut self) {
+        //     self.verbs.clear();
+        //     self.points.clear();
+        // }
+    }
+
+    impl Transform for Path {
+        fn transform<T>(mut self, t: &T) -> Path
+        where
+            T: Transformation,
+        {
+            self.transform_mut(t);
+            self
+        }
+
+        fn transform_mut<T>(&mut self, t: &T)
+        where
+            T: Transformation,
+        {
+            for point in self.points_mut() {
+                point.transform_mut(t);
+            }
+        }
+    }
+
+    /// An iterator over the commands that make up a path.
+    #[derive(Clone, Debug)]
+    pub struct Commands<'a> {
+        verbs: Cloned<Iter<'a, Verb>>,
+        points: Cloned<Iter<'a, Point>>,
+    }
+
+    impl<'a> Iterator for Commands<'a> {
+        type Item = PathCommand;
+
+        fn next(&mut self) -> Option<PathCommand> {
+            self.verbs.next().map(|verb| match verb {
+                Verb::MoveTo => PathCommand::MoveTo(self.points.next().unwrap()),
+                // Verb::LineTo => PathCommand::LineTo(self.points.next().unwrap()),
+                Verb::QuadraticTo => PathCommand::QuadraticTo(self.points.next().unwrap(), self.points.next().unwrap()),
+                Verb::Close => PathCommand::Close,
+            })
+        }
+    }
+
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+    enum Verb {
+        MoveTo,
+        // LineTo,
+        QuadraticTo,
+        Close,
+    }
 
     #[test]
     fn test() {
@@ -372,8 +480,14 @@ mod tests {
         path.quadratic_to(Point::new(-1.0, -1.0), Point::new(0.0, -1.0));
         path.quadratic_to(Point::new(-1.0, -1.0), Point::new(0.0, -1.0));
         path.close();
+
+        let mut result = Vec::new();
+        Trapezoidator::default().trapezoidate(path.commands().linearize(0.1)).unwrap().for_each(&mut |item| {
+            result.push(item);
+            true
+        });
         assert_eq!(
-            Trapezoidator::default().trapezoidate(path.commands().linearize(0.1)).unwrap().collect::<Vec<_>>(),
+            result,
             [
                 Trapezoid { xs: [-1.0, -0.9375], ys: [0.0, -0.4375, 0.0, 0.4375] },
                 Trapezoid { xs: [-0.9375, -0.75], ys: [-0.4375, -0.75, 0.4375, 0.75] },

@@ -4,6 +4,8 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
+use std::f32::consts::PI;
+
 // a bunch o buttons to select the world
 use crate::fieldworld::FieldWorld;
 use crate::treeworld::TreeWorld;
@@ -41,8 +43,14 @@ pub struct WorldView {
 
 const COLOR_BG: Vec4 = vec4(34.0 / 255.0, 34.0 / 255.0, 34.0 / 255.0, 1.0);
 
-impl WorldView {
-    pub fn new() -> Self {
+const VIEWPORT_PROPS: Viewport3DProps = Viewport3DProps {
+    camera_target: Vec3 { x: 0.0, y: 0.5, z: -1.5 },
+    initial_camera_position: Coordinates::Spherical(SphericalAngles { phi: PI / 2., theta: 0., radius: 1.5 + 1.1 }),
+    panning_enabled: false,
+};
+
+impl Default for WorldView {
+    fn default() -> Self {
         Self {
             view: View::default(),
             bg: Background::default(),
@@ -55,7 +63,9 @@ impl WorldView {
             field_world: FieldWorld::default(),
         }
     }
+}
 
+impl WorldView {
     pub fn handle_world_select(&mut self, cx: &mut Cx, event: &mut Event) {
         if self.select_view.handle(cx, event) {}
         for (index, btn) in self.buttons.iter_mut().enumerate() {
@@ -95,7 +105,7 @@ impl WorldView {
     }
 
     pub fn draw_world_view_2d(&mut self, cx: &mut Cx) {
-        self.viewport_3d.begin_viewport_3d(cx);
+        self.viewport_3d.begin_viewport_3d(cx, VIEWPORT_PROPS);
         self.draw_world_view_3d(cx);
         self.viewport_3d.end_viewport_3d(cx);
     }

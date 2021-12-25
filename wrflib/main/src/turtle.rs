@@ -11,6 +11,7 @@ pub enum CxTurtleType {
     CenterYAlign,
     BottomAlign,
     CenterXYAlign,
+    Padding,
 }
 
 impl Default for CxTurtleType {
@@ -81,7 +82,6 @@ pub(crate) struct CxTurtle {
     pos: Vec2,
 
     /// The origin of the current turtle's walking area. Starts off at the parent's turtle [`CxTurtle::pos`]
-    /// plus this turtle's [`Walk::margin`].
     origin: Vec2,
 
     /// The inherent width of the current turtle's walking area. Is [`f32::NAN`] if the width is computed,
@@ -117,303 +117,59 @@ pub(crate) struct CxTurtle {
     /// Used for additional checks that enclosing turtles match opening ones
     turtle_type: CxTurtleType,
 
-    /// Total width available for this turtle. Computed at creation time based on parent's width and layout
+    /// Available width for the turtle to be walked. This is different from [`CxTurtle::width`] which is turtle outer bounds.
+    /// For example, for Width::Compute turtles width would be [`f32::NAN`] as this needs to be computed,
+    /// but available_width is defined until the bounds of parent
     available_width: f32,
 
-    /// Total height available for this turtle. Computed at creation time based on parent's height and layout
+    /// Available height for the turtle to be walked. This is different from [`CxTurtle::height`] which is turtle outer bounds.
+    /// For example, for height::Compute turtles height would be [`f32::NAN`] as this needs to be computed,
+    /// but available_height is defined until the bounds of parent
     available_height: f32,
 }
 
-/// Indicates when to wrap the current line to a new line. See also [`Direction`].
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum LineWrap {
-    /// Never wrap to a new line.
-    None,
+impl CxTurtle {
+    /// Returns how much available_width is "left" for current turtle,
+    /// i.e. distance from current turtle x position until the right bound
+    fn get_available_width_left(&self) -> f32 {
+        (self.origin.x + self.available_width - self.pos.x).max(0.)
+    }
 
-    /// Wrap to a new line when the available width is exhausted.
-    Overflow,
-}
-impl LineWrap {
-    /// TODO(JP): Replace these with LineWrap::default() when
-    /// <https://github.com/rust-lang/rust/issues/67792> gets done
-    pub const DEFAULT: LineWrap = LineWrap::None;
-}
-impl Default for LineWrap {
-    fn default() -> Self {
-        LineWrap::DEFAULT
+    /// Returns how much available_height is "left" for current turtle
+    /// i.e. distance from current turtle y position until the bottom bound
+    fn get_available_height_left(&self) -> f32 {
+        (self.origin.y + self.available_height - self.pos.y).max(0.)
     }
 }
 
-/// Configure how a [`CxTurtle`] is going to walk, typically bounded by the
-/// dimensions of a parent [`CxTurtle`].
-#[derive(Copy, Clone, Debug)]
-pub struct Layout {
-    /// See [`Walk`].
-    pub walk: Walk,
-    /// See [`Padding`].
-    pub padding: Padding,
-    /// See [`Direction`].
-    pub direction: Direction,
-    /// See [`LineWrap`].
-    pub line_wrap: LineWrap,
-    /// The amount of extra spacing when wrapping a line.
-    ///
-    /// TODO(JP): Should we make this part of [`LineWrap`] instead?
-    pub new_line_padding: f32,
-    /// Absolutely position by overriding the [`CxTurtle::origin`] with (0,0) instead of using the parent's
-    /// current position.
-    pub absolute: bool,
-    /// Override the maximum size of the [`Window`]/[`Pass`]. Should typically
-    /// not be used; instead set [`CxTurtle::width`] and [`CxTurtle::height`]
-    /// through [`Layout::walk`].
-    pub abs_size: Option<Vec2>,
-}
-
-impl Layout {
-    /// TODO(JP): Replace these with Layout::default() when
-    /// <https://github.com/rust-lang/rust/issues/67792> gets done
-    pub const DEFAULT: Layout = Layout {
-        walk: Walk::DEFAULT,
-        padding: Padding::DEFAULT,
-        direction: Direction::DEFAULT,
-        line_wrap: LineWrap::DEFAULT,
-        new_line_padding: 0.,
-        absolute: false,
-        abs_size: None,
-    };
-
-    pub fn abs_origin_zero() -> Self {
-        Layout { absolute: true, ..Default::default() }
-    }
-}
-impl Default for Layout {
-    fn default() -> Self {
-        Layout::DEFAULT
-    }
-}
-
-/// Determines how a [`CxTurtle`] should walk. Can be applied to a new [`CxTurtle`]
-/// through [`Layout::walk`], or directly to move an existing [`CxTurtle`] by
-/// using [`Cx::walk_turtle`].
-#[derive(Copy, Clone, Debug)]
-pub struct Walk {
-    pub margin: Margin,
-    pub width: Width,
-    pub height: Height,
-}
-
-impl Walk {
-    /// TODO(JP): Replace these with Align::default() when
-    /// <https://github.com/rust-lang/rust/issues/67792> gets done
-    pub const DEFAULT: Walk = Walk { width: Width::DEFAULT, height: Height::DEFAULT, margin: Margin::DEFAULT };
-
-    pub const fn wh(w: Width, h: Height) -> Self {
-        Self { width: w, height: h, margin: Margin::ZERO }
-    }
-}
-impl Default for Walk {
-    fn default() -> Self {
-        Walk::DEFAULT
-    }
-}
 /// Defines how elements on [`Cx::turtle_align_list`] should be moved horizontally
-pub struct AlignX(f32);
+struct AlignX(f32);
 
 impl AlignX {
     // Note: LEFT is the default so not needed as explicit option
     pub const CENTER: AlignX = AlignX(0.5);
+    #[allow(dead_code)]
     pub const RIGHT: AlignX = AlignX(1.0);
 }
 
 /// Defines how elements on [`Cx::turtle_align_list`] should be moved vertically
-pub struct AlignY(f32);
+struct AlignY(f32);
 
 impl AlignY {
     // Note: TOP is the default so not needed as explicit option
     pub const CENTER: AlignY = AlignY(0.5);
+    #[allow(dead_code)]
     pub const BOTTOM: AlignY = AlignY(1.0);
-}
-
-/// A margin that should be added around a [`Walk`].
-///
-/// TODO(JP): these values can be negative, which can be quite confusing, but we
-/// seem to actually honor that in the turtle code. Might be good to look into that
-/// and see if we should forbid that or not (we seem to never actually do that yet).
-#[derive(Clone, Copy, Debug)]
-pub struct Margin {
-    pub l: f32,
-    pub t: f32,
-    pub r: f32,
-    pub b: f32,
-}
-impl Margin {
-    pub const ZERO: Margin = Margin { l: 0.0, t: 0.0, r: 0.0, b: 0.0 };
-
-    /// TODO(JP): Replace these with Margin::default() when
-    /// <https://github.com/rust-lang/rust/issues/67792> gets done
-    pub const DEFAULT: Margin = Margin::ZERO;
-
-    pub const fn all(v: f32) -> Margin {
-        Margin { l: v, t: v, r: v, b: v }
-    }
-
-    pub const fn left(v: f32) -> Margin {
-        Margin { l: v, ..Margin::ZERO }
-    }
-
-    pub const fn top(v: f32) -> Margin {
-        Margin { t: v, ..Margin::ZERO }
-    }
-
-    pub const fn right(v: f32) -> Margin {
-        Margin { r: v, ..Margin::ZERO }
-    }
-
-    pub const fn bottom(v: f32) -> Margin {
-        Margin { b: v, ..Margin::ZERO }
-    }
-}
-impl Default for Margin {
-    fn default() -> Self {
-        Margin::DEFAULT
-    }
-}
-
-/// Inner padding dimensions that should be applied on top of the width/height
-/// from the parent [`CxTurtle`].
-#[derive(Clone, Copy, Debug)]
-pub struct Padding {
-    pub l: f32,
-    pub t: f32,
-    pub r: f32,
-    pub b: f32,
-}
-impl Padding {
-    pub const ZERO: Padding = Padding { l: 0.0, t: 0.0, r: 0.0, b: 0.0 };
-
-    /// TODO(JP): Replace these with Padding::default() when
-    /// <https://github.com/rust-lang/rust/issues/67792> gets done
-    pub const DEFAULT: Padding = Padding::ZERO;
-
-    pub const fn all(v: f32) -> Padding {
-        Padding { l: v, t: v, r: v, b: v }
-    }
-
-    pub const fn left(v: f32) -> Padding {
-        Padding { l: v, ..Padding::ZERO }
-    }
-
-    pub const fn top(v: f32) -> Padding {
-        Padding { t: v, ..Padding::ZERO }
-    }
-
-    pub const fn right(v: f32) -> Padding {
-        Padding { r: v, ..Padding::ZERO }
-    }
-
-    pub const fn bottom(v: f32) -> Padding {
-        Padding { b: v, ..Padding::ZERO }
-    }
-}
-impl Default for Padding {
-    fn default() -> Self {
-        Padding::DEFAULT
-    }
-}
-
-/// The direction in which the [`CxTurtle`] should walk. It will typically walk
-/// in a straight line in this direction. E.g. when walking to [`Direction::Right`],
-/// it will only walk horizontally, not vertically, until it hits the [`CxTurtle::width`],
-/// at which point it will wrap around using [`LineWrap`], based on the maximum
-/// height of widgets that have been drawn so far, which is registered in
-/// [`CxTurtle::biggest`].
-///
-/// TODO(JP): This line wrapping behavior makes sense for [`Direction::Right`],
-/// but not so much for [`Direction::Down`].. Maybe we should split [`CxTurtle`]
-/// into different kinds of behavior?
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum Direction {
-    Right,
-    Down,
-}
-impl Direction {
-    /// TODO(JP): Replace these with Direction::default() when
-    /// <https://github.com/rust-lang/rust/issues/67792> gets done
-    pub const DEFAULT: Direction = Direction::Right;
-}
-impl Default for Direction {
-    fn default() -> Self {
-        Direction::DEFAULT
-    }
-}
-
-/// Different ways in which a [`Walk`] can get a width.
-///
-/// TODO(JP): Something like `FillUpTo(f32)` or `FillMax(f32)` might be useful here, to mimic
-/// CSS'es `max-width`. For now you can manually use `Cx::get_width_left` with
-/// `Width::Fix` as a workaround.
-///
-/// TODO(JP): See [`Height::DEFAULT`] for a related TODO.
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum Width {
-    /// Fill up as much of the available space as possible.
-    Fill,
-    /// Use a fixed width.
-    Fix(f32),
-    /// Will defer computation of [`CxTurtle::width`] by setting it to [`f32::NAN`],
-    /// and only properly computing it later on.
-    ///
-    /// TODO(JP): This can also be passed into [`Cx::walk_turtle`] but there it
-    /// makes no sense!
-    Compute,
-    // Fill up as much of the available space as possible up to provided width
-    FillUntil(f32),
-}
-impl Width {
-    /// TODO(JP): Replace these with Width::default() when
-    /// <https://github.com/rust-lang/rust/issues/67792> gets done
-    pub const DEFAULT: Width = Width::Fill;
-}
-impl Default for Width {
-    fn default() -> Self {
-        Width::Fill
-    }
-}
-
-/// Different ways in which a [`Walk`] can get a height.
-///
-/// See [`Width`] for more documentation, since it's analogous.
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum Height {
-    // See [`Width::Fill`].
-    Fill,
-    // See [`Width::Fix`].
-    Fix(f32),
-    // See [`Width::Compute`].
-    Compute,
-    // See [`Width::FillUntil`],
-    FillUntil(f32),
-}
-impl Height {
-    /// TODO(JP): [`Height::Fill`] might be a bad default, because if you use
-    /// [`Direction::Down`] it will push out everything out it below.
-    /// HTML/CSS uses something more like [`Height::Compute`] by default for height,
-    /// and only [`Height::Fill`] for width (for block-layout elements).
-    ///
-    /// TODO(JP): Replace these with Height::default() when
-    /// <https://github.com/rust-lang/rust/issues/67792> gets done
-    pub const DEFAULT: Height = Height::Fill;
-}
-impl Default for Height {
-    fn default() -> Self {
-        Height::Fill
-    }
 }
 
 impl Cx {
     /// Begin a new [`CxTurtle`] with a given [`Layout`]. This new [`CxTurtle`] will be added to the
     /// [`Cx::turtles`] stack.
     pub fn begin_turtle(&mut self, layout: Layout) -> Turtle {
+        self.begin_typed_turtle(layout, CxTurtleType::Normal)
+    }
+
+    fn begin_typed_turtle(&mut self, layout: Layout, turtle_type: CxTurtleType) -> Turtle {
         if !self.in_redraw_cycle {
             panic!("calling begin_turtle outside of redraw cycle is not possible!");
         }
@@ -423,11 +179,11 @@ impl Cx {
 
         // fetch origin and size from parent
         let (mut origin, mut abs_size) = if let Some(parent) = self.turtles.last() {
-            (Vec2 { x: layout.walk.margin.l + parent.pos.x, y: layout.walk.margin.t + parent.pos.y }, parent.abs_size)
+            (Vec2 { x: parent.pos.x, y: parent.pos.y }, parent.abs_size)
         } else {
             assert!(layout.absolute);
             assert!(layout.abs_size.is_some());
-            (Vec2 { x: layout.walk.margin.l, y: layout.walk.margin.t }, Vec2::default())
+            (Vec2 { x: 0., y: 0. }, Vec2::default())
         };
 
         // see if layout overrode size
@@ -437,33 +193,38 @@ impl Cx {
 
         // same for origin
         if layout.absolute {
-            origin = vec2(layout.walk.margin.l, layout.walk.margin.t);
+            origin = vec2(0.0, 0.0);
         }
 
         // absolute overrides the computation of width/height to use the parent absolute
-        let width = self.eval_width(&layout.walk.width, layout.walk.margin, layout.absolute, abs_size.x);
-        let height = self.eval_height(&layout.walk.height, layout.walk.margin, layout.absolute, abs_size.y);
+        let width = self.eval_width(&layout.walk.width, layout.absolute, abs_size.x);
+        let height = self.eval_height(&layout.walk.height, layout.absolute, abs_size.y);
         let pos = Vec2 { x: origin.x + layout.padding.l, y: origin.y + layout.padding.t };
 
-        let available_width = if layout.walk.width == Width::Compute {
-            if let Some(parent) = self.turtles.last() {
-                parent.origin.x + parent.available_width - pos.x
-            } else {
-                abs_size.x - pos.x
+        // TODO(Dmitry): potentially unifty with regular width/height computation
+        let available_width = if let Some(parent) = self.turtles.last() {
+            match layout.walk.width {
+                Width::Fix(v) => v,
+                Width::FillUntil(v) => parent.get_available_width_left().min(v),
+                _ => parent.get_available_width_left(),
             }
         } else {
-            width
+            abs_size.x
         };
 
-        let available_height = if layout.walk.height == Height::Compute {
-            if let Some(parent) = self.turtles.last() {
-                parent.origin.y + parent.available_height - pos.y
-            } else {
-                abs_size.y - pos.y
+        let available_height = if let Some(parent) = self.turtles.last() {
+            match layout.walk.height {
+                Height::Fix(v) => v,
+                Height::FillUntil(v) => parent.get_available_height_left().min(v),
+                _ => parent.get_available_height_left(),
             }
         } else {
-            height
+            abs_size.y
         };
+
+        // By induction property this values should never be NaN
+        assert!(!available_width.is_nan());
+        assert!(!available_height.is_nan());
 
         let turtle = CxTurtle {
             align_list_x_start_index: self.turtle_align_list.len(),
@@ -476,7 +237,7 @@ impl Cx {
             width,
             height,
             abs_size,
-            turtle_type: CxTurtleType::Normal,
+            turtle_type,
             available_height,
             available_width,
         };
@@ -495,22 +256,16 @@ impl Cx {
         }
     }
 
-    fn assert_alignment_matches(cx_turtle: &CxTurtle, turtle_type: CxTurtleType) {
+    fn assert_last_turtle_type_matches(&self, turtle_type: CxTurtleType) {
+        let cx_turtle = self.turtles.last().unwrap();
         if cx_turtle.turtle_type != turtle_type {
-            panic!("Closing alignment doesn't match! Expected: {:?}, found: {:?}", turtle_type, cx_turtle.turtle_type);
+            panic!("Closing turtle type doesn't match! Expected: {:?}, found: {:?}", turtle_type, cx_turtle.turtle_type);
         }
     }
 
-    /// Pop the current [`CxTurtle`] from the [`Cx::turtles`] stack, returning a [`Rect`] that the turtle walked
-    /// during its lifetime. The parent [`CxTurtle`] will be made to walk this [`Rect`].
-    ///
-    /// Note that this is a method on [`Cx`] instead of on [`Turtle`], since this way we can take ownership
-    /// of the [`Turtle`], making it less likely that you accidentally reuse the [`Turtle`] after ending it.
-    pub fn end_turtle(&mut self, turtle: Turtle) -> Rect {
-        self.assert_last_turtle_matches(&turtle);
-
+    /// Similar to [`Cx::end_turtle`], but doesn't do any matching checks on the turtle. Use at your own risk!
+    pub fn end_last_turtle_unchecked(&mut self) -> Rect {
         let old = self.turtles.pop().unwrap();
-
         let w = if old.width.is_nan() {
             if old.bound_right_bottom.x == std::f32::NEG_INFINITY {
                 // nothing happened, use padding
@@ -535,20 +290,28 @@ impl Cx {
             Height::Fix(old.height)
         };
 
-        let margin = old.layout.walk.margin;
-
         let rect = {
             // when a turtle is absolutely positioned don't walk the parent
             if old.layout.absolute {
                 let w = if let Width::Fix(vw) = w { vw } else { 0. };
                 let h = if let Height::Fix(vh) = h { vh } else { 0. };
-                Rect { pos: vec2(old.layout.walk.margin.l, old.layout.walk.margin.t), size: vec2(w, h) }
+                Rect { pos: vec2(0., 0.), size: vec2(w, h) }
             } else {
-                self.walk_turtle_with_old(Walk { width: w, height: h, margin }, Some(&old))
+                self.walk_turtle_with_old(Walk { width: w, height: h }, Some(&old))
             }
         };
         self.debug_logs.push(DebugLog::EndTurtle { rect });
         rect
+    }
+
+    /// Pop the current [`CxTurtle`] from the [`Cx::turtles`] stack, returning a [`Rect`] that the turtle walked
+    /// during its lifetime. The parent [`CxTurtle`] will be made to walk this [`Rect`].
+    ///
+    /// Note that this is a method on [`Cx`] instead of on [`Turtle`], since this way we can take ownership
+    /// of the [`Turtle`], making it less likely that you accidentally reuse the [`Turtle`] after ending it.
+    pub fn end_turtle(&mut self, turtle: Turtle) -> Rect {
+        self.assert_last_turtle_matches(&turtle);
+        self.end_last_turtle_unchecked()
     }
 
     /// Starts alignment element that fills all remaining space by y axis and centers content by it
@@ -567,16 +330,16 @@ impl Cx {
             height: self.get_height_left(),
             abs_size: parent.abs_size,
             turtle_type: CxTurtleType::CenterYAlign,
-            available_width: parent.origin.x + parent.available_width - parent.pos.y,
-            available_height: parent.origin.y - parent.available_height - parent.pos.y,
+            available_width: parent.get_available_width_left(),
+            available_height: parent.get_available_height_left(),
         };
         self.turtles.push(turtle);
     }
 
     pub fn end_center_y_align(&mut self) {
-        let turtle = self.turtles.pop().unwrap();
-        Cx::assert_alignment_matches(&turtle, CxTurtleType::CenterYAlign);
+        self.assert_last_turtle_type_matches(CxTurtleType::CenterYAlign);
 
+        let turtle = self.turtles.pop().unwrap();
         let dy = Cx::compute_align_turtle_y(&turtle, AlignY::CENTER);
         let align_start = turtle.align_list_y_start_index;
         self.do_align_y(dy, align_start);
@@ -596,22 +359,22 @@ impl Cx {
             origin: parent.pos,
             pos: parent.pos,
             // fills out all remaining space by both axis
-            layout: Layout { walk: Walk { width: Width::Fill, height: Height::Fill, ..parent.layout.walk }, ..parent.layout },
+            layout: Layout { walk: Walk { width: Width::Fill, height: Height::Fill }, ..parent.layout },
             biggest: 0.0,
             bound_right_bottom: Vec2 { x: std::f32::NEG_INFINITY, y: std::f32::NEG_INFINITY },
             width: self.get_width_left(),
             height: self.get_height_left(),
             abs_size: parent.abs_size,
             turtle_type: CxTurtleType::CenterXYAlign,
-            available_width: parent.origin.x + parent.available_width - parent.pos.y,
-            available_height: parent.origin.y - parent.available_height - parent.pos.y,
+            available_width: parent.get_available_width_left(),
+            available_height: parent.get_available_height_left(),
         };
         self.turtles.push(turtle);
     }
 
     pub fn end_center_x_and_y_align(&mut self) {
+        self.assert_last_turtle_type_matches(CxTurtleType::CenterXYAlign);
         let turtle = self.turtles.pop().unwrap();
-        Cx::assert_alignment_matches(&turtle, CxTurtleType::CenterXYAlign);
 
         let dx = Cx::compute_align_turtle_x(&turtle, AlignX::CENTER);
         self.do_align_x(dx, turtle.align_list_x_start_index);
@@ -626,7 +389,7 @@ impl Cx {
     pub fn begin_row_turtle(&mut self) -> Turtle {
         self.begin_turtle(Layout {
             direction: Direction::Right,
-            walk: Walk { width: Width::Fill, height: Height::Compute, ..Walk::default() },
+            walk: Walk { width: Width::Fill, height: Height::Compute },
             ..Layout::default()
         })
     }
@@ -634,12 +397,12 @@ impl Cx {
     pub fn begin_column_turtle(&mut self) -> Turtle {
         self.begin_turtle(Layout {
             direction: Direction::Down,
-            walk: Walk { width: Width::Compute, height: Height::Fill, ..Walk::default() },
+            walk: Walk { width: Width::Compute, height: Height::Fill },
             ..Layout::default()
         })
     }
 
-    // Start alignment element that pushes content at the bottom by y axis
+    /// Start alignment element that pushes content at the bottom by y axis
     pub fn begin_bottom_align(&mut self) {
         let parent = self.turtles.last().unwrap();
         let turtle = CxTurtle {
@@ -654,23 +417,23 @@ impl Cx {
             height: parent.height,
             abs_size: parent.abs_size,
             turtle_type: CxTurtleType::BottomAlign,
-            available_width: parent.origin.x + parent.available_width - parent.pos.y,
-            available_height: parent.origin.y - parent.available_height - parent.pos.y,
+            available_width: parent.get_available_width_left(),
+            available_height: parent.get_available_height_left(),
         };
         self.turtles.push(turtle);
     }
 
     pub fn end_bottom_align(&mut self) {
-        let turtle = self.turtles.pop().unwrap();
-        Cx::assert_alignment_matches(&turtle, CxTurtleType::BottomAlign);
+        self.assert_last_turtle_type_matches(CxTurtleType::BottomAlign);
 
+        let turtle = self.turtles.pop().unwrap();
         let parent = self.turtles.last_mut().unwrap();
 
         let drawn_height = turtle.bound_right_bottom.y - turtle.origin.y;
-        let last_y = parent.origin.y + parent.height;
+        let last_y = parent.origin.y + parent.available_height;
         let dy = last_y - turtle.bound_right_bottom.y;
         // update parent
-        parent.height -= drawn_height;
+        parent.available_height -= drawn_height;
         parent.pos = turtle.origin;
         parent.bound_right_bottom.x = parent.bound_right_bottom.x.max(turtle.bound_right_bottom.x);
         parent.bound_right_bottom.y = last_y;
@@ -695,16 +458,16 @@ impl Cx {
             height: self.get_height_left(),
             abs_size: parent.abs_size,
             turtle_type: CxTurtleType::CenterXAlign,
-            available_width: parent.origin.x + parent.available_width - parent.pos.y,
-            available_height: parent.origin.y - parent.available_height - parent.pos.y,
+            available_width: parent.get_available_width_left(),
+            available_height: parent.get_available_height_left(),
         };
         self.turtles.push(turtle);
     }
 
     pub fn end_center_x_align(&mut self) {
-        let turtle = self.turtles.pop().unwrap();
-        Cx::assert_alignment_matches(&turtle, CxTurtleType::CenterXAlign);
+        self.assert_last_turtle_type_matches(CxTurtleType::CenterXAlign);
 
+        let turtle = self.turtles.pop().unwrap();
         let dx = Cx::compute_align_turtle_x(&turtle, AlignX::CENTER);
         let align_start = turtle.align_list_x_start_index;
         self.do_align_x(dx, align_start);
@@ -730,23 +493,23 @@ impl Cx {
             height: parent.height,
             abs_size: parent.abs_size,
             turtle_type: CxTurtleType::RightAlign,
-            available_width: parent.origin.x + parent.available_width - parent.pos.y,
-            available_height: parent.origin.y - parent.available_height - parent.pos.y,
+            available_width: parent.get_available_width_left(),
+            available_height: parent.get_available_height_left(),
         };
         self.turtles.push(turtle);
     }
 
     pub fn end_right_align(&mut self) {
-        let turtle = self.turtles.pop().unwrap();
-        Cx::assert_alignment_matches(&turtle, CxTurtleType::RightAlign);
+        self.assert_last_turtle_type_matches(CxTurtleType::RightAlign);
 
+        let turtle = self.turtles.pop().unwrap();
         let parent = self.turtles.last_mut().unwrap();
 
         let drawn_width = turtle.bound_right_bottom.x - turtle.origin.x;
-        let last_x = parent.origin.x + parent.width;
+        let last_x = parent.origin.x + parent.available_width;
         let dx = last_x - turtle.bound_right_bottom.x;
         // update parent
-        parent.width -= drawn_width;
+        parent.available_width -= drawn_width;
         parent.pos = turtle.origin;
         parent.bound_right_bottom.x = last_x;
         parent.bound_right_bottom.y = parent.bound_right_bottom.y.max(turtle.bound_right_bottom.y);
@@ -755,14 +518,28 @@ impl Cx {
         self.do_align_x(dx, align_start);
     }
 
+    /// Starts a new box that adds padding to current turtle context
+    pub fn begin_padding_box(&mut self, padding: Padding) {
+        self.begin_typed_turtle(
+            Layout { walk: Walk { width: Width::Compute, height: Height::Compute }, padding, ..Layout::default() },
+            CxTurtleType::Padding,
+        );
+    }
+
+    /// Ends the current block that was opened by "begin_padding_box"
+    pub fn end_padding_box(&mut self) {
+        self.assert_last_turtle_type_matches(CxTurtleType::Padding);
+        self.end_last_turtle_unchecked();
+    }
+
     /// Walk the current [`CxTurtle`], returning a [`Rect`] that it ended up walking.
     pub fn walk_turtle(&mut self, walk: Walk) -> Rect {
         self.walk_turtle_with_old(walk, None)
     }
 
-    /// Walk the turtle with a 'w/h' and a margin.
+    /// Walk the turtle with a 'w/h'
     ///
-    /// Returns a [`Rect`] containing the area that the turtle walked, excluding the [`Walk::margin`].
+    /// Returns a [`Rect`] containing the area that the turtle walked
     ///
     /// TODO(JP): This `old_turtle` stuff is a bit awkward (awkward turtle..) and only used for the
     /// alignment stuff at the end. We can probably structure this in a nicer way.
@@ -774,17 +551,17 @@ impl Cx {
         // return a NaN for `w`, but that doesn't make much sense when you explicitly do a walk.
         // It looks like it's assumed that that never gets passed in here, but it would be better to
         // verify that.
-        let w = self.eval_width(&walk.width, walk.margin, false, 0.0);
-        let h = self.eval_height(&walk.height, walk.margin, false, 0.0);
+        // NOTE(Dmitry): now this methods will panic when receiving Compute walks.
+        // We can probably express this better in type system, but this is good enough for now.
+        let w = self.eval_walking_width(&walk.width);
+        let h = self.eval_walking_height(&walk.height);
 
         let ret = if let Some(turtle) = self.turtles.last_mut() {
-            let (x, y) = match turtle.layout.direction {
+            let old_pos = match turtle.layout.direction {
                 Direction::Right => {
                     match turtle.layout.line_wrap {
                         LineWrap::Overflow => {
-                            if (turtle.pos.x + walk.margin.l + w)
-                                > (turtle.origin.x + turtle.available_width - turtle.layout.padding.r) + 0.01
-                            {
+                            if (turtle.pos.x + w) > (turtle.origin.x + turtle.available_width - turtle.layout.padding.r) + 0.01 {
                                 // what is the move delta.
                                 let old_x = turtle.pos.x;
                                 let old_y = turtle.pos.y;
@@ -798,58 +575,42 @@ impl Cx {
                         LineWrap::None => {}
                     }
 
-                    let x = turtle.pos.x + walk.margin.l;
-                    let y = turtle.pos.y + walk.margin.t;
+                    let old_pos = turtle.pos;
                     // walk it normally
-                    turtle.pos.x += w + walk.margin.l + walk.margin.r;
+                    turtle.pos.x += w;
 
-                    // keep track of biggest item in the line (include item margin bottom)
-                    let biggest = h + walk.margin.t + walk.margin.b;
-                    if biggest > turtle.biggest {
-                        turtle.biggest = biggest;
-                    }
-                    (x, y)
+                    // keep track of biggest item in the line
+                    turtle.biggest = turtle.biggest.max(h);
+                    old_pos
                 }
                 Direction::Down => {
-                    let x = turtle.pos.x + walk.margin.l;
-                    let y = turtle.pos.y + walk.margin.t;
+                    let old_pos = turtle.pos;
                     // walk it normally
-                    turtle.pos.y += h + walk.margin.t + walk.margin.b;
+                    turtle.pos.y += h;
 
-                    // keep track of biggest item in the line (include item margin bottom)
-                    let biggest = w + walk.margin.r + walk.margin.l;
-                    if biggest > turtle.biggest {
-                        turtle.biggest = biggest;
-                    }
-                    (x, y)
+                    // keep track of biggest item in the line
+                    turtle.biggest = turtle.biggest.max(w);
+                    old_pos
                 }
             };
 
-            let bound_x2 = x + w + if walk.margin.r < 0. { walk.margin.r } else { 0. };
-            if bound_x2 > turtle.bound_right_bottom.x {
-                turtle.bound_right_bottom.x = bound_x2;
-            }
-            // update y2 bounds (margin bottom is only added if its negative)
-            // TODO(JP): We seem to never actually use negative margins (yet),
-            // maybe we should forbid that altogether since it can be confusing?
-            let bound_y2 = y + h + walk.margin.t + if walk.margin.b < 0. { walk.margin.b } else { 0. };
-            if bound_y2 > turtle.bound_right_bottom.y {
-                turtle.bound_right_bottom.y = bound_y2;
-            }
+            // update bounds
+            let new_bound = old_pos + vec2(w, h);
+            turtle.bound_right_bottom = turtle.bound_right_bottom.max(&new_bound);
 
-            Rect { pos: vec2(x, y), size: vec2(w, h) }
+            Rect { pos: old_pos, size: vec2(w, h) }
         } else {
             Rect { pos: vec2(0.0, 0.0), size: vec2(w, h) }
         };
 
         if align_dx != 0.0 {
             if let Some(old_turtle) = old_turtle {
-                self.do_align_x(align_dx, old_turtle.align_list_x_start_index);
+                self.move_by_x(align_dx, old_turtle.align_list_x_start_index);
             }
         };
         if align_dy != 0.0 {
             if let Some(old_turtle) = old_turtle {
-                self.do_align_y(align_dy, old_turtle.align_list_y_start_index);
+                self.move_by_y(align_dy, old_turtle.align_list_y_start_index);
             }
         };
 
@@ -864,21 +625,12 @@ impl Cx {
             // walk it normally
             turtle.pos.x += w;
 
-            // keep track of biggest item in the line (include item margin bottom)
-            let biggest = h;
-            if biggest > turtle.biggest {
-                turtle.biggest = biggest;
-            }
-            // update x2 bounds (margin right is only added if its negative)
-            let bound_x2 = x + w;
-            if bound_x2 > turtle.bound_right_bottom.x {
-                turtle.bound_right_bottom.x = bound_x2;
-            }
-            // update y2 bounds (margin bottom is only added if its negative)
-            let bound_y2 = turtle.pos.y + h;
-            if bound_y2 > turtle.bound_right_bottom.y {
-                turtle.bound_right_bottom.y = bound_y2;
-            }
+            // keep track of biggest item in the line
+            turtle.biggest = turtle.biggest.max(h);
+
+            // update bounds
+            turtle.bound_right_bottom.x = turtle.bound_right_bottom.x.max(x + w);
+            turtle.bound_right_bottom.y = turtle.bound_right_bottom.y.max(y + h);
 
             let vx = turtle.origin.x + scroll.x;
             let vy = turtle.origin.y + scroll.y;
@@ -901,18 +653,10 @@ impl Cx {
     /// this for [`Direction::Down`] to avoid confusion?
     pub fn turtle_new_line(&mut self) {
         if let Some(turtle) = self.turtles.last_mut() {
-            match turtle.layout.direction {
-                Direction::Right => {
-                    turtle.pos.x = turtle.origin.x + turtle.layout.padding.l;
-                    turtle.pos.y += turtle.biggest + turtle.layout.new_line_padding;
-                    turtle.biggest = 0.0;
-                }
-                Direction::Down => {
-                    turtle.pos.y = turtle.origin.y + turtle.layout.padding.t;
-                    turtle.pos.x += turtle.biggest + turtle.layout.new_line_padding;
-                    turtle.biggest = 0.0;
-                }
-            }
+            assert_eq!(turtle.layout.direction, Direction::Right, "turtle_new_line with Direction::Down is not supported");
+            turtle.pos.x = turtle.origin.x + turtle.layout.padding.l;
+            turtle.pos.y += turtle.biggest;
+            turtle.biggest = 0.0;
         }
     }
 
@@ -921,7 +665,11 @@ impl Cx {
     /// TODO(JP): Should we instead include `min_height` in [`Layout`]?
     pub fn turtle_new_line_min_height(&mut self, min_height: f32) {
         if let Some(turtle) = self.turtles.last_mut() {
-            assert_eq!(turtle.layout.direction, Direction::Right);
+            assert_eq!(
+                turtle.layout.direction,
+                Direction::Right,
+                "turtle_new_line_min_height with Direction::Down is not supported"
+            );
             turtle.pos.x = turtle.origin.x + turtle.layout.padding.l;
             turtle.pos.y += turtle.biggest.max(min_height);
             turtle.biggest = 0.0;
@@ -945,10 +693,7 @@ impl Cx {
         false
     }
 
-    /// Actually perform a horizontal movement of items in [`Cx::turtle_align_list`].
-    ///
-    /// TODO(JP): Should we move some of this stuff to [`Area`], where we already seem to do a bunch
-    /// of rectangle and position calculations?
+    /// Actually perform a horizontal movement of items in [`Cx::turtle_align_list`], but only for positive dx
     fn do_align_x(&mut self, dx: f32, align_start: usize) {
         if dx < 0. {
             // do only forward moving alignment
@@ -956,7 +701,15 @@ impl Cx {
             // in which case the alignment is not well defined
             return;
         }
+        self.move_by_x(dx, align_start)
+    }
 
+    /// Actually perform a horizontal movement of items in [`Cx::turtle_align_list`].
+    /// Unlike "do_align_x" negative moves can happen here because of wrapping behavior.
+    ///
+    /// TODO(JP): Should we move some of this stuff to [`Area`], where we already seem to do a bunch
+    /// of rectangle and position calculations?
+    fn move_by_x(&mut self, dx: f32, align_start: usize) {
         let dx = (dx * self.current_dpi_factor).floor() / self.current_dpi_factor;
         for i in align_start..self.turtle_align_list.len() {
             let align_item = &self.turtle_align_list[i];
@@ -983,10 +736,7 @@ impl Cx {
         }
     }
 
-    /// Actually perform a vertical movement of items in [`Cx::turtle_align_list`].
-    ///
-    /// TODO(JP): Should we move some of this stuff to [`Area`], where we already seem to do a bunch
-    /// of rectangle and position calculations?
+    /// Actually perform a vertical movement of items in [`Cx::turtle_align_list`], but only for positive dy
     fn do_align_y(&mut self, dy: f32, align_start: usize) {
         if dy < 0. {
             // do only forward moving alignment
@@ -994,7 +744,15 @@ impl Cx {
             // in which case the alignment is not well defined
             return;
         }
+        self.move_by_y(dy, align_start);
+    }
 
+    /// Actually perform a vertical movement of items in [`Cx::turtle_align_list`].
+    /// Unlike "do_align_y" negative moves can happen here because of wrapping behavior.
+    ///
+    /// TODO(JP): Should we move some of this stuff to [`Area`], where we already seem to do a bunch
+    /// of rectangle and position calculations?
+    fn move_by_y(&mut self, dy: f32, align_start: usize) {
         let dy = (dy * self.current_dpi_factor).floor() / self.current_dpi_factor;
         for i in align_start..self.turtle_align_list.len() {
             let align_item = &self.turtle_align_list[i];
@@ -1128,8 +886,9 @@ impl Cx {
     fn compute_align_turtle_x(turtle: &CxTurtle, align: AlignX) -> f32 {
         let AlignX(fx) = align;
         if fx > 0.0 {
+            // TODO(Dmitry): check if we need use padding here
             let dx = fx
-                * ((turtle.width - (turtle.layout.padding.l + turtle.layout.padding.r))
+                * ((turtle.available_width - (turtle.layout.padding.l + turtle.layout.padding.r))
                     - (turtle.bound_right_bottom.x - (turtle.origin.x + turtle.layout.padding.l)));
             if dx.is_nan() {
                 return 0.0;
@@ -1149,8 +908,9 @@ impl Cx {
     fn compute_align_turtle_y(turtle: &CxTurtle, align: AlignY) -> f32 {
         let AlignY(fy) = align;
         if fy > 0.0 {
+            // TODO(Dmitry): check if we need use padding here
             let dy = fy
-                * ((turtle.height - (turtle.layout.padding.t + turtle.layout.padding.b))
+                * ((turtle.available_height - (turtle.layout.padding.t + turtle.layout.padding.b))
                     - (turtle.bound_right_bottom.y - (turtle.origin.y + turtle.layout.padding.t)));
             if dy.is_nan() {
                 return 0.0;
@@ -1218,6 +978,14 @@ impl Cx {
         0.
     }
 
+    fn get_available_width_left(&self) -> f32 {
+        if let Some(turtle) = self.turtles.last() {
+            turtle.get_available_width_left()
+        } else {
+            0.
+        }
+    }
+
     fn _get_width_total(&self, abs: bool, abs_size: f32) -> f32 {
         if !abs {
             self.get_width_total()
@@ -1271,6 +1039,14 @@ impl Cx {
         0.
     }
 
+    fn get_available_height_left(&self) -> f32 {
+        if let Some(turtle) = self.turtles.last() {
+            turtle.get_available_height_left()
+        } else {
+            0.
+        }
+    }
+
     fn _get_height_total(&self, abs: bool, abs_size: f32) -> f32 {
         if !abs {
             self.get_height_total()
@@ -1309,21 +1085,41 @@ impl Cx {
         false
     }
 
-    fn eval_width(&self, width: &Width, margin: Margin, abs: bool, abs_size: f32) -> f32 {
+    fn eval_width(&self, width: &Width, abs: bool, abs_size: f32) -> f32 {
         match width {
             Width::Compute => std::f32::NAN,
             Width::Fix(v) => max_zero_keep_nan(*v),
-            Width::Fill => max_zero_keep_nan(self._get_width_left(abs, abs_size) - (margin.l + margin.r)),
-            Width::FillUntil(v) => min_keep_nan(*v, self._get_width_left(abs, abs_size) - (margin.l + margin.r)),
+            Width::Fill => max_zero_keep_nan(self._get_width_left(abs, abs_size)),
+            Width::FillUntil(v) => min_keep_nan(*v, self._get_width_left(abs, abs_size)),
         }
     }
 
-    fn eval_height(&self, height: &Height, margin: Margin, abs: bool, abs_size: f32) -> f32 {
+    // TODO(Dmitry): unify with eval_width or get rid of one
+    fn eval_walking_width(&self, width: &Width) -> f32 {
+        match width {
+            Width::Compute => panic!("Walking with Width:Compute is not supported"),
+            Width::Fix(v) => v.max(0.),
+            Width::Fill => self.get_available_width_left(),
+            Width::FillUntil(v) => self.get_available_width_left().min(*v),
+        }
+    }
+
+    fn eval_height(&self, height: &Height, abs: bool, abs_size: f32) -> f32 {
         match height {
             Height::Compute => std::f32::NAN,
             Height::Fix(v) => max_zero_keep_nan(*v),
-            Height::Fill => max_zero_keep_nan(self._get_height_left(abs, abs_size) - (margin.t + margin.b)),
-            Height::FillUntil(v) => min_keep_nan(*v, self._get_height_left(abs, abs_size) - (margin.t + margin.b)),
+            Height::Fill => max_zero_keep_nan(self._get_height_left(abs, abs_size)),
+            Height::FillUntil(v) => min_keep_nan(*v, self._get_height_left(abs, abs_size)),
+        }
+    }
+
+    // TODO(Dmitry): unify with eval_height or get rid of one
+    fn eval_walking_height(&self, height: &Height) -> f32 {
+        match height {
+            Height::Compute => panic!("Walking with Height:Compute is not supported"),
+            Height::Fix(v) => v.max(0.),
+            Height::Fill => self.get_available_height_left(),
+            Height::FillUntil(v) => self.get_available_height_left().min(*v),
         }
     }
 

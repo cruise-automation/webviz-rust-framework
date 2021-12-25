@@ -721,6 +721,8 @@ where
         //if !self.dock_items.is_none(){
         stack.push(DockWalkStack { counter: 0, uid: 0, item: dock_items });
         //}
+        self.splitters.begin_draw();
+        self.tab_controls.begin_draw();
         DockWalker {
             walk_uid: 0,
             stack,
@@ -790,6 +792,7 @@ where
     element_list: Vec<ID>,
     element_map: HashMap<ID, ElementsRedraw<T>>,
     redraw_id: u64,
+    marked_begin_draw: bool,
 }
 
 /// See [`Elements`].
@@ -873,13 +876,7 @@ where
     ID: std::cmp::Ord + std::hash::Hash + Clone,
 {
     fn new() -> Elements<ID, T> {
-        Elements::<ID, T> { redraw_id: 0, element_list: Vec::new(), element_map: HashMap::new() }
-    }
-
-    // if you don't atleast get_draw 1 item
-    // you have to call mark for sweep to work
-    fn mark(&mut self) {
-        self.redraw_id += 1;
+        Elements::<ID, T> { redraw_id: 0, element_list: Vec::new(), element_map: HashMap::new(), marked_begin_draw: false }
     }
 
     // enumerate the set of 'last drawn' items
@@ -897,11 +894,18 @@ where
         }
     }
 
+    fn begin_draw(&mut self) {
+        self.marked_begin_draw = true;
+    }
+
     fn get_draw<F>(&mut self, index: ID, mut insert_callback: F) -> &mut T
     where
         F: FnMut() -> T,
     {
-        self.mark();
+        if self.marked_begin_draw {
+            self.marked_begin_draw = false;
+            self.redraw_id += 1;
+        }
         let element_list = &mut self.element_list;
         let redraw_id = self.redraw_id;
         let redraw = self.element_map.entry(index.clone()).or_insert_with(|| {

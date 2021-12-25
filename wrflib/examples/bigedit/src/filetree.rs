@@ -62,8 +62,6 @@ pub struct FileTree {
 
     node_layout: Layout,
     row_height: f32,
-    filler_walk: Walk,
-    folder_walk: Walk,
     color_tree_folder: Vec4,
     color_tree_file: Vec4,
 
@@ -79,6 +77,9 @@ pub enum FileTreeEvent {
     SelectFile { path: String },
     SelectFolder { path: String },
 }
+
+const FILLER_WALK: Walk = Walk { width: Width::Fix(10.0), height: Height::Fill };
+const FILLER_PADDING: Padding = Padding { l: 1., t: 0., r: 4., b: 0. };
 
 const TEXT_STYLE_LABEL: TextStyle = TextStyle { top_drop: 1.3, ..TEXT_STYLE_NORMAL };
 
@@ -109,8 +110,6 @@ impl FileTree {
             //node_layout: LayoutFileTreeNode::id(),
             node_layout: Layout::default(),
             row_height: 0.,
-            filler_walk: Walk::default(),
-            folder_walk: Walk::default(),
             color_tree_folder: Vec4::default(),
             color_tree_file: Vec4::default(),
 
@@ -126,8 +125,6 @@ impl FileTree {
             ..Layout::default()
         };
         self.row_height = node_height;
-        self.filler_walk = Walk { width: Width::Fix(10.0), height: Height::Fill, margin: Margin { l: 1., t: 0., r: 4., b: 0. } };
-        self.folder_walk = Walk { width: Width::Fix(14.), height: Height::Fill, margin: Margin::right(2.) };
         self.color_tree_folder = COLOR_TREE_FOLDER;
         self.color_tree_file = COLOR_TREE_FILE;
     }
@@ -313,6 +310,13 @@ impl FileTree {
         FileTreeEvent::None
     }
 
+    fn walk_filler(cx: &mut Cx) -> Rect {
+        cx.begin_padding_box(FILLER_PADDING);
+        let rect = cx.walk_turtle(FILLER_WALK);
+        cx.end_padding_box();
+        rect
+    }
+
     pub fn draw(&mut self, cx: &mut Cx) {
         self.view.begin_view(cx, Layout::default());
 
@@ -381,16 +385,16 @@ impl FileTree {
                     }
                     //anim_pos
                     filler.anim_pos = -1.;
-                    let rect = cx.walk_turtle(self.filler_walk);
+                    let rect = Self::walk_filler(cx);
                     filler.draw_quad_abs(cx, rect);
                 } else {
                     let here_last = if last_stack.len() > 1 { last_stack[i + 1] } else { false };
                     if here_last {
-                        cx.walk_turtle(self.filler_walk);
+                        Self::walk_filler(cx);
                     } else {
                         filler.line_vec = vec2(-0.2, 1.2);
                         filler.anim_pos = -1.;
-                        let rect = cx.walk_turtle(self.filler_walk);
+                        let rect = Self::walk_filler(cx);
                         filler.draw_quad_abs(cx, rect);
                     }
                 }
@@ -404,7 +408,7 @@ impl FileTree {
                     // draw the folder icon
                     filler.line_vec = vec2(0., 0.);
                     filler.anim_pos = 1.;
-                    let rect = cx.walk_turtle(self.filler_walk);
+                    let rect = Self::walk_filler(cx);
                     filler.draw_quad_abs(cx, rect);
                     // move the turtle down a bit
                     //cx.move_turtle(0., 3.5);

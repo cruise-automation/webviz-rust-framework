@@ -21,24 +21,24 @@ pub struct Point {
 
 impl Point {
     /// Creates a new point with the given coordinates.
-    pub fn new(x: f32, y: f32) -> Point {
+    pub(crate) fn new(x: f32, y: f32) -> Point {
         Point { x, y }
     }
 
     /// Returns the point at the origin.
-    pub fn origin() -> Point {
+    pub(crate) fn origin() -> Point {
         Point::new(0.0, 0.0)
     }
 
-    /// Converts `self` to a vector.
-    ///
-    /// This is equivalent to subtracting `self` from the origin.
-    pub fn to_vector(self) -> Vector {
-        Vector::new(self.x, self.y)
-    }
+    // /// Converts `self` to a vector.
+    // ///
+    // /// This is equivalent to subtracting `self` from the origin.
+    // pub(crate)fn to_vector(self) -> Vector {
+    //     Vector::new(self.x, self.y)
+    // }
 
     /// Linearly interpolate between `self` and `other` with parameter `t`.
-    pub fn lerp(self, other: Point, t: f32) -> Point {
+    pub(crate) fn lerp(self, other: Point, t: f32) -> Point {
         Point::new(F32Ext::lerp(self.x, other.x, t), F32Ext::lerp(self.y, other.y, t))
     }
 }

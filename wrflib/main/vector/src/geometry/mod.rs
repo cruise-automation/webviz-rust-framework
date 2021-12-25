@@ -18,13 +18,13 @@ mod trapezoid;
 mod vector;
 
 pub use self::affine_transformation::AffineTransformation;
-pub use self::f32_ext::F32Ext;
-pub use self::line_segment::LineSegment;
-pub use self::linear_transformation::LinearTransformation;
+pub(crate) use self::f32_ext::F32Ext;
+pub(crate) use self::line_segment::LineSegment;
+pub(crate) use self::linear_transformation::LinearTransformation;
 pub use self::point::Point;
-pub use self::quadratic_segment::QuadraticSegment;
+pub(crate) use self::quadratic_segment::QuadraticSegment;
 pub use self::rectangle::Rectangle;
 pub use self::transform::Transform;
-pub use self::transformation::Transformation;
+pub(crate) use self::transformation::Transformation;
 pub use self::trapezoid::Trapezoid;
 pub use self::vector::Vector;

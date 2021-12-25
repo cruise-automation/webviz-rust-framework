@@ -9,12 +9,12 @@ use crate::geometry::{LinearTransformation, Point, Transform, Transformation, Ve
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(C)]
 pub struct AffineTransformation {
-    pub xy: LinearTransformation,
-    pub z: Vector,
+    pub(crate) xy: LinearTransformation,
+    pub(crate) z: Vector,
 }
 
 impl AffineTransformation {
-    pub fn new(xy: LinearTransformation, z: Vector) -> AffineTransformation {
+    pub(crate) fn new(xy: LinearTransformation, z: Vector) -> AffineTransformation {
         AffineTransformation { xy, z }
     }
 

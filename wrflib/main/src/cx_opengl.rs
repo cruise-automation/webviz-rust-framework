@@ -58,7 +58,7 @@ impl Cx {
                     draw_call.platform.inst_vb.update_with_f32_data(opengl_cx, &draw_call.instances);
                 }
 
-                let geometry_id = if let Some(geometry) = draw_call.geometry {
+                let geometry_id = if let Some(geometry) = draw_call.props.geometry {
                     geometry.geometry_id
                 } else if let Some(geometry) = sh.default_geometry {
                     geometry.geometry_id

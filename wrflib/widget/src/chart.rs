@@ -7,22 +7,172 @@
 use std::{
     collections::HashMap,
     f32::{INFINITY, NEG_INFINITY},
+    sync::{Arc, RwLock},
 };
 
 use crate::*;
 use wrflib::*;
+
+#[derive(Default)]
+pub struct ChartTooltip {
+    background: Background,
+    target_pos: Vec2,
+    value: f32,
+    axis: f32,
+    dataset: usize,
+}
+
+impl ChartTooltip {
+    fn update(&mut self, current_element: &ChartCurrentElement) {
+        self.target_pos = current_element.normalized_data_point;
+        self.value = current_element.data_point.y;
+        self.axis = current_element.data_point.x;
+        self.dataset = current_element.dataset_index;
+    }
+
+    fn draw(&mut self, cx: &mut Cx, config: &ChartConfig) {
+        let bounds = cx.get_turtle_rect();
+
+        // Simple coloring for the tooltip: set the text color to be the same as the
+        // chart's background, while using the invert of that color as the background
+        // of the tooltip.
+        let text_color = config.style.background_color;
+        let mut background_color = vec4(1., 1., 1., 1.) - text_color;
+        background_color.w = 1.; // Keep a valid alpha color.
+
+        let size = config.tooltip.size.max(&vec2(130., 50.));
+        let arrow_pointer_size = vec2(10., 10.);
+
+        // Center the tooltip horizontally, always on top of the current element
+        let mut pos = self.target_pos - vec2(0.5 * size.x, size.y);
+
+        // Keep the tooltip inside the chart's horizontal bounds
+        pos.x = pos.x.clamp(bounds.pos.x, bounds.pos.x + bounds.size.x - size.x);
+
+        // Make sure the tooltip is snapped to the top border if
+        // the current element is too close to it.
+        if pos.y < 0.5 * size.y {
+            pos.y += size.y;
+        }
+
+        // Shift the tooltip a bit up/down based on the current element position,
+        // so the pointer is visible. Also, since the tooltip is mostly on top
+        // of the current element, the pointer is inverted by default but the
+        // tip of the arrow must always point to the current element
+        let arrow_pointer_direction;
+        if pos.y < self.target_pos.y {
+            pos.y -= arrow_pointer_size.y - 1.;
+            arrow_pointer_direction = ArrowPointerDirection::Down;
+        } else {
+            pos.y += arrow_pointer_size.y - 1.;
+            arrow_pointer_direction = ArrowPointerDirection::Up;
+        }
+
+        // The pointer is always drawn at the current element's position.
+        ArrowPointerIns::draw(cx, self.target_pos, background_color, arrow_pointer_direction, arrow_pointer_size);
+
+        self.background.draw(cx, Rect { pos, size }, background_color);
+
+        if let Some(renderer) = &config.tooltip.renderer {
+            renderer.read().unwrap().draw_tooltip(cx, &config, pos);
+        } else {
+            let text_props = TextInsProps { text_style: TEXT_STYLE_MONO, color: text_color, ..TextInsProps::DEFAULT };
+
+            let path = {
+                if (self.axis as usize) < config.labels.len() {
+                    config.labels[self.axis as usize].to_string()
+                } else {
+                    format!("{}", self.axis)
+                }
+            };
+
+            TextIns::draw_str(cx, &path, pos + vec2(10., 10.), &text_props);
+            TextIns::draw_str(cx, &format!("Dataset {}: {:.3}", self.dataset, self.value), pos + vec2(10., 25.), &text_props);
+        }
+    }
+}
 
 /// TODO(hernan): Implement other chart types like bar, pie, etc...
 pub enum ChartType {
     Line,
 }
 
-type ChartDatum = Vec2;
+/// Contains the data is going to be used to render the chart
+///
+/// Input data can be represented in different formats and we
+/// use references to avoid an extra copy
+#[derive(Debug, Clone)]
+pub enum ChartData<'a> {
+    Empty,
+    Values(&'a [f32]),
+    Pairs(&'a [Vec2]),
+}
+
+impl<'a> ChartData<'a> {
+    pub fn from_values(data: &'a Vec<f32>) -> ChartData<'a> {
+        ChartData::Values(data)
+    }
+
+    pub fn from_pairs(data: &'a Vec<Vec2>) -> ChartData<'a> {
+        ChartData::Pairs(data)
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            ChartData::Values(data) => data.len(),
+            ChartData::Pairs(data) => data.len(),
+            ChartData::Empty => 0,
+        }
+    }
+
+    // TODO(hernan): There's probably a better way to do this
+    pub fn min_max(&self, lo: Vec2, hi: Vec2) -> (Vec2, Vec2) {
+        match self {
+            ChartData::Values(data) => {
+                let mut min = lo;
+                let mut max = hi;
+                for i in 0..data.len() {
+                    let p = vec2(i as f32, data[i]);
+                    min = min.min(&p);
+                    max = max.max(&p);
+                }
+                (min, max)
+            }
+            ChartData::Pairs(data) => {
+                let mut min = lo;
+                let mut max = hi;
+                for p in *data {
+                    min = min.min(p);
+                    max = max.max(p);
+                }
+                (min, max)
+            }
+            ChartData::Empty => (lo, hi),
+        }
+    }
+
+    pub fn value_at(&self, i: usize) -> Vec2 {
+        match self {
+            ChartData::Values(data) => vec2(i as f32, data[i]),
+            ChartData::Pairs(data) => data[i],
+            ChartData::Empty => vec2(INFINITY, INFINITY),
+        }
+    }
+
+    // TODO(hernan): Prevent copying data
+    pub fn points(&self) -> Vec<Vec2> {
+        match self {
+            ChartData::Values(data) => data.iter().enumerate().map(|(x, y)| vec2(x as f32, *y)).collect(),
+            ChartData::Pairs(data) => data.to_vec(),
+            ChartData::Empty => vec![],
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
-pub struct ChartDataset {
+pub struct ChartDataset<'a> {
     pub label: String,
-    pub data: Vec<ChartDatum>,
+    pub data: ChartData<'a>,
     pub point_background_color: Vec4,
     pub point_radius: f32,
     pub point_style: DrawPoints3dStyle,
@@ -31,11 +181,11 @@ pub struct ChartDataset {
     pub show_line: bool,
 }
 
-impl Default for ChartDataset {
+impl<'a> Default for ChartDataset<'a> {
     fn default() -> Self {
         Self {
             label: String::new(),
-            data: vec![],
+            data: ChartData::Empty,
             point_background_color: COLOR_WHITE,
             point_radius: 10.,
             point_style: DrawPoints3dStyle::Circle,
@@ -51,16 +201,87 @@ pub struct ChartScale {
     pub max: f32,
 }
 
-/// These options are based on the ones provided by ChartJS
-pub struct ChartConfig {
-    pub chart_type: ChartType,
-    pub datasets: Vec<ChartDataset>,
-    pub scales: HashMap<String, ChartScale>,
+#[derive(Clone)]
+pub struct ChartStyle {
+    pub background_color: Vec4,
+    pub grid_color: Vec4,
+    pub label_color: Vec4,
 }
 
-impl Default for ChartConfig {
+pub const CHART_STYLE_LIGHT: ChartStyle =
+    ChartStyle { background_color: COLOR_WHITE, grid_color: COLOR_LIGHTGRAY, label_color: COLOR_DARKGRAY };
+
+pub const CHART_STYLE_DARK: ChartStyle =
+    ChartStyle { background_color: COLOR_BLACK, grid_color: vec4(0.25, 0.25, 0.25, 1.), label_color: COLOR_WHITE };
+
+/// Renders a tooltip's content
+///
+/// Implement this trait to render the elements that are shown inside a tooltip. The
+/// tooltip's background and current element indicator (small triangle) are not rendered
+/// by this function.
+///
+/// See [`ChartTooltipConfig`] for comments about size and other settings for tooltips.
+pub trait ChartTooltipRenderer {
+    /// Draw the tooltip's content
+    ///
+    /// Use `pos` to position the elements that need to be rendered.
+    ///
+    /// TODO(Hernan): Add support for turtles and other layout mechanisms.
+    fn draw_tooltip(&self, cx: &mut Cx, config: &ChartConfig, pos: Vec2);
+}
+
+/// An extension machanism for charts
+///
+/// Implement this trait to render custom elements on top of the chart, but
+/// behind tooltips, if any.
+///
+/// Note that any new element added by this function will not be considered for
+/// selection and will not affect selection of existing elements drawn by the
+/// chart.
+pub trait ChartPlugin {
+    fn draw(&mut self, cx: &mut Cx, config: &ChartConfig, chart_bounds: &Rect);
+}
+
+/// Tooltip configuration
+///
+/// TODO(Hernan): Provide customization options for background, current element
+/// indicator and whether or not the tooltip should be visible and animated.
+#[derive(Default, Clone)]
+pub struct ChartTooltipConfig {
+    /// Tooltip content's size
+    ///
+    /// This value does not take into account the size of the current element
+    /// indicator, which is drawn outside of the tooltip's content rectangle.
+    pub size: Vec2,
+    /// Optional custom renderer for tooltips.
+    ///
+    /// If none is provided, the tooltip will be rendered with the default content
+    /// and style.
+    pub renderer: Option<Arc<RwLock<dyn ChartTooltipRenderer>>>,
+}
+
+/// These options are based on the ones provided by ChartJS
+pub struct ChartConfig<'a> {
+    pub chart_type: ChartType,
+    /// If the [`ChartConfig::labels] property of the main data property is used,
+    /// it has to contain the same amount of elements as the dataset with the most values.
+    pub labels: Vec<String>,
+    pub datasets: Vec<ChartDataset<'a>>,
+    pub scales: HashMap<String, ChartScale>,
+    pub style: ChartStyle,
+    pub tooltip: ChartTooltipConfig,
+}
+
+impl<'a> Default for ChartConfig<'a> {
     fn default() -> Self {
-        Self { chart_type: ChartType::Line, datasets: vec![], scales: HashMap::new() }
+        Self {
+            chart_type: ChartType::Line,
+            labels: Vec::<String>::default(),
+            datasets: vec![],
+            scales: HashMap::new(),
+            style: CHART_STYLE_DARK,
+            tooltip: ChartTooltipConfig::default(),
+        }
     }
 }
 
@@ -93,16 +314,28 @@ pub enum ChartEvent {
 #[derive(Default)]
 pub struct Chart {
     bounds: Rect,
+    view: View,
+    chart_view: View,
+    component_base: ComponentBase,
+    pass: Pass,
+    color_texture: Texture,
     min: Vec2,
     max: Vec2,
+    background: Background,
     areas: Vec<Area>,
+    tooltip: ChartTooltip,
+    tooltip_visible: bool,
+    // Keep an Arc<RwLock> to plugins since most of them are maybe owned
+    // by other components. But we also need to call them here.
+    pub plugins: Vec<Arc<RwLock<dyn ChartPlugin>>>,
 }
 
 impl Chart {
-    pub fn handle(&mut self, cx: &mut Cx, event: &mut Event, component_base: &ComponentBase) -> ChartEvent {
-        match event.hits(cx, component_base, HitOpt::default()) {
+    pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) -> ChartEvent {
+        match event.hits(cx, &self.component_base, HitOpt::default()) {
             Event::FingerHover(fe) => {
                 if fe.hover_state == HoverState::Out {
+                    self.tooltip_visible = false;
                     return ChartEvent::FingerOut;
                 }
 
@@ -110,6 +343,12 @@ impl Chart {
                 let cursor = mouse_pos_rel.clamp(&self.bounds.pos, &(self.bounds.pos + self.bounds.size));
                 let cursor_value = self.denormalize_data_point(cursor);
                 let current_element = self.get_element_at(cx, cursor_value);
+                if let Some(current_element) = &current_element {
+                    self.tooltip.update(&current_element);
+                    self.tooltip_visible = true;
+                } else {
+                    self.tooltip_visible = false;
+                }
 
                 return ChartEvent::FingerHover { cursor, cursor_value, current_element };
             }
@@ -183,16 +422,11 @@ impl Chart {
         ret
     }
 
-    pub(crate) fn get_bounds(&self) -> Rect {
-        self.bounds
-    }
-
     fn remap(value: f32, lo0: f32, hi0: f32, lo1: f32, hi1: f32) -> f32 {
         lo1 + (value - lo0) / (hi0 - lo0) * (hi1 - lo1)
     }
 
-    fn draw_grid(&mut self, cx: &mut Cx) {
-        let color = vec4(0.25, 0.25, 0.25, 1.);
+    fn draw_grid(&mut self, cx: &mut Cx, config: &ChartConfig) {
         let scale = 1.;
 
         let min_x = self.bounds.pos.x;
@@ -202,32 +436,60 @@ impl Chart {
 
         let mut lines = vec![];
 
-        let columns = 4.;
+        let columns = {
+            let mut count = 5;
+            if let Some(data_len) = config.datasets.iter().map(|ds| ds.data.len()).max() {
+                if data_len > 0 {
+                    count = data_len.min(10).max(count);
+                }
+            }
+            count
+        };
+
         let rows = 10.;
 
         // TODO(hernan): Grids should be dynamic, adding or removing vertical/horizontal
-        // divisions as needed depending on zoom and pan options. For now, just use 5 divisions for both.
-        let step = (max_x - min_x) / columns;
-        let mut x = min_x;
-        while x <= max_x {
-            lines.push(DrawLines3dInstance::from_segment(vec3(x, min_y, 0.), vec3(x, max_y + 10., 0.), color, scale));
+        // divisions as needed depending on zoom and pan options. For now, just use arbitrary divisions for both.
+        for i in 0..columns {
+            let x = Self::remap(i as f32, 0., (columns - 1) as f32, min_x, max_x);
 
-            let col_value = Self::remap(x, min_x, max_x, self.min.x, self.max.x);
+            lines.push(DrawLines3dInstance::from_segment(
+                vec3(x, min_y, 0.),
+                vec3(x, max_y + 10., 0.),
+                config.style.grid_color,
+                scale,
+            ));
+
+            let label = {
+                if i < config.labels.len() {
+                    config.labels[i].clone()
+                } else {
+                    let col_value = Self::remap(x, min_x, max_x, self.min.x, self.max.x);
+                    format!("{:.0}", col_value)
+                }
+            };
 
             TextIns::draw_str(
                 cx,
-                &format!("{:.0}", col_value),
-                cx.get_turtle_origin() + Vec2 { x, y: max_y + 10. },
-                &TextInsProps { position_anchoring: TEXT_ANCHOR_CENTER_H, ..TextInsProps::DEFAULT },
+                &label,
+                Vec2 { x, y: max_y + 10. },
+                &TextInsProps {
+                    position_anchoring: TEXT_ANCHOR_CENTER_H,
+                    color: config.style.label_color,
+                    ..TextInsProps::DEFAULT
+                },
             );
-
-            x += step;
         }
 
         let step = (max_y - min_y) / rows;
         let mut y = min_y;
         while y <= max_y {
-            lines.push(DrawLines3dInstance::from_segment(vec3(min_x - 10., y, 0.), vec3(max_x, y, 0.), color, scale));
+            lines.push(DrawLines3dInstance::from_segment(
+                vec3(min_x - 10., y, 0.),
+                vec3(max_x, y, 0.),
+                config.style.grid_color,
+                scale,
+            ));
 
             // Flip min_y/max_y since y coordinate is inverted
             let row_value = Self::remap(y, max_y, min_y, self.min.y, self.max.y);
@@ -235,8 +497,12 @@ impl Chart {
             TextIns::draw_str(
                 cx,
                 &format!("{:.0}", row_value),
-                cx.get_turtle_origin() + Vec2 { x: min_x - 15., y },
-                &TextInsProps { position_anchoring: TEXT_ANCHOR_RIGHT + TEXT_ANCHOR_CENTER_V, ..TextInsProps::DEFAULT },
+                Vec2 { x: min_x - 15., y },
+                &TextInsProps {
+                    position_anchoring: TEXT_ANCHOR_RIGHT + TEXT_ANCHOR_CENTER_V,
+                    color: config.style.label_color,
+                    ..TextInsProps::DEFAULT
+                },
             );
 
             y += step;
@@ -283,7 +549,11 @@ impl Chart {
             });
         }
 
-        DrawPoints3d::draw(cx, &points, DrawPoints3dOptions { use_screen_space: true, point_style })
+        DrawPoints3d::draw(
+            cx,
+            &points,
+            DrawPoints3dOptions { use_screen_space: true, point_style, ..DrawPoints3dOptions::default() },
+        )
     }
 
     /// Transform a data point from data coordinates to normalized screen coordinates
@@ -353,10 +623,9 @@ impl Chart {
         }
 
         for dataset in &config.datasets {
-            for datum in &dataset.data {
-                min = min.min(datum);
-                max = max.max(datum);
-            }
+            let (lo, hi) = dataset.data.min_max(min, max);
+            min = lo;
+            max = hi;
         }
 
         // Force either bound to be zero (but not both)
@@ -369,28 +638,38 @@ impl Chart {
         (Self::round_down(min), Self::round_up(max))
     }
 
-    pub fn draw(&mut self, cx: &mut Cx, config: &ChartConfig) {
+    pub fn draw_chart(&mut self, cx: &mut Cx, config: &ChartConfig) {
+        self.chart_view.begin_view(cx, Layout::default());
+
+        let rect = cx.get_turtle_rect();
+
         let current_dpi = cx.current_dpi_factor;
-        let measured_size = vec2(cx.get_width_total(), cx.get_height_total());
-        self.bounds = Rect { pos: vec2(60., 5.), size: measured_size - vec2(80., 40.) };
+
+        self.background.draw(cx, rect, config.style.background_color);
+
+        // Compute the rect where the chart will be rendered. The offsets below
+        // add some marging so we can also render labels for each axis.
+        // TODO(Hernan): should this be customizable?
+        self.bounds = Rect { pos: rect.pos + vec2(60., 5.), size: rect.size - vec2(80., 40.) };
 
         // Compute min/max for all datasets before rendering
         let (min, max) = Self::get_min_max(config);
         self.min = min;
         self.max = max;
 
-        self.draw_grid(cx);
+        self.draw_grid(cx, &config);
 
         self.areas = vec![];
 
         for dataset in &config.datasets {
-            let normalized_data = self.normalize(&dataset.data);
+            let points = dataset.data.points();
+            let normalized_data = self.normalize(&points);
             if !normalized_data.is_empty() {
                 self.draw_lines(cx, &normalized_data, dataset.border_color, dataset.border_width * current_dpi);
                 let area = self.draw_points(
                     cx,
                     &normalized_data,
-                    &dataset.data,
+                    &points,
                     dataset.point_background_color,
                     dataset.point_radius * current_dpi,
                     dataset.point_style.clone(),
@@ -398,6 +677,39 @@ impl Chart {
                 self.areas.push(area);
             }
         }
+
+        for plugin in &mut self.plugins {
+            plugin.write().unwrap().draw(cx, config, &self.bounds)
+        }
+
+        if self.tooltip_visible {
+            self.tooltip.draw(cx, config);
+        }
+
+        self.chart_view.end_view(cx);
+    }
+
+    fn draw_view(&mut self, cx: &mut Cx) {
+        self.view.begin_view(cx, Layout::default());
+        let rect = cx.get_turtle_rect();
+        let color_texture_handle = self.color_texture.get_color(cx);
+        let area = ImageIns::draw(cx, rect, color_texture_handle);
+        self.component_base.register_component_area(cx, area);
+        self.view.end_view(cx);
+    }
+
+    pub fn draw(&mut self, cx: &mut Cx, config: &ChartConfig) {
+        self.draw_view(cx);
+
+        self.pass.begin_pass_without_textures(cx);
+        let rect = cx.get_turtle_rect();
+        let color_texture_handle = self.color_texture.get_color(cx);
+        self.pass.set_size(cx, rect.size);
+        self.pass.add_color_texture(cx, color_texture_handle, ClearColor::default());
+
+        self.draw_chart(cx, config);
+
+        self.pass.end_pass(cx);
     }
 }
 

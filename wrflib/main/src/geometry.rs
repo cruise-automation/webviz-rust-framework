@@ -69,6 +69,13 @@ fn declare_geometry(cx: &mut Cx, gen: GeometryGen) {
     });
 }
 
+/// Create a Geometry out of indices and vertex attributes
+pub fn create_mesh(cx: &mut Cx, indices: Vec<u32>, vertices: Vec<f32>) -> Geometry {
+    cx.geometries.push(CxGeometry { indices, vertices, dirty: true, platform: CxPlatformGeometry::default() });
+
+    Geometry { geometry_id: cx.geometries.len() - 1 }
+}
+
 /// Generated geometry data, used for instanced renderen. For example, you can define that a
 /// quad has 4 vertices (for use in e.g. [`crate::QuadIns`]), so you don't have to manually create them
 /// every time you want to render a quad.

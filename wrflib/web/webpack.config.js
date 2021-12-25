@@ -9,10 +9,8 @@ const path = require("path");
 module.exports = {
   entry: {
     /* eslint-disable camelcase */
-    wrf_wasm_runtime: "./wrf_wasm_runtime.ts",
-    wrf_cef_runtime: "./wrf_cef_runtime.ts",
     wrf_runtime: "./wrf_runtime.ts",
-    wrf_user_worker_runtime: "./wrf_user_worker_runtime.ts",
+    wrf_web_worker_runtime: "./wrf_web_worker_runtime.ts",
     test_suite: "./test_suite.ts",
     /* eslint-enable camelcase */
   },
@@ -30,6 +28,10 @@ module.exports = {
         test: /\.tsx?$/,
         use: "ts-loader",
         exclude: /node_modules/,
+      },
+      {
+        test: /\.css$/i,
+        use: ["style-loader", "css-loader"],
       },
     ],
   },

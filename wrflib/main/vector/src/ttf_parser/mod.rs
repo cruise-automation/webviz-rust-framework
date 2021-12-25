@@ -6,11 +6,10 @@
 
 use crate::font::{Glyph, HorizontalMetrics, Outline, OutlinePoint, VectorFont};
 use crate::geometry::{AffineTransformation, LinearTransformation, Point, Rectangle, Transform, Vector};
-use crate::internal_iter::ExtendFromInternalIterator;
 use std::{mem, result};
 
 #[derive(Clone, Debug)]
-pub struct GlyphsParser<'a> {
+pub(crate) struct GlyphsParser<'a> {
     glyphs: Vec<Option<Glyph>>,
     advance_width_count: usize,
     hmtx_table_bytes: &'a [u8],
@@ -209,9 +208,11 @@ impl<'a> GlyphsParser<'a> {
             };
             for component_contour in component_glyph.outline.contours() {
                 let mut contour = outline.begin_contour();
-                contour.extend_from_internal_iter(
-                    component_contour.points().iter().cloned().map(|point| point.transform(&AffineTransformation::new(xy, z))),
-                );
+                for item in
+                    component_contour.points().iter().cloned().map(|point| point.transform(&AffineTransformation::new(xy, z)))
+                {
+                    contour.push(item);
+                }
                 contour.end();
             }
             if !flags.more_components() {

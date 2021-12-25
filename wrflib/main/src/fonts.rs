@@ -297,6 +297,8 @@ impl TrapezoidText {
 
                 let font_scale_logical = atlas_page.font_size * 96.0 / (72.0 * font.units_per_em);
                 let font_scale_pixels = font_scale_logical * atlas_page.dpi_factor;
+                assert!(font_scale_logical > 0.);
+                assert!(font_scale_pixels > 0.);
                 let mut trapezoids = Vec::new();
                 let trapezoidate = self.trapezoidator.trapezoidate(
                     glyph
@@ -315,7 +317,10 @@ impl TrapezoidText {
                         .linearize(0.5),
                 );
                 if let Some(trapezoidate) = trapezoidate {
-                    trapezoids.extend_from_internal_iter(trapezoidate);
+                    trapezoidate.for_each(&mut |item| {
+                        trapezoids.push(item);
+                        true
+                    });
                 }
                 trapezoids
             };

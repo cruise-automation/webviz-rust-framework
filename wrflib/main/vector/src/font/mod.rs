@@ -18,4 +18,4 @@ pub use self::font::VectorFont;
 pub use self::glyph::Glyph;
 pub use self::horizontal_metrics::HorizontalMetrics;
 pub use self::outline::Outline;
-pub use self::outline_point::OutlinePoint;
+pub(crate) use self::outline_point::OutlinePoint;

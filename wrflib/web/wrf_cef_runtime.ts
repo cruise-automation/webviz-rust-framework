@@ -34,9 +34,9 @@ declare global {
     cefCallRustInSameThreadSync: (
       name: string,
       params: CefParams
-    ) => (string | [ArrayBuffer, number])[];
+    ) => (string | [ArrayBuffer, number | undefined])[];
     cefReadyForMessages: () => void;
-    cefCreateArrayBuffer: (size: number) => ArrayBuffer;
+    cefCreateArrayBuffer: (size: number) => [ArrayBuffer, number | undefined];
     cefHandleKeyboardEvent: (buffer: ArrayBuffer) => void;
     cefTriggerCut: () => void;
     cefTriggerCopy: () => void;
@@ -70,7 +70,7 @@ export const callRust: CallRust = (name, params = []) => {
         const wrfBuffer = param.buffer as WrfBuffer;
         return [wrfBuffer.__wrflibWasmBuffer, wrfBuffer.readonly];
       }
-      const cefBuffer = window.cefCreateArrayBuffer(param.byteLength);
+      const [cefBuffer] = window.cefCreateArrayBuffer(param.byteLength);
       copyUint8ArrayToRustBuffer(param, cefBuffer, 0);
       return [cefBuffer, false];
     }
@@ -126,6 +126,25 @@ export const unregisterCallJsCallbacks = (fnNames: string[]): void => {
   });
 };
 
+const transformReturnParams = (
+  returnParams: (string | [ArrayBuffer, number | undefined])[]
+) =>
+  returnParams.map((param) => {
+    if (typeof param === "string") {
+      return param;
+    } else {
+      const [buffer, arcPtr] = param;
+      const wrfBuffer = getWrfBufferCef(buffer, arcPtr);
+      // Creating Uint8Array with stable identity as that's what underlying underlying API expects
+      const uint8Buffer = getCachedUint8Buffer(
+        wrfBuffer,
+        // This actually creates a WrfUint8Array as this was overwritten above in overwriteTypedArraysWithWrfArrays()
+        new Uint8Array(wrfBuffer)
+      );
+      return uint8Buffer;
+    }
+  });
+
 // TODO(JP): Some of this code is duplicated with callRust/call_js; see if we can reuse some.
 export const callRustInSameThreadSync: CallRustInSameThreadSync = (
   name,
@@ -135,27 +154,14 @@ export const callRustInSameThreadSync: CallRustInSameThreadSync = (
     if (typeof param === "string") {
       return param;
     } else {
-      const cefBuffer = window.cefCreateArrayBuffer(param.byteLength);
+      const [cefBuffer] = window.cefCreateArrayBuffer(param.byteLength);
       // TODO(Dmitry): implement optimization to avoid copying when possible
       copyUint8ArrayToRustBuffer(param, cefBuffer, 0);
       return [cefBuffer, false];
     }
   });
   const returnParams = window.cefCallRustInSameThreadSync(name, cefParams);
-  return returnParams.map((param) => {
-    if (typeof param === "string") {
-      return param;
-    } else {
-      const [buffer, arcPtr] = param;
-      const wrfBuffer = getWrfBufferCef(buffer, arcPtr);
-      // Creating Uint8Array with stable identity as that's what underlying underlying API expects
-      const uint8Buffer = getCachedUint8Buffer(
-        wrfBuffer,
-        new Uint8Array(wrfBuffer)
-      );
-      return uint8Buffer;
-    }
-  });
+  return transformReturnParams(returnParams);
 };
 
 export const wrfNewWorkerPort = (): MessagePort => {
@@ -189,29 +195,14 @@ export const initialize = (): Promise<void> =>
     };
 
     window.fromCefCallJsFunction = (name, params) => {
-      const transformedParams = params.map((param) => {
-        if (typeof param === "string") {
-          return param;
-        } else {
-          const [buffer, arcPtr] = param;
-          const wrfBuffer = getWrfBufferCef(buffer, arcPtr);
-          // Creaing Uint8Array with stable identity as that's what underlying underlying API expects
-          const uint8Buffer = getCachedUint8Buffer(
-            wrfBuffer,
-            // This actually creates a WrfUint8Array as this was overwritten above in overwriteTypedArraysWithWrfArrays()
-            new Uint8Array(wrfBuffer)
-          );
-          return uint8Buffer;
-        }
-      });
-      fromCefJsFunctions[name](transformedParams);
+      fromCefJsFunctions[name](transformReturnParams(params));
     };
 
     document.addEventListener("DOMContentLoaded", () => {
       const { showTextIME, textareaHasFocus } = makeTextarea(
         (taEvent: TextareaEvent) => {
           const slots = 20;
-          const buffer = window.cefCreateArrayBuffer(slots * 4);
+          const [buffer] = window.cefCreateArrayBuffer(slots * 4);
           const zerdeBuilder = new ZerdeBuilder({
             buffer,
             byteOffset: 0,
@@ -266,3 +257,17 @@ export const initialize = (): Promise<void> =>
       resolve();
     });
   });
+
+export const createBuffer = async (data: Uint8Array): Promise<Uint8Array> => {
+  const [cefBuffer] = window.cefCreateArrayBuffer(data.byteLength);
+  copyUint8ArrayToRustBuffer(data, cefBuffer, 0);
+  return transformReturnParams([[cefBuffer, undefined]])[0] as Uint8Array;
+};
+
+export const createReadOnlyBuffer = async (
+  data: Uint8Array
+): Promise<Uint8Array> => {
+  const [cefBuffer, arcPtr] = window.cefCreateArrayBuffer(data.byteLength);
+  copyUint8ArrayToRustBuffer(data, cefBuffer, 0);
+  return transformReturnParams([[cefBuffer, arcPtr]])[0] as Uint8Array;
+};

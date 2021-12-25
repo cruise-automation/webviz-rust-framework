@@ -58,7 +58,7 @@ impl BottomBar {
         cx.begin_bottom_align();
         let bottom_bar_turtle = cx.begin_turtle(Layout {
             direction: Direction::Right,
-            walk: Walk { width: Width::Fill, height: Height::Compute, margin: Margin::ZERO },
+            walk: Walk { width: Width::Fill, height: Height::Compute },
             ..Layout::default()
         });
         {

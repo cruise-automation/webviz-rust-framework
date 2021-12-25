@@ -8,16 +8,12 @@
 
 set -euo pipefail
 
-build_command='RUSTFLAGS="-C target-feature=+atomics,+bulk-memory,+mutable-globals,+simd128" cargo build --target=wasm32-unknown-unknown -Zbuild-std=std,panic_abort "$@"'
+# max-memory=4294967296 = 65536 (max pages) * 65536 (page size)
+# Export __stack_pointer to get the shadow stack pointer; see e.g.:
+# - https://github.com/rustwasm/wasm-bindgen/blob/ac87c8215bdd28d6aa0e12705996238a78227f8c/crates/wasm-conventions/src/lib.rs#L36
+# - https://github.com/WebAssembly/tool-conventions/blob/main/Linking.md#merging-global-sections
+build_command='RUSTFLAGS="-C target-feature=+atomics,+bulk-memory,+mutable-globals,+simd128 -C link-arg=--max-memory=4294967296 -C link-arg=--export=__stack_pointer" cargo build --target=wasm32-unknown-unknown -Zbuild-std=std,panic_abort "$@"'
 
 # First build normally, for human readable compile errors
 echo "    Running cargo build $@"
-eval "time $build_command --quiet"
-
-# Build again with JSON output (results should be cached from previous run)
-output=$(eval $build_command --message-format json)
-
-# Transform generated wasm into thread safe code
-echo "    Transforming WASM"
-echo $output | WASM_BINDGEN_THREADS=1 cargo run --quiet -p wrflib_wasm_thread_xform
-echo "    Finished transforming WASM"
+eval "$build_command"

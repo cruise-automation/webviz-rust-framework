@@ -5,7 +5,7 @@
 // You may not use this file except in compliance with the License.
 
 /// An extension trait for [`f32`].
-pub trait F32Ext {
+pub(crate) trait F32Ext {
     /// Linearly interpolate between `self` and `other` with parameter `t`.
     fn lerp(self, other: f32, t: f32) -> f32;
 }

@@ -4,12 +4,16 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
-import { Rpc, getWasmEnv } from "./common";
-import { AsyncWorkerEvent, FileHandle, WasmExports } from "./types";
+import {
+  Rpc,
+  getWasmEnv,
+  initThreadLocalStorageAndStackOtherWorkers,
+} from "./common";
+import { AsyncWorkerEvent, AsyncWorkerRunValue, WasmExports } from "./types";
 
 const rpc = new Rpc(self);
 
-rpc.receive(
+rpc.receive<AsyncWorkerRunValue, void>(
   AsyncWorkerEvent.Run,
   ({
     wasmModule,
@@ -18,13 +22,7 @@ rpc.receive(
     ctxPtr,
     fileHandles,
     baseUri,
-  }: {
-    wasmModule: WebAssembly.Module;
-    memory: WebAssembly.Memory;
-    taskWorkerSab: SharedArrayBuffer;
-    ctxPtr: number;
-    fileHandles: FileHandle[];
-    baseUri: string;
+    tlsAndStackData,
   }) => {
     const sendEventFromAnyThread = (eventPtr: BigInt) => {
       rpc.send(AsyncWorkerEvent.SendEventFromAnyThread, { eventPtr });
@@ -50,6 +48,7 @@ rpc.receive(
     return new Promise<void>((resolve, reject) => {
       WebAssembly.instantiate(wasmModule, { env }).then((instance) => {
         exports = instance.exports;
+        initThreadLocalStorageAndStackOtherWorkers(exports, tlsAndStackData);
         // TODO(Paras): Eventually call `processWasmEvents` instead of a custom exported function.
         exports.runFunctionPointer(ctxPtr);
         resolve();

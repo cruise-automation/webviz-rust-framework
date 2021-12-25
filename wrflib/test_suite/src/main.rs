@@ -101,13 +101,6 @@ impl TestSuiteApp {
                 // Note: not returning anything to test destructor behavior
                 vec![]
             }
-            // TODO(JP): Turn this into an actual API.
-            "make_wrfbuffer" => {
-                vec![WrfParam::ReadOnlyBuffer(Arc::new(vec![1, 2, 3, 4, 5, 6, 7, 8]))]
-            }
-            "make_mutable_wrfbuffer" => {
-                vec![WrfParam::Buffer(vec![1, 2, 3, 4, 5, 6, 7, 8])]
-            }
             "check_arc_count" => {
                 let arc_ptr = params[0].as_string().parse::<u64>().unwrap() as *const Vec<u8>;
                 let arc: Arc<Vec<u8>> = unsafe { Arc::from_raw(arc_ptr) };
@@ -143,9 +136,6 @@ impl TestSuiteApp {
     pub fn call_rust_in_same_thread_sync(name: &str, params: Vec<WrfParam>) -> Vec<WrfParam> {
         match name {
             "array_multiply" => array_multiply(&params),
-            "make_wrfbuffer" => {
-                vec![WrfParam::ReadOnlyBuffer(Arc::new(vec![1, 2, 3, 4, 5, 6, 7, 8]))]
-            }
             "send_signal" => {
                 // This is a fake signal ID
                 Cx::post_signal(Signal { signal_id: 123 }, location_hash!());

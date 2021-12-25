@@ -29,27 +29,50 @@ const checkConditionTimeout = async (
   return condition();
 };
 
-const arcDeallocated = async (callRust: CallRust, arcPtr: number) => {
-  expect(allocatedArcs[arcPtr], true);
+// Generate some dummy data and then delete it. This usually triggers the garbage collector.
+const generateGarbage = () => {
+  for (let i = 0; i < 10000; i++) {
+    self["garbage_" + i] = { i };
+  }
+  for (let i = 0; i < 10000; i++) {
+    delete self["garbage_" + i];
+  }
+};
 
-  const [result] = await callRust("check_arc_count", [`${BigInt(arcPtr)}`]);
+const arcAllocated = async (callRust: CallRust, buffer: WrfBuffer) => {
+  // We still have the buffer here! So it should still be allocated.
+  expect(allocatedArcs[buffer.__wrflibBufferData.arcPtr], true);
+
+  const [result] = await callRust("check_arc_count", [
+    `${BigInt(buffer.__wrflibBufferData.arcPtr)}`,
+  ]);
   const [countBeforeDeallocation] = result;
   expect(countBeforeDeallocation, 1);
+};
 
+const arcDeallocated = async (arcPtr: number) => {
+  // From here on out we don't refer to `buffer` any more, so it should get
+  // deallocated, if the garbage collector is any good.
   expect(
-    await checkConditionTimeout(() => allocatedArcs[arcPtr] === false, 20000),
+    await checkConditionTimeout(() => {
+      generateGarbage();
+      return allocatedArcs[arcPtr] === false;
+    }, 20000),
     true
   );
 };
 
 const vecDeallocated = async (bufferPtr: number) => {
-  expect(allocatedVecs[bufferPtr], true);
+  // Even though we have the buffer, it might have already been unregistered
+  // when passed to Rust. We shouldn't read/write to it any more. If this is the
+  // case, let's just bail.
+  if (!allocatedVecs[bufferPtr]) return;
 
   expect(
-    await checkConditionTimeout(
-      () => allocatedVecs[bufferPtr] === false,
-      20000
-    ),
+    await checkConditionTimeout(() => {
+      generateGarbage();
+      return allocatedVecs[bufferPtr] === false;
+    }, 20000),
     true
   );
 };
@@ -59,7 +82,9 @@ const vecDeallocated = async (bufferPtr: number) => {
 // but observationally this ends up being enough time. The caller must also ensure that the buffer will go out of scope
 // shortly after calling this.
 // We have to pass in `callRust` because we can call this function from a variety of runtimes.
-export const expectDeallocation = (
+// Note that assertions on garbage collection are extremely sensitive to exactly how these functions are written,
+// and can easily break if you restucture the function, use a different/newer browser, etc!
+export const expectDeallocationOrUnregister = (
   callRust: CallRust,
   wrfArray: Uint8Array
 ): Promise<void> => {
@@ -68,7 +93,9 @@ export const expectDeallocation = (
 
   const buffer = wrfArray.buffer as WrfBuffer;
   return buffer.readonly
-    ? arcDeallocated(callRust, buffer.__wrflibBufferData.arcPtr)
+    ? arcAllocated(callRust, buffer).then(() =>
+        arcDeallocated(buffer.__wrflibBufferData.arcPtr)
+      )
     : vecDeallocated(buffer.__wrflibBufferData.bufferPtr);
 };
 

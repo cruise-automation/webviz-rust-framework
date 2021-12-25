@@ -9,7 +9,8 @@ import {
   Rpc,
   initTaskWorkerSab,
   getWasmEnv,
-  copyUint8ArrayToRustBuffer,
+  makeThreadLocalStorageAndStackDataOnMainWorker,
+  initThreadLocalStorageMainWorker,
 } from "./common";
 import { RpcEvent } from "./make_rpc_event";
 import {
@@ -31,6 +32,8 @@ import {
   UserWorkerEvent,
   AsyncWorkerEvent,
   TaskWorkerEvent,
+  SizingData,
+  AsyncWorkerRunValue,
 } from "./types";
 import { ZerdeParser } from "./zerde";
 import { ZerdeEventloopEvents } from "./zerde_eventloop_events";
@@ -69,7 +72,7 @@ export class WasmApp {
   exports: WasmExports;
   canvas: OffscreenCanvas;
   module: WebAssembly.Module;
-  canFullscreen: boolean;
+  sizingData: SizingData;
   baseUri: string;
   shaders: {
     geomAttribs: ReturnType<WasmApp["getAttribLocations"]>;
@@ -101,9 +104,6 @@ export class WasmApp {
   zerdeEventloopEvents: ZerdeEventloopEvents;
   appPtr: BigInt;
   doWasmBlock: boolean;
-  width: number;
-  height: number;
-  dpiFactor: number;
   xrCanPresent: boolean;
   xrIsPresenting: boolean;
   zerdeParser: ZerdeParser;
@@ -143,7 +143,7 @@ export class WasmApp {
     offscreenCanvas,
     webasm,
     memory,
-    canFullscreen,
+    sizingData,
     baseUri,
     fileHandles,
     taskWorkerSab,
@@ -151,7 +151,7 @@ export class WasmApp {
     offscreenCanvas: OffscreenCanvas;
     webasm: WebAssembly.WebAssemblyInstantiatedSource;
     memory: WebAssembly.Memory;
-    canFullscreen: boolean;
+    sizingData: SizingData;
     baseUri: string;
     fileHandles: FileHandle[];
     taskWorkerSab: SharedArrayBuffer;
@@ -160,7 +160,7 @@ export class WasmApp {
     this.module = webasm.module;
     this.exports = webasm.instance.exports as WasmExports;
     this.memory = memory;
-    this.canFullscreen = canFullscreen;
+    this.sizingData = sizingData;
     this.baseUri = baseUri;
 
     // local webgl resources
@@ -221,6 +221,19 @@ export class WasmApp {
       Promise<(string | BufferData)[]>
     >(WorkerEvent.CallRust, callRust);
 
+    rpc.receive(WorkerEvent.CreateBuffer, (data: Uint8Array) =>
+      this.zerdeEventloopEvents.createWasmBuffer(data)
+    );
+
+    rpc.receive(WorkerEvent.CreateReadOnlyBuffer, (data: Uint8Array) => {
+      const bufferPtr = this.zerdeEventloopEvents.createWasmBuffer(data);
+      const arcPtr = this.zerdeEventloopEvents.createArcVec(
+        bufferPtr,
+        data.byteLength
+      );
+      return { bufferPtr, arcPtr };
+    });
+
     rpc.receive(WorkerEvent.IncrementArc, (arcPtr: number) => {
       this.exports.incrementArc(BigInt(arcPtr));
     });
@@ -251,6 +264,9 @@ export class WasmApp {
             taskWorkerSab,
             appPtr: this.appPtr,
             baseUri,
+            tlsAndStackData: makeThreadLocalStorageAndStackDataOnMainWorker(
+              this.exports
+            ),
           };
         }
       );
@@ -303,11 +319,8 @@ export class WasmApp {
       const result = results[i];
       // allocate pointer, do +8 because of the u64 length at the head of the buffer
       const vecLen = result.buffer.byteLength;
-      const vecPtr = Number(this.zerdeEventloopEvents.allocWasmVec(vecLen));
-      copyUint8ArrayToRustBuffer(
-        new Uint8Array(result.buffer),
-        this.zerdeEventloopEvents.getWasmApp().memory.buffer,
-        vecPtr
+      const vecPtr = this.zerdeEventloopEvents.createWasmBuffer(
+        new Uint8Array(result.buffer)
       );
       deps.push({
         name: result.name,
@@ -319,11 +332,11 @@ export class WasmApp {
     this.zerdeEventloopEvents.depsLoaded(deps);
     // initialize the application
     this.zerdeEventloopEvents.init({
-      width: this.width,
-      height: this.height,
-      dpiFactor: this.dpiFactor,
+      width: this.sizingData.width,
+      height: this.sizingData.height,
+      dpiFactor: this.sizingData.dpiFactor,
       xrCanPresent: this.xrCanPresent,
-      canFullscreen: this.canFullscreen,
+      canFullscreen: this.sizingData.canFullscreen,
       xrIsPresenting: false,
     });
     this.doWasmBlock = false;
@@ -828,28 +841,23 @@ export class WasmApp {
   }
 
   initWebglContext(): void {
-    rpc.receive(
-      WorkerEvent.ScreenResize,
-      ({ dpiFactor, width, height, isFullscreen }) => {
-        this.dpiFactor = dpiFactor;
-        this.width = width;
-        this.height = height;
+    rpc.receive(WorkerEvent.ScreenResize, (sizingData: SizingData) => {
+      this.sizingData = sizingData;
 
-        this.canvas.width = width * dpiFactor;
-        this.canvas.height = height * dpiFactor;
-        this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+      this.canvas.width = sizingData.width * sizingData.dpiFactor;
+      this.canvas.height = sizingData.height * sizingData.dpiFactor;
+      this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
 
-        this.zerdeEventloopEvents.resize({
-          width: this.width,
-          height: this.height,
-          dpiFactor: this.dpiFactor,
-          xrIsPresenting: this.xrIsPresenting,
-          xrCanPresent: this.xrCanPresent,
-          isFullscreen: isFullscreen,
-        });
-        this.requestAnimationFrame();
-      }
-    );
+      this.zerdeEventloopEvents.resize({
+        width: this.sizingData.width,
+        height: this.sizingData.height,
+        dpiFactor: this.sizingData.dpiFactor,
+        xrIsPresenting: this.xrIsPresenting,
+        xrCanPresent: this.xrCanPresent,
+        isFullscreen: this.sizingData.isFullscreen,
+      });
+      this.requestAnimationFrame();
+    });
 
     const options = {
       preferLowPowerToHighPerformance: true,
@@ -1791,7 +1799,7 @@ function addLineNumbersToString(code) {
 
 rpc.receive(
   WorkerEvent.Init,
-  ({ offscreenCanvas, wasmFilename, canFullscreen, baseUri, memory }) => {
+  ({ offscreenCanvas, wasmFilename, sizingData, baseUri, memory }) => {
     const wasmPath = new URL(wasmFilename, baseUri).href;
 
     let wasmapp;
@@ -1827,15 +1835,19 @@ rpc.receive(
           }
         );
 
+        const asyncWorkerRunValue: AsyncWorkerRunValue = {
+          wasmModule: wasmapp.module,
+          memory,
+          taskWorkerSab,
+          ctxPtr,
+          fileHandles,
+          baseUri,
+          tlsAndStackData: makeThreadLocalStorageAndStackDataOnMainWorker(
+            wasmapp.exports
+          ),
+        };
         workerRpc
-          .send(AsyncWorkerEvent.Run, {
-            wasmModule: wasmapp.module,
-            memory,
-            taskWorkerSab,
-            ctxPtr,
-            fileHandles,
-            baseUri,
-          })
+          .send(AsyncWorkerEvent.Run, asyncWorkerRunValue)
           .catch((e) => {
             console.error("async worker failed", e);
           })
@@ -1862,11 +1874,14 @@ rpc.receive(
 
       WebAssembly.instantiateStreaming(fetch(wasmPath), { env }).then(
         (webasm) => {
+          initThreadLocalStorageMainWorker(
+            webasm.instance.exports as WasmExports
+          );
           wasmapp = new WasmApp({
             offscreenCanvas,
             webasm,
             memory,
-            canFullscreen,
+            sizingData,
             baseUri,
             fileHandles,
             taskWorkerSab,

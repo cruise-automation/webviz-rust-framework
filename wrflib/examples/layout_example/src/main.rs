@@ -14,10 +14,11 @@ struct ExampleQuad {
 }
 impl ExampleQuad {
     fn draw(&mut self, cx: &mut Cx, label: &str) {
+        cx.begin_padding_box(Padding::all(1.0));
         let turtle = self.base.begin_turtle(
             cx,
             Layout {
-                walk: Walk { width: Width::Compute, height: Height::Compute, margin: Margin::all(1.0) },
+                walk: Walk { width: Width::Compute, height: Height::Compute },
                 padding: Padding { l: 16.0, t: 12.0, r: 16.0, b: 12.0 },
                 ..Layout::default()
             },
@@ -25,6 +26,7 @@ impl ExampleQuad {
         );
         TextIns::draw_walk(cx, label, &TextInsProps::DEFAULT);
         self.base.end_turtle(cx, turtle);
+        cx.end_padding_box();
     }
 }
 
@@ -34,6 +36,8 @@ pub struct LayoutExampleApp {
     main_view: View,
     quad: ExampleQuad,
     token_input: TextInput,
+    slider: FloatSlider,
+    padding_value: f32,
 }
 
 impl LayoutExampleApp {
@@ -47,24 +51,37 @@ impl LayoutExampleApp {
                 empty_message: "Enter text".to_string(),
                 ..TextInputOptions::default()
             }),
+            slider: FloatSlider::new(),
+            padding_value: 15.,
         }
     }
 
     pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
-        // match event {
-        //     _ => (),
-        // }
         self.token_input.handle(cx, event);
+        if let FloatSliderEvent::Change { scaled_value } = self.slider.handle(cx, event) {
+            self.padding_value = scaled_value;
+            cx.request_draw();
+        }
     }
 
-    pub fn draw(&mut self, cx: &mut Cx) {
-        self.window.begin_window(cx);
-        self.pass.begin_pass(cx, Vec4::color("500"));
-        self.main_view.begin_view(cx, Layout { direction: Direction::Down, ..Layout::default() });
+    fn draw_padding_slider(&mut self, cx: &mut Cx) {
+        // This is the important non-trivial case of Compute turtle (padding_box) enclosing Fill one (slider)
+        // It is tricky because Fill turtle doesn't have outer bounds (width/height) passed to it as
+        // the outer turtle Compute is unbounded
+        let row = cx.begin_row_turtle();
+        {
+            cx.begin_padding_box(Padding::all(self.padding_value));
+            self.quad.draw(cx, &format!("{:.0} padding", self.padding_value));
+            cx.end_padding_box();
 
-        let top = cx.begin_turtle(Layout { walk: Walk::wh(Width::Fill, Height::Fix(27.)), ..Layout::default() });
-        cx.end_turtle(top);
+            cx.begin_padding_box(Padding::all(self.padding_value));
+            self.slider.draw(cx, self.padding_value, 0.0, 30.0, Some(1.0), 1.0, None);
+            cx.end_padding_box();
+        }
+        cx.end_turtle(row);
+    }
 
+    fn draw_alignment_examples(&mut self, cx: &mut Cx) {
         // This is the example of applying various alignment techniques
         {
             // First we cut the row with quads being on both side (left / right) and the middle one spanning the remaining
@@ -92,7 +109,7 @@ impl LayoutExampleApp {
             // Cut fixed height row
             let row = cx.begin_turtle(Layout {
                 direction: Direction::Right,
-                walk: Walk { width: Width::Fill, height: Height::Fix(80.), margin: Margin::ZERO },
+                walk: Walk { width: Width::Fill, height: Height::Fix(80.) },
                 ..Layout::default()
             });
 
@@ -117,7 +134,7 @@ impl LayoutExampleApp {
             // Cut the column aligned on the right
             let row = cx.begin_turtle(Layout {
                 direction: Direction::Right,
-                walk: Walk { width: Width::Fill, height: Height::Fill, margin: Margin::ZERO },
+                walk: Walk { width: Width::Fill, height: Height::Fill },
                 ..Layout::default()
             });
             {
@@ -147,6 +164,18 @@ impl LayoutExampleApp {
             }
             cx.end_turtle(row);
         }
+    }
+
+    pub fn draw(&mut self, cx: &mut Cx) {
+        self.window.begin_window(cx);
+        self.pass.begin_pass(cx, Vec4::color("500"));
+        self.main_view.begin_view(cx, Layout { direction: Direction::Down, ..Layout::default() });
+
+        let top = cx.begin_turtle(Layout { walk: Walk::wh(Width::Fill, Height::Fix(27.)), ..Layout::default() });
+        cx.end_turtle(top);
+
+        self.draw_padding_slider(cx);
+        self.draw_alignment_examples(cx);
 
         self.main_view.end_view(cx);
         self.pass.end_pass(cx);

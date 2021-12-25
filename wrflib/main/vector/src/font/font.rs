@@ -11,10 +11,10 @@ use crate::geometry::Rectangle;
 #[derive(Clone, Debug, PartialEq)]
 pub struct VectorFont {
     pub units_per_em: f32,
-    pub ascender: f32,
-    pub descender: f32,
-    pub line_gap: f32,
-    pub bounds: Rectangle,
+    pub(crate) ascender: f32,
+    pub(crate) descender: f32,
+    pub(crate) line_gap: f32,
+    pub(crate) bounds: Rectangle,
     pub char_code_to_glyph_index_map: Vec<usize>,
     pub glyphs: Vec<Glyph>,
 }

@@ -4,19 +4,14 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
-import { copyUint8ArrayToRustBuffer, makeZerdeBuilder } from "./common";
+import { createWasmBuffer, makeZerdeBuilder } from "./common";
 import { Dependency, Finger, FingerScroll, WasmApp } from "./wrf_wasm_worker";
 import {
   TextareaEventKeyDown,
   TextareaEventKeyUp,
   TextareaEventTextInput,
 } from "./make_textarea";
-import {
-  FileHandle,
-  PostMessageTypedArray,
-  WasmExports,
-  WrfParamType,
-} from "./types";
+import { FileHandle, PostMessageTypedArray, WrfParamType } from "./types";
 import { ZerdeBuilder } from "./zerde";
 import { zerdeKeyboardHandlers } from "./zerde_keyboard_handlers";
 
@@ -56,18 +51,13 @@ export class ZerdeEventloopEvents {
     this._zerdeBuilder.sendString(location.hash);
   }
 
-  allocWasmVec(vecLen: number): number {
-    return Number(
-      (this._wasmApp.exports as WasmExports).allocWasmVec(BigInt(vecLen))
-    );
+  createWasmBuffer(data: Uint8Array): number {
+    return createWasmBuffer(this._wasmApp.memory, this._wasmApp.exports, data);
   }
 
   createArcVec(vecPtr: number, vecLen: number): number {
     return Number(
-      (this._wasmApp.exports as WasmExports).createArcVec(
-        BigInt(vecPtr),
-        BigInt(vecLen)
-      )
+      this._wasmApp.exports.createArcVec(BigInt(vecPtr), BigInt(vecLen))
     );
   }
 
@@ -279,12 +269,7 @@ export class ZerdeEventloopEvents {
 
   websocketMessage(url: string, data: ArrayBuffer): void {
     const vecLen = data.byteLength;
-    const vecPtr = this.allocWasmVec(vecLen);
-    copyUint8ArrayToRustBuffer(
-      new Uint8Array(data),
-      this._wasmApp.memory.buffer,
-      vecPtr
-    );
+    const vecPtr = this.createWasmBuffer(new Uint8Array(data));
     this._zerdeBuilder.sendU32(23);
     this._zerdeBuilder.sendU32(vecPtr);
     this._zerdeBuilder.sendU32(vecLen);
@@ -346,12 +331,7 @@ export class ZerdeEventloopEvents {
           }
         } else {
           const vecLen = param.byteLength;
-          const vecPtr = this.allocWasmVec(vecLen);
-          copyUint8ArrayToRustBuffer(
-            param,
-            this.getWasmApp().memory.buffer,
-            vecPtr
-          );
+          const vecPtr = this.createWasmBuffer(param);
           this._zerdeBuilder.sendU32(WrfParamType.Buffer);
           this._zerdeBuilder.sendU32(vecPtr);
           this._zerdeBuilder.sendU32(vecLen);

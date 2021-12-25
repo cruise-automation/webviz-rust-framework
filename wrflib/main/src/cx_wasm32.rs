@@ -12,7 +12,6 @@ use crate::universal_file::UniversalFile;
 use crate::zerde::*;
 use std::alloc;
 use std::collections::{BTreeSet, HashMap};
-use std::convert::TryInto;
 use std::mem;
 use std::ptr;
 use std::sync::{Arc, RwLock};
@@ -123,6 +122,7 @@ impl Cx {
                         can_fullscreen: zerde_parser.parse_u32() > 0,
                     };
                     self.default_dpi_factor = self.platform.window_geom.dpi_factor;
+                    assert!(self.default_dpi_factor > 0.0);
 
                     if self.windows.len() > 0 {
                         self.windows[0].window_geom = self.platform.window_geom.clone();
@@ -146,6 +146,7 @@ impl Cx {
                         is_fullscreen: zerde_parser.parse_u32() > 0,
                         can_fullscreen: old_geom.can_fullscreen,
                     };
+                    assert!(self.platform.window_geom.dpi_factor > 0.0);
                     let new_geom = self.platform.window_geom.clone();
 
                     if self.windows.len() > 0 {
@@ -432,7 +433,11 @@ impl Cx {
                     let name = zerde_parser.parse_string();
                     let params = zerde_parser.parse_wrf_params();
                     let callback_id = zerde_parser.parse_u32();
-                    self.wasm_event_handler(Event::WebRustCall(Some(WebRustCallEvent { name, params, callback_id })));
+                    self.wasm_event_handler(Event::SystemEvent(SystemEvent::WebRustCall(Some(WebRustCallEvent {
+                        name,
+                        params,
+                        callback_id,
+                    }))));
                 }
                 _ => {
                     panic!("Message unknown {}", msg_type);
@@ -961,15 +966,6 @@ pub unsafe extern "C" fn alloc_wasm_vec(bytes: u64) -> u64 {
     let ptr = vec.as_mut_ptr();
     mem::forget(vec);
     return ptr as u64;
-}
-
-// Used by wrflib_wasm_thread_xform for allocating thread memory
-#[no_mangle]
-pub extern "C" fn __wbindgen_malloc(size: usize) -> *mut u8 {
-    unsafe {
-        // Panic if usize is not u32
-        alloc_wasm_message(size.try_into().unwrap()) as *mut u8
-    }
 }
 
 // for use with message passing

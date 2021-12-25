@@ -11,12 +11,12 @@ import { wrfBufferTests } from "./wrf_buffer.test";
 import * as wrf from "./wrf_runtime";
 import {
   expect,
-  expectDeallocation as _expectDeallocation,
+  expectDeallocationOrUnregister as _expectDeallocationOrUnregister,
   setInTest,
 } from "./wrf_test";
 
-const expectDeallocation = (buffer: Uint8Array) =>
-  _expectDeallocation(wrf.callRust, buffer);
+const expectDeallocationOrUnregister = (buffer: Uint8Array) =>
+  _expectDeallocationOrUnregister(wrf.callRust, buffer);
 
 const rpc = new Rpc(
   new Worker(new URL("./test_suite_worker.ts", import.meta.url))
@@ -26,8 +26,7 @@ const runWorkerTest = (testName: TestSuiteTests) => async () => {
   return await rpc.send("run_test", testName);
 };
 
-const filename = "target/wasm32-unknown-unknown/release/test_suite-xform.wasm";
-wrf.initialize({ filename }).then(() => {
+wrf.initialize({ targetName: "test_suite" }).then(() => {
   // Initialize the worker by sending a "wrf worker port" to it in the first message.
   if (wrf.jsRuntime === "wasm") {
     const wrfWorkerPort = wrf.wrfNewWorkerPort();
@@ -147,7 +146,9 @@ wrf.initialize({ filename }).then(() => {
       expect(result, "36");
     },
     "Call Rust (with WrfBuffer)": async () => {
-      const buffer = (await wrf.callRust("make_wrfbuffer"))[0] as Uint8Array;
+      const buffer = await wrf.createReadOnlyBuffer(
+        new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])
+      );
       const result = (
         await wrf.callRust("array_multiply", [JSON.stringify(10), buffer])
       )[0] as Uint8Array;
@@ -161,8 +162,8 @@ wrf.initialize({ filename }).then(() => {
       expect(result[6], 70);
       expect(result[7], 80);
       return Promise.all([
-        expectDeallocation(buffer),
-        expectDeallocation(result),
+        expectDeallocationOrUnregister(buffer),
+        expectDeallocationOrUnregister(result),
       ]);
     },
     "Call Rust (with Mutable WrfBuffer)": async () => {
@@ -177,9 +178,9 @@ wrf.initialize({ filename }).then(() => {
       //     expect(err?.message, "Cannot mutate a read-only array");
       // }
 
-      const mutableBuffer = (
-        await wrf.callRust("make_mutable_wrfbuffer")
-      )[0] as Uint8Array;
+      const mutableBuffer = await wrf.createBuffer(
+        new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])
+      );
       expect(mutableBuffer.length, 8);
       expect(mutableBuffer[0], 1);
       expect(mutableBuffer[1], 2);
@@ -213,8 +214,8 @@ wrf.initialize({ filename }).then(() => {
       expect(result[7], 80);
 
       return Promise.all([
-        expectDeallocation(mutableBuffer),
-        expectDeallocation(result),
+        expectDeallocationOrUnregister(mutableBuffer),
+        expectDeallocationOrUnregister(result),
       ]);
     },
     ...runtimeSpecificTests,
@@ -225,13 +226,19 @@ wrf.initialize({ filename }).then(() => {
     const jsRoot = document.getElementById("js_root");
 
     const runAllButton = document.createElement("button");
-    runAllButton.innerText = "Run All Tests";
+    runAllButton.innerText = "Run All Tests 3x";
     runAllButton.onclick = async () => {
       setInTest(true);
-      for (const [testName, test] of Object.entries(tests)) {
-        console.log(`Running test: ${testName}`);
-        await test();
+      for (let i = 0; i < 3; i++) {
+        for (const [testName, test] of Object.entries(tests)) {
+          console.log(`Running test: ${testName}`);
+          await test();
+          console.log(`✅ Success`);
+        }
       }
+      console.log(
+        `✅ All tests completed (3x to ensure no memory corruption!)`
+      );
       setInTest(false);
     };
     const buttonDiv = document.createElement("div");
@@ -243,7 +250,9 @@ wrf.initialize({ filename }).then(() => {
       button.innerText = name;
       button.onclick = async () => {
         setInTest(true);
+        console.log(`Running test: ${name}`);
         await test();
+        console.log(`✅ Success`);
         setInTest(false);
       };
 

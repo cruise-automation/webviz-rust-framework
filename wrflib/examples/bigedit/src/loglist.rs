@@ -31,7 +31,7 @@ const LAYOUT_ITEM_CONTENT: Layout = Layout { walk: Walk::wh(Width::Compute, Heig
 
 const COLOR_PATH: Vec4 = vec4(0.6, 0.6, 0.6, 1.0);
 
-const ITEM_TEXT_PROPS: TextInsProps = TextInsProps { wrapping: Wrapping::Word, color: COLOR_PATH, ..TextInsProps::DEFAULT };
+const ITEM_TEXT_PROPS: TextInsProps = TextInsProps { wrapping: Wrapping::None, color: COLOR_PATH, ..TextInsProps::DEFAULT };
 
 impl LogList {
     pub fn new() -> Self {
@@ -245,7 +245,7 @@ struct LogItemDraw {
 
 impl LogItemDraw {
     fn draw_icon(&mut self, cx: &mut Cx, icon_type: CodeIconType) {
-        let icon_turtle = cx.begin_turtle(Layout { padding: Padding::right(5.), ..LAYOUT_ITEM_CONTENT });
+        let icon_turtle = cx.begin_turtle(LAYOUT_ITEM_CONTENT);
         cx.begin_center_y_align();
         CodeIconIns::draw(cx, icon_type);
         cx.end_center_y_align();

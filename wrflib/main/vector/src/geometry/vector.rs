@@ -15,8 +15,8 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssi
 /// a point can be scaled, rotated, and translated, a vector can only be scaled and rotated.
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
 pub struct Vector {
-    pub x: f32,
-    pub y: f32,
+    pub(crate) x: f32,
+    pub(crate) y: f32,
 }
 
 impl Vector {
@@ -26,26 +26,26 @@ impl Vector {
     }
 
     /// Returns the zero vector.
-    pub fn zero() -> Vector {
+    pub(crate) fn zero() -> Vector {
         Vector::new(0.0, 0.0)
     }
 
     /// Converts `self` to a point.
     ///
     /// This is equivalent to adding `self` to the origin.
-    pub fn to_point(self) -> Point {
+    pub(crate) fn to_point(self) -> Point {
         Point::new(self.x, self.y)
     }
 
     /// Returns the length of `self`.
-    pub fn length(self) -> f32 {
+    pub(crate) fn length(self) -> f32 {
         // `hypot` is more numerically stable than using `sqrt`. See:
         // https://en.wikipedia.org/wiki/Hypot
         self.x.hypot(self.y)
     }
 
     /// Returns the unit vector in the direction of `self`, or [`None`] if `self` is the zero vector.
-    pub fn normalize(self) -> Option<Vector> {
+    pub(crate) fn normalize(self) -> Option<Vector> {
         let length = self.length();
         if length == 0.0 {
             None
@@ -54,18 +54,18 @@ impl Vector {
         }
     }
 
-    /// Returns the dot product of `self` and `other`.
-    pub fn dot(self, other: Vector) -> f32 {
-        self.x * other.x + self.y * other.y
-    }
+    // /// Returns the dot product of `self` and `other`.
+    // pub(crate) fn dot(self, other: Vector) -> f32 {
+    //     self.x * other.x + self.y * other.y
+    // }
 
     /// Returns the cross product of `self` and `other`.
-    pub fn cross(self, other: Vector) -> f32 {
+    pub(crate) fn cross(self, other: Vector) -> f32 {
         self.x * other.y - self.y * other.x
     }
 
     /// Non-uniformly scales `self` with the scale vector `v`.
-    pub fn scale(self, v: Vector) -> Vector {
+    pub(crate) fn scale(self, v: Vector) -> Vector {
         Vector::new(self.x * v.x, self.y * v.y)
     }
 }

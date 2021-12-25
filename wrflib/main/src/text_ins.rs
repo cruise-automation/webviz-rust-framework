@@ -174,6 +174,8 @@ pub struct TextInsProps {
     pub color: Vec4,
     /// By default, the position describes the top-left corner of the string
     pub position_anchoring: Vec2,
+    /// See [`Padding`].
+    pub padding: Padding,
 }
 impl TextInsProps {
     /// TODO(JP): Replace these with TextInsProps::default() when
@@ -185,6 +187,7 @@ impl TextInsProps {
         draw_depth: 0.0,
         color: COLOR_WHITE,
         position_anchoring: vec2(0., 0.),
+        padding: Padding::DEFAULT,
     };
 }
 impl Default for TextInsProps {
@@ -210,7 +213,7 @@ pub enum Wrapping {
 impl Wrapping {
     /// TODO(JP): Replace these with Wrapping::default() when
     /// <https://github.com/rust-lang/rust/issues/67792> gets done
-    pub const DEFAULT: Wrapping = Wrapping::Word;
+    pub const DEFAULT: Wrapping = Wrapping::None;
 }
 impl Default for Wrapping {
     fn default() -> Self {
@@ -440,6 +443,14 @@ impl TextIns {
         let mut buf = Vec::with_capacity(text.len());
         let mut glyphs: Vec<TextIns> = Vec::with_capacity(text.len());
 
+        let text_turtle = cx.begin_turtle(Layout {
+            direction: Direction::Right,
+            walk: Walk { width: Width::Compute, height: Height::Compute },
+            padding: props.padding,
+            line_wrap: LineWrap::Overflow,
+            ..Layout::default()
+        });
+
         while let Some(c) = iter.next() {
             let last = iter.peek().is_none();
 
@@ -495,7 +506,7 @@ impl TextIns {
             }
             if emit {
                 let height = font_size * height_factor * props.font_scale;
-                let rect = cx.walk_turtle(Walk { width: Width::Fix(width), height: Height::Fix(height), margin: Margin::ZERO });
+                let rect = cx.walk_turtle(Walk { width: Width::Fix(width), height: Height::Fix(height) });
 
                 if !rect.pos.x.is_nan() && !rect.pos.y.is_nan() {
                     glyphs.extend(Self::generate_2d_glyphs(
@@ -519,6 +530,7 @@ impl TextIns {
                 }
             }
         }
+        cx.end_turtle(text_turtle);
 
         Self::draw_glyphs(
             cx,

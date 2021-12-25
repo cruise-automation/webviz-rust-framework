@@ -235,19 +235,16 @@ impl Tab {
             padding: Padding { l: 16.0, t: 1.0, r: 16.0, b: 0.0 },
             ..Layout::default()
         };
-        let layout = if let Some(abs_origin) = self.abs_origin {
-            Layout {
-                absolute: true,
-                walk: Walk { margin: Margin { l: abs_origin.x, t: abs_origin.y, r: 0., b: 0. }, ..base_layout.walk },
-                ..base_layout
-            }
-        } else {
-            base_layout
+
+        if let Some(abs_origin) = self.abs_origin {
+            // Set tab position by absolute coordinates
+            cx.begin_turtle(Layout { absolute: true, ..Layout::default() });
+            cx.begin_padding_box(Padding { l: abs_origin.x, t: abs_origin.y, r: 0., b: 0. });
         };
 
         self.bg_area = cx.add_instances(&SHADER, &[TabIns::default()]);
 
-        self.turtle = Some(cx.begin_turtle(layout));
+        self.turtle = Some(cx.begin_turtle(base_layout));
 
         let text_turtle =
             cx.begin_turtle(Layout { walk: Walk::wh(Width::Compute, Height::Fix(tab_height)), ..Layout::default() });
@@ -273,6 +270,12 @@ impl Tab {
 
     pub fn end_tab(&mut self, cx: &mut Cx) {
         let rect = cx.end_turtle(self.turtle.take().unwrap());
+        // We need to close corresponding turtles which we opened in absolute mode
+        if self.abs_origin.is_some() {
+            cx.end_padding_box(); // close padding_box
+            cx.end_last_turtle_unchecked(); // close absolute:true
+        }
+
         let bg = self.bg_area.get_first_mut::<TabIns>(cx);
         bg.base = QuadIns::from_rect(rect).with_draw_depth(self.draw_depth);
         self.animator.draw(cx, ANIM_DESELECTED_DEFOCUS);

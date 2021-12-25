@@ -7,7 +7,7 @@
 // This file should only be imported by WebWorkers
 /// <reference lib="WebWorker" />
 
-import { FileHandle, WasmEnv, WasmExports } from "./types";
+import { FileHandle, TlsAndStackData, WasmEnv, WasmExports } from "./types";
 import { ZerdeBuilder } from "./zerde";
 
 ////////////////////////////////////////////////////////////////
@@ -244,6 +244,93 @@ const sendTaskWorkerMessage = (
 };
 
 ////////////////////////////////////////////////////////////////
+// Wasm Thread initialization
+////////////////////////////////////////////////////////////////
+
+// Threads in WebAssembly! They are.. fun! Here's what happens.
+//
+// The first Wasm instance we start is in the main worker. It does the following:
+// - It initializes static memory using `__wasm_init_memory`, which is automatically set
+//   by LLVM as the special "start" function.
+// - It already has memory allocated for the "shadow stack". This is like any stack in a
+//   native program, but in WebAssembly it's called the "shadow stack" because WebAssembly
+//   itself also has a notion of a stack built-in. It is however not suitable for all
+//   kinds of data, which is why we need another separate stack.
+// - We allocate Thread Local Storage (TLS) by allocating some memory on the heap (an
+//   operation which by itself should not require TLS; otherwise we'd have a Catch-22
+//   situation..), and calling `initThreadLocalStorageMainWorker` with it.
+//
+// Then, when we make any other WebAssembly threads (e.g. in our own WebWorkers, or in
+// the WebWorkers of users), we do the following:
+// - `__wasm_init_memory` is again called automatically, but will be skipped, since an
+//   (atomic) flag has been set not to initialize static memory again.
+// - We need to initialize memory for both the shadow stack and the Thread Local
+//   Storage (TLS), using `makeThreadLocalStorageAndStackDataOnMainWorker`. We do this
+//   by allocating memory on the heap on the main thread, since allocating memory DOES
+//   require the shadow stack to be initialized.
+// - We then use this memory for both the TLS (on the lower side) and the shadow stack
+//   (on the upper side, since it moves downward), using `initThreadLocalStorageAndStackOtherWorkers`.
+//
+// TODO(JP): This currently leaks memory since we never deallocate the TLS/shadow stack!
+//
+// TODO(JP): Even if we do deallocate the memory, there is currently no way to call TLS
+// destructors; so we'd still leak memory. See https://github.com/rust-lang/rust/issues/77839
+
+// The "shadow stack" size for new threads. Note that the main thread will
+// keep using its own shadow stack size.
+const WASM_STACK_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
+
+// For the main worker, we only need to initialize Thread Local Storage (TLS).
+export const initThreadLocalStorageMainWorker = (
+  wasmExports: WasmExports
+): void => {
+  // Note that allocWasmMessage always aligns to 64 bits / 8 bytes.
+  const ptr = wasmExports.allocWasmMessage(
+    BigInt(wasmExports.__tls_size.value)
+  );
+  // TODO(JP): Cast to Number can cause trouble >2GB.
+  wasmExports.__wasm_init_tls(Number(ptr));
+};
+
+// For non-main workers, we need to allocate enough data for Thread Local Storage (TLS)
+// and the "shadow stack". We allocate this data in the main worker, and then send the
+// pointer + size to other workers.
+//
+// This is easier than trying to allocate the appropriate amount of data in the other
+// itself, which is possible (e.g. using memory.grow) but kind of cumbersome.
+export const makeThreadLocalStorageAndStackDataOnMainWorker = (
+  wasmExports: WasmExports
+): TlsAndStackData => {
+  // Align size to 64 bits / 8 bytes.
+  const size =
+    Math.ceil((wasmExports.__tls_size.value + WASM_STACK_SIZE_BYTES) / 8) * 8;
+  // Note that allocWasmMessage always aligns to 64 bits / 8 bytes.
+  const ptr = wasmExports.allocWasmMessage(BigInt(size));
+  return { ptr, size };
+};
+
+// Set the shadow stack pointer and initialize thet Thread Local Storage (TLS).
+//
+// Note that the TLS sits on the lower side of the memory, wheras the shadow stack
+// starts on the upper side of the memory and grows downwards.
+//
+// TODO(JP): __wasm_init_tls takes a Number, which might not work when it is >2GB.
+export const initThreadLocalStorageAndStackOtherWorkers = (
+  wasmExports: WasmExports,
+  tlsAndStackData: TlsAndStackData
+): void => {
+  // Start the shadow stack pointer on the upper side of the memory, though subtract
+  // 8 so we don't overwrite the byte right after the memory, while still keeping it
+  // 64-bit aligned. TODO(JP): Is the 64-bit alignment necessary for the shadow stack?
+  wasmExports.__stack_pointer.value =
+    Number(tlsAndStackData.ptr) + tlsAndStackData.size - 8;
+  wasmExports.__wasm_init_tls(
+    // TODO(JP): Cast to Number can cause trouble >2GB.
+    Number(tlsAndStackData.ptr)
+  );
+};
+
+////////////////////////////////////////////////////////////////
 // Common wasm functions
 ////////////////////////////////////////////////////////////////
 
@@ -255,6 +342,16 @@ export const copyUint8ArrayToRustBuffer = (
   const u8len = inputBuffer.byteLength;
   const u8out = new Uint8Array(outputBuffer, outputPtr, u8len);
   u8out.set(inputBuffer);
+};
+
+export const createWasmBuffer = (
+  memory: WebAssembly.Memory,
+  exports: WasmExports,
+  data: Uint8Array
+): number => {
+  const vecPtr = Number(exports.allocWasmVec(BigInt(data.byteLength)));
+  copyUint8ArrayToRustBuffer(data, memory.buffer, vecPtr);
+  return vecPtr;
 };
 
 export const makeZerdeBuilder = (
@@ -295,7 +392,7 @@ export const getWasmEnv = ({
   fileHandles: FileHandle[];
   sendEventFromAnyThread: (eventPtr: BigInt) => void;
   threadSpawn: (ctxPtr: BigInt) => void;
-  baseUri;
+  baseUri: string;
 }): WasmEnv => {
   const fileReaderSync = new FileReaderSync();
 
@@ -365,14 +462,10 @@ export const getWasmEnv = ({
 
       if (request.status === 200) {
         const exports = getExports();
-        const response = request.response as ArrayBuffer;
-        const outputBufPtr = Number(
-          exports.allocWasmVec(BigInt(response.byteLength))
-        );
-        copyUint8ArrayToRustBuffer(
-          new Uint8Array(request.response),
-          memory.buffer,
-          outputBufPtr
+        const outputBufPtr = createWasmBuffer(
+          memory,
+          exports,
+          new Uint8Array(request.response)
         );
         new Uint32Array(memory.buffer, bufPtrOut, 1)[0] = outputBufPtr;
         new Uint32Array(memory.buffer, bufLenOut, 1)[0] =

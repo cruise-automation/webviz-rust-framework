@@ -18,6 +18,7 @@ import {
   PostMessageTypedArray,
   CallRustInSameThreadSync,
   WorkerEvent,
+  SizingData,
 } from "./types";
 
 const jsFunctions: Record<string, CallJsCallback> = {};
@@ -63,11 +64,11 @@ export const wrfNewWorkerPort = (): MessagePort => {
 
 let wasmMemory: WebAssembly.Memory;
 
-const deconstructor = (arcPtr: number) => {
+const destructor = (arcPtr: number) => {
   rpc.send(WorkerEvent.DecrementArc, arcPtr);
 };
 
-const mutableDeconstructor = (bufferData: BufferData) => {
+const mutableDestructor = (bufferData: BufferData) => {
   rpc.send(WorkerEvent.DeallocVec, bufferData);
 };
 
@@ -79,8 +80,8 @@ function transformParamsFromRust(params: (string | BufferData)[]) {
       const wrfBuffer = getWrfBufferWasm(
         wasmMemory,
         param,
-        deconstructor,
-        mutableDeconstructor
+        destructor,
+        mutableDestructor
       );
       return getCachedUint8Buffer(
         wrfBuffer,
@@ -148,14 +149,49 @@ export const callRust: CallRust = async (name, params = []) => {
   );
 };
 
+export const createBuffer = async (data: Uint8Array): Promise<Uint8Array> => {
+  const bufferLen = data.byteLength;
+  const bufferPtr = await rpc.send<number>(WorkerEvent.CreateBuffer, data, [
+    data.buffer,
+  ]);
+
+  return transformParamsFromRust([
+    {
+      bufferPtr,
+      bufferLen,
+      bufferCap: bufferLen,
+      arcPtr: null,
+    },
+  ])[0] as Uint8Array;
+};
+
+export const createReadOnlyBuffer = async (
+  data: Uint8Array
+): Promise<Uint8Array> => {
+  const bufferLen = data.byteLength;
+  const { bufferPtr, arcPtr } = await rpc.send<{
+    bufferPtr: number;
+    arcPtr: number;
+  }>(WorkerEvent.CreateReadOnlyBuffer, data, [data.buffer]);
+
+  return transformParamsFromRust([
+    {
+      bufferPtr,
+      bufferLen,
+      bufferCap: undefined,
+      arcPtr,
+    },
+  ])[0] as Uint8Array;
+};
+
 export const deserializeWrfArrayFromPostMessage = (
   postMessageData: PostMessageTypedArray
 ): Uint8Array => {
   const wrfBuffer = getWrfBufferWasm(
     wasmMemory,
     postMessageData.bufferData,
-    deconstructor,
-    mutableDeconstructor
+    destructor,
+    mutableDestructor
   );
   return new Uint8Array(
     wrfBuffer,
@@ -354,11 +390,27 @@ export const initialize = (
         rpc.receive(WorkerEvent.ShowTextIME, showTextIME);
       }
 
-      function onScreenResize() {
-        const dpiFactor = window.devicePixelRatio;
-        const w = canvas.offsetWidth;
-        const h = canvas.offsetHeight;
+      function getSizingData(): SizingData {
+        const canFullscreen = !!(
+          document.fullscreenEnabled ||
+          document["webkitFullscreenEnabled"] ||
+          document["mozFullscreenEnabled"]
+        );
+        const isFullscreen = !!(
+          document.fullscreenElement ||
+          document["webkitFullscreenElement"] ||
+          document["mozFullscreenElement"]
+        );
+        return {
+          width: canvas.offsetWidth,
+          height: canvas.offsetHeight,
+          dpiFactor: window.devicePixelRatio,
+          canFullscreen,
+          isFullscreen,
+        };
+      }
 
+      function onScreenResize() {
         // TODO(JP): Some day bring this back?
         // if (is_add_to_homescreen_safari) { // extremely ugly. but whatever.
         //     if (window.orientation == 90 || window.orientation == -90) {
@@ -370,20 +422,8 @@ export const initialize = (
         //         h = screen.height - 80;
         //     }
         // }
-        // else {
 
-        const isFullscreen = !!(
-          document.fullscreenElement ||
-          document["webkitFullscreenElement"] ||
-          document["mozFullscreenElement"]
-        );
-        if (rpcInitialized)
-          rpc.send(WorkerEvent.ScreenResize, {
-            width: w,
-            height: h,
-            dpiFactor,
-            isFullscreen,
-          });
+        if (rpcInitialized) rpc.send(WorkerEvent.ScreenResize, getSizingData());
       }
       window.addEventListener("resize", () => onScreenResize());
       window.addEventListener("orientationchange", () => onScreenResize());
@@ -404,11 +444,6 @@ export const initialize = (
       }
 
       const offscreenCanvas = canvas.transferControlToOffscreen();
-      const canFullscreen = !!(
-        document.fullscreenEnabled ||
-        document["webkitFullscreenEnabled"] ||
-        document["mozFullscreenEnabled"]
-      );
       const baseUri = document.baseURI;
 
       // Initial has to be equal to or higher than required by the app (which at the time of writing
@@ -431,7 +466,7 @@ export const initialize = (
         const env = new URL(window.document.location).searchParams.get("debug")
           ? "debug"
           : "release";
-        wasmFilename = `target/wasm32-unknown-unknown/${env}/${initParams.targetName}-xform.wasm`;
+        wasmFilename = `target/wasm32-unknown-unknown/${env}/${initParams.targetName}.wasm`;
       }
 
       rpc
@@ -440,7 +475,7 @@ export const initialize = (
           {
             offscreenCanvas,
             wasmFilename,
-            canFullscreen,
+            sizingData: getSizingData(),
             baseUri,
             memory: wasmMemory,
           },

@@ -69,6 +69,7 @@ mod cx_app_load;
 
 mod animator;
 mod area;
+pub mod byte_extract;
 mod colors;
 mod component_base;
 mod cursor;
@@ -79,6 +80,7 @@ mod events;
 mod fonts;
 mod geometry;
 mod hash;
+mod layout;
 mod pass;
 mod profile;
 mod read_seek;

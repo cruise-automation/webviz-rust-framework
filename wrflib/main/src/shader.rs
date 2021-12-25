@@ -13,7 +13,7 @@ use wrflib_shader_compiler::{Decl, ShaderAst};
 
 /// Contains all information necessary to build a shader. Create using [`Cx::define_shader`].
 pub struct Shader {
-    /// The default [`Geometry`] that we will draw with, if any. Can be overridden using [`DrawCall::geometry`].
+    /// The default [`Geometry`] that we will draw with, if any. Can be overridden using [`DrawCallProps::geometry`].
     default_geometry: Option<Geometry>,
     /// A bunch of [`CodeFragment`]s that will get concatenated.
     base_code_fragments: &'static [CodeFragment],

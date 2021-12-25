@@ -10,20 +10,20 @@ use crate::internal_iter::InternalIterator;
 /// A quadratic bezier curve segment in 2-dimensional Euclidian space.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(C)]
-pub struct QuadraticSegment {
-    pub p0: Point,
-    pub p1: Point,
-    pub p2: Point,
+pub(crate) struct QuadraticSegment {
+    pub(crate) p0: Point,
+    pub(crate) p1: Point,
+    pub(crate) p2: Point,
 }
 
 impl QuadraticSegment {
     /// Creates a new quadratic bezier curve segment with the given control points.
-    pub fn new(p0: Point, p1: Point, p2: Point) -> QuadraticSegment {
+    pub(crate) fn new(p0: Point, p1: Point, p2: Point) -> QuadraticSegment {
         QuadraticSegment { p0, p1, p2 }
     }
 
     /// Returns true if `self` is approximately linear with tolerance `epsilon`.
-    pub fn is_approximately_linear(self, epsilon: f32) -> bool {
+    pub(crate) fn is_approximately_linear(self, epsilon: f32) -> bool {
         let v1 = self.p1 - self.p0;
         (if let Some(vx) = (self.p2 - self.p0).normalize() {
             // If the baseline is a line segment, the segment is approximately linear if the
@@ -37,7 +37,7 @@ impl QuadraticSegment {
     }
 
     /// Splits `self` into two quadratic Bezier curve segments, at parameter `t`.
-    pub fn split(self, t: f32) -> (QuadraticSegment, QuadraticSegment) {
+    pub(crate) fn split(self, t: f32) -> (QuadraticSegment, QuadraticSegment) {
         let p01 = self.p0.lerp(self.p1, t);
         let p12 = self.p1.lerp(self.p2, t);
         let p012 = p01.lerp(p12, t);
@@ -46,7 +46,7 @@ impl QuadraticSegment {
 
     /// Returns an iterator over the points of a polyline that approximates `self` with tolerance
     /// `epsilon`, *excluding* the first point.
-    pub fn linearize(self, epsilon: f32) -> Linearize {
+    pub(crate) fn linearize(self, epsilon: f32) -> Linearize {
         Linearize { segment: self, epsilon }
     }
 }

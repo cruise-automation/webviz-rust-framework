@@ -4,8 +4,6 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
-use crate::internal_iter::FromInternalIterator;
-
 /// A trait for internal iterators. An internal iterator differs from a normal iterator in that its
 /// iteration is controlled internally by the iterator itself, instead of externally by the calling
 /// code. This means that instead of returning a single item on each call to `next`, internal
@@ -21,15 +19,6 @@ pub trait InternalIterator {
     fn for_each<F>(self, f: &mut F) -> bool
     where
         F: FnMut(Self::Item) -> bool;
-
-    /// Transforms `self` into a collection.
-    fn collect<F>(self) -> F
-    where
-        Self: Sized,
-        F: FromInternalIterator<Self::Item>,
-    {
-        FromInternalIterator::from_internal_iter(self)
-    }
 
     /// Returns an internal iterator that applies `f` to each item of `self`.
     fn map<R, F>(self, f: F) -> Map<Self, F>

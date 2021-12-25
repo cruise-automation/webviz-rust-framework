@@ -59,7 +59,7 @@ impl WrfWindow {
             log_list: LogList::new(),
             search_results: SearchResults::new(),
             file_panel: FilePanel::new(),
-            world_view: WorldView::new(),
+            world_view: WorldView::default(),
             dock: Dock::new(),
             dock_items: DockItem::Splitter {
                 axis: Axis::Vertical,

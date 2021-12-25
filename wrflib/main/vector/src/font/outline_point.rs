@@ -13,9 +13,9 @@ use crate::geometry::{Point, Transform, Transformation};
 /// a quadratic b-spline curve segment. Each quadratic b-spline curve segment has two endpoints and
 /// zero or more control points.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct OutlinePoint {
-    pub is_on_curve: bool,
-    pub point: Point,
+pub(crate) struct OutlinePoint {
+    pub(crate) is_on_curve: bool,
+    pub(crate) point: Point,
 }
 
 impl Transform for OutlinePoint {

@@ -209,8 +209,9 @@ impl FoldCaption {
 
         self.bg_area = cx.add_instances(&SHADER, &[FoldCaptionIns { open: open_value, ..Default::default() }]);
 
+        cx.begin_padding_box(Padding::all(1.0));
         self.turtle = Some(cx.begin_turtle(Layout {
-            walk: Walk { width: Width::Fill, height: Height::Compute, margin: Margin::all(1.0) },
+            walk: Walk { width: Width::Fill, height: Height::Compute },
             padding: Padding { l: 14.0, t: 8.0, r: 14.0, b: 8.0 },
             ..Layout::default()
         }));
@@ -225,19 +226,14 @@ impl FoldCaption {
     pub fn end_fold_caption(&mut self, cx: &mut Cx, label: &str) {
         cx.reset_turtle_pos();
 
-        let text_turtle = cx.begin_turtle(Layout {
-            walk: Walk { width: Width::Fill, height: Height::Compute, ..Walk::default() },
-            ..Layout::default()
-        });
-        // TODO(Dmitry): using only the right alignment without ecnlosing turtle seems to be reducing the width
-        // of parent turtle and returning shorter rect as a result causing not fully covered background
         cx.begin_right_align();
         let draw_str_props = TextInsProps { wrapping: Wrapping::Ellipsis(cx.get_width_left() - 10.), ..TextInsProps::DEFAULT };
         TextIns::draw_walk(cx, label, &draw_str_props);
         cx.end_right_align();
-        cx.end_turtle(text_turtle);
 
         let rect = cx.end_turtle(self.turtle.take().unwrap());
+
+        cx.end_padding_box();
 
         let bg = self.bg_area.get_first_mut::<FoldCaptionIns>(cx);
         bg.base = QuadIns::from_rect(rect);
