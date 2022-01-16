@@ -1,0 +1,27 @@
+# Copyright (c) 2021-present, Cruise LLC
+#
+# This source code is licensed under the Apache License, Version 2.0,
+# found in the LICENSE-APACHE file in the root directory of this source tree.
+# You may not use this file except in compliance with the License.
+
+[package]
+name = "example_bigedit"
+version = "0.0.1"
+edition = "2018"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies.bigedit_http]
+path="http"
+
+[dependencies.bigedit_microserde]
+path="microserde"
+
+[dependencies.wrflib_widget]
+path="../../widget"
+
+[dependencies.wrflib]
+path="../../main"
+
+[dependencies.bigedit_hub]
+path="hub"

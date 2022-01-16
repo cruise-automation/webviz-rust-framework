@@ -6,11 +6,8 @@
 
 //! Events coming from user actions, system calls, and so on.
 
-use crate::{cx::*, universal_file::UniversalFile};
-use std::{
-    collections::{BTreeSet, HashMap},
-    sync::Arc,
-};
+use crate::{universal_file::UniversalFile, *};
+use std::collections::{BTreeSet, HashMap};
 
 /// Modifiers that were held when a key event was fired.
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -289,39 +286,6 @@ pub struct UserFile {
 impl PartialEq for UserFile {
     fn eq(&self, other: &Self) -> bool {
         self.basename == other.basename
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum WrfParam {
-    /// An arbitrary string supplied by the user (e.g. JSON encoded).
-    /// TODO(Paras): I wish I could just put references here, since we end up cloning the string anyways when
-    /// calling zerde. But then we have to declare many lifetimes - maybe worth it.
-    String(String),
-    /// Buffers to pass read-only memory from JS to Rust
-    ReadOnlyBuffer(Arc<Vec<u8>>),
-    /// Buffers to transfer ownership of memory from JS to Rust
-    Buffer(Vec<u8>),
-}
-
-impl WrfParam {
-    pub fn as_string(&self) -> &str {
-        match self {
-            WrfParam::String(v) => v,
-            _ => panic!("WrfParam is not a String"),
-        }
-    }
-    pub fn as_read_only_buffer(&self) -> &Arc<Vec<u8>> {
-        match self {
-            WrfParam::ReadOnlyBuffer(v) => v,
-            _ => panic!("WrfParam is not a ReadOnlyBuffer"),
-        }
-    }
-    pub fn as_buffer(&self) -> &Vec<u8> {
-        match self {
-            WrfParam::Buffer(v) => v,
-            _ => panic!("WrfParam is not a Buffer"),
-        }
     }
 }
 

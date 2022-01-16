@@ -6,7 +6,7 @@
 
 //! An animation system for transitioning between various kinds of values over time.
 
-use crate::cx::*;
+use crate::*;
 use std::f64::consts::PI;
 
 /// Manages animations. Assumes that you always pass it with [`Anim`] objects with

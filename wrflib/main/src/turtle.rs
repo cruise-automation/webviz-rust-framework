@@ -1,17 +1,21 @@
 //! Layout system. 🐢
 
-use crate::cx::*;
 use crate::debug_log::DebugLog;
+use crate::*;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum CxTurtleType {
     Normal,
+    RightBox,
+    BottomBox,
     CenterXAlign,
-    RightAlign,
     CenterYAlign,
-    BottomAlign,
     CenterXYAlign,
-    Padding,
+    PaddingBox,
+    Row,
+    Column,
+    AbsoluteBox,
+    WrappingBox,
 }
 
 impl Default for CxTurtleType {
@@ -65,32 +69,32 @@ pub struct Turtle {
 pub(crate) struct CxTurtle {
     /// The layout that is associated directly with this turtle, which determines a lot of its
     /// behavior.
-    layout: Layout,
+    pub(crate) layout: Layout,
 
     /// The index within Cx::turtle_align_list, which contains all the things that we draw within this
     /// turtle, and which needs to get aligned at some point. We have a separate list for x/y
     /// because you can manually trigger an alignment (aside from it happening automatically at the
     /// end), which resets this list to no longer align those areas again.
-    align_list_x_start_index: usize,
+    pub(crate) align_list_x_start_index: usize,
 
     /// Same as [`CxTurtle::align_list_x_start_index`] but for vertical alignment.
-    align_list_y_start_index: usize,
+    pub(crate) align_list_y_start_index: usize,
 
     /// The current position of the turtle. This is the only field that seems to actually correspond
     /// to the "turtle graphics" metaphor! This is an absolute position, and starts out at [`CxTurtle::origin`]
     /// plus padding.
-    pos: Vec2,
+    pub(crate) pos: Vec2,
 
     /// The origin of the current turtle's walking area. Starts off at the parent's turtle [`CxTurtle::pos`]
-    origin: Vec2,
+    pub(crate) origin: Vec2,
 
     /// The inherent width of the current turtle's walking area. Is [`f32::NAN`] if the width is computed,
     /// and can get set explicitly later.
-    width: f32,
+    pub(crate) width: f32,
 
     /// The inherent height of the current turtle's walking area. Is [`f32::NAN`] if the height is computed,
     /// and can get set explicitly later.
-    height: f32,
+    pub(crate) height: f32,
 
     /// Seems to only be used to be passed down to child turtles, so if one of them gets an absolute
     /// origin passed in, we can just use the entire remaining absolute canvas as the width/height.
@@ -98,78 +102,60 @@ pub(crate) struct CxTurtle {
     /// TODO(JP): seems pretty unnecessary; why not just grab this field from the current [`Pass`
     /// directly if necessary? Or just always have the caller pass it in (they can take it from the
     /// current [`Pass`] if they want)?
-    abs_size: Vec2,
+    pub(crate) abs_size: Vec2,
 
     /// Keeps track of the bottom right corner where we have walked so far, including the width/height
     /// of the walk, whereas [`CxTurtle::pos`] stays in the top left position of what we have last drawn.
     ///
     /// TODO(JP): [`CxTurtle::pos`] and [`CxTurtle::bound_right_bottom`] can (and seem to regularly and intentionally do)
     /// get out of sync, which makes things more confusing.
-    bound_right_bottom: Vec2,
+    pub(crate) bound_right_bottom: Vec2,
 
     /// We keep track of the [`Walk`] with the greatest height (or width, when walking down), so that
     /// we know how much to move the turtle's y-position when wrapping to the next line. When
     /// wrapping to the next line, this value is reset back to 0.
     ///
     /// See also [`Padding`].
-    biggest: f32,
+    pub(crate) biggest: f32,
 
     /// Used for additional checks that enclosing turtles match opening ones
-    turtle_type: CxTurtleType,
+    pub(crate) turtle_type: CxTurtleType,
 
-    /// Available width for the turtle to be walked. This is different from [`CxTurtle::width`] which is turtle outer bounds.
+    /// Available width for the content of the turtle, starting from turtle origin, minus right padding.
+    /// This is different from [`CxTurtle::width`] which is turtle outer width.
     /// For example, for Width::Compute turtles width would be [`f32::NAN`] as this needs to be computed,
     /// but available_width is defined until the bounds of parent
-    available_width: f32,
+    pub(crate) available_width: f32,
 
-    /// Available height for the turtle to be walked. This is different from [`CxTurtle::height`] which is turtle outer bounds.
+    /// Available height for the content of the turtle, starting from turtle origin, minus bottom padding.
+    /// This is different from [`CxTurtle::height`] which is turtle outer height.
     /// For example, for height::Compute turtles height would be [`f32::NAN`] as this needs to be computed,
     /// but available_height is defined until the bounds of parent
-    available_height: f32,
+    pub(crate) available_height: f32,
 }
 
 impl CxTurtle {
     /// Returns how much available_width is "left" for current turtle,
     /// i.e. distance from current turtle x position until the right bound
-    fn get_available_width_left(&self) -> f32 {
+    pub(crate) fn get_available_width_left(&self) -> f32 {
         (self.origin.x + self.available_width - self.pos.x).max(0.)
     }
 
     /// Returns how much available_height is "left" for current turtle
     /// i.e. distance from current turtle y position until the bottom bound
-    fn get_available_height_left(&self) -> f32 {
+    pub(crate) fn get_available_height_left(&self) -> f32 {
         (self.origin.y + self.available_height - self.pos.y).max(0.)
     }
-}
-
-/// Defines how elements on [`Cx::turtle_align_list`] should be moved horizontally
-struct AlignX(f32);
-
-impl AlignX {
-    // Note: LEFT is the default so not needed as explicit option
-    pub const CENTER: AlignX = AlignX(0.5);
-    #[allow(dead_code)]
-    pub const RIGHT: AlignX = AlignX(1.0);
-}
-
-/// Defines how elements on [`Cx::turtle_align_list`] should be moved vertically
-struct AlignY(f32);
-
-impl AlignY {
-    // Note: TOP is the default so not needed as explicit option
-    pub const CENTER: AlignY = AlignY(0.5);
-    #[allow(dead_code)]
-    pub const BOTTOM: AlignY = AlignY(1.0);
 }
 
 impl Cx {
     /// Begin a new [`CxTurtle`] with a given [`Layout`]. This new [`CxTurtle`] will be added to the
     /// [`Cx::turtles`] stack.
-    pub fn begin_turtle(&mut self, layout: Layout) -> Turtle {
-        self.begin_typed_turtle(layout, CxTurtleType::Normal)
+    pub(crate) fn begin_turtle(&mut self, layout: Layout) -> Turtle {
+        self.begin_typed_turtle(CxTurtleType::Normal, layout)
     }
 
-    fn begin_typed_turtle(&mut self, layout: Layout, turtle_type: CxTurtleType) -> Turtle {
+    pub(crate) fn begin_typed_turtle(&mut self, turtle_type: CxTurtleType, layout: Layout) -> Turtle {
         if !self.in_redraw_cycle {
             panic!("calling begin_turtle outside of redraw cycle is not possible!");
         }
@@ -191,36 +177,23 @@ impl Cx {
             abs_size = layout_abs_size;
         }
 
-        // same for origin
+        let width;
+        let height;
         if layout.absolute {
+            // absolute overrides origin to start from (0, 0)
             origin = vec2(0.0, 0.0);
+            // absolute overrides the computation of width/height to use the parent absolute
+            width = self.eval_absolute_width(&layout.walk.width, abs_size.x);
+            height = self.eval_absolute_height(&layout.walk.height, abs_size.y);
+        } else {
+            width = self.eval_width(&layout.walk.width);
+            height = self.eval_height(&layout.walk.height);
         }
 
-        // absolute overrides the computation of width/height to use the parent absolute
-        let width = self.eval_width(&layout.walk.width, layout.absolute, abs_size.x);
-        let height = self.eval_height(&layout.walk.height, layout.absolute, abs_size.y);
         let pos = Vec2 { x: origin.x + layout.padding.l, y: origin.y + layout.padding.t };
 
-        // TODO(Dmitry): potentially unifty with regular width/height computation
-        let available_width = if let Some(parent) = self.turtles.last() {
-            match layout.walk.width {
-                Width::Fix(v) => v,
-                Width::FillUntil(v) => parent.get_available_width_left().min(v),
-                _ => parent.get_available_width_left(),
-            }
-        } else {
-            abs_size.x
-        };
-
-        let available_height = if let Some(parent) = self.turtles.last() {
-            match layout.walk.height {
-                Height::Fix(v) => v,
-                Height::FillUntil(v) => parent.get_available_height_left().min(v),
-                _ => parent.get_available_height_left(),
-            }
-        } else {
-            abs_size.y
-        };
+        let available_width = (self.eval_available_width_left(&layout.walk.width, abs_size) - layout.padding.r).max(0.);
+        let available_height = (self.eval_available_height_left(&layout.walk.height, abs_size) - layout.padding.b).max(0.);
 
         // By induction property this values should never be NaN
         assert!(!available_width.is_nan());
@@ -256,7 +229,12 @@ impl Cx {
         }
     }
 
-    fn assert_last_turtle_type_matches(&self, turtle_type: CxTurtleType) {
+    pub(crate) fn end_typed_turtle(&mut self, turtle_type: CxTurtleType) -> Rect {
+        self.assert_last_turtle_type_matches(turtle_type);
+        self.end_last_turtle_unchecked()
+    }
+
+    pub(crate) fn assert_last_turtle_type_matches(&self, turtle_type: CxTurtleType) {
         let cx_turtle = self.turtles.last().unwrap();
         if cx_turtle.turtle_type != turtle_type {
             panic!("Closing turtle type doesn't match! Expected: {:?}, found: {:?}", turtle_type, cx_turtle.turtle_type);
@@ -267,7 +245,11 @@ impl Cx {
     pub fn end_last_turtle_unchecked(&mut self) -> Rect {
         let old = self.turtles.pop().unwrap();
         let w = if old.width.is_nan() {
-            if old.bound_right_bottom.x == std::f32::NEG_INFINITY {
+            // when nesting Fill turtle inside Compute the former would have nan width
+            if old.layout.walk.width == Width::Fill {
+                // use all available width + padding
+                Width::Fix(old.available_width + old.layout.padding.r)
+            } else if old.bound_right_bottom.x == std::f32::NEG_INFINITY {
                 // nothing happened, use padding
                 Width::Fix(old.layout.padding.l + old.layout.padding.r)
             } else {
@@ -279,7 +261,11 @@ impl Cx {
         };
 
         let h = if old.height.is_nan() {
-            if old.bound_right_bottom.y == std::f32::NEG_INFINITY {
+            // when nesting Fill turtle inside Compute the former would have nan height
+            if old.layout.walk.height == Height::Fill {
+                // use all available height + padding
+                Height::Fix(old.available_height + old.layout.padding.b)
+            } else if old.bound_right_bottom.y == std::f32::NEG_INFINITY {
                 // nothing happened use the padding
                 Height::Fix(old.layout.padding.t + old.layout.padding.b)
             } else {
@@ -309,227 +295,9 @@ impl Cx {
     ///
     /// Note that this is a method on [`Cx`] instead of on [`Turtle`], since this way we can take ownership
     /// of the [`Turtle`], making it less likely that you accidentally reuse the [`Turtle`] after ending it.
-    pub fn end_turtle(&mut self, turtle: Turtle) -> Rect {
+    pub(crate) fn end_turtle(&mut self, turtle: Turtle) -> Rect {
         self.assert_last_turtle_matches(&turtle);
         self.end_last_turtle_unchecked()
-    }
-
-    /// Starts alignment element that fills all remaining space by y axis and centers content by it
-    pub fn begin_center_y_align(&mut self) {
-        let parent = self.turtles.last().unwrap();
-        let turtle = CxTurtle {
-            align_list_x_start_index: self.turtle_align_list.len(),
-            align_list_y_start_index: self.turtle_align_list.len(),
-            origin: parent.pos,
-            pos: parent.pos,
-            // fills out all remaining space by y axis
-            layout: Layout { walk: Walk { height: Height::Fill, ..parent.layout.walk }, ..parent.layout },
-            biggest: 0.0,
-            bound_right_bottom: Vec2 { x: std::f32::NEG_INFINITY, y: std::f32::NEG_INFINITY },
-            width: self.get_width_left(),
-            height: self.get_height_left(),
-            abs_size: parent.abs_size,
-            turtle_type: CxTurtleType::CenterYAlign,
-            available_width: parent.get_available_width_left(),
-            available_height: parent.get_available_height_left(),
-        };
-        self.turtles.push(turtle);
-    }
-
-    pub fn end_center_y_align(&mut self) {
-        self.assert_last_turtle_type_matches(CxTurtleType::CenterYAlign);
-
-        let turtle = self.turtles.pop().unwrap();
-        let dy = Cx::compute_align_turtle_y(&turtle, AlignY::CENTER);
-        let align_start = turtle.align_list_y_start_index;
-        self.do_align_y(dy, align_start);
-
-        let parent = self.turtles.last_mut().unwrap();
-        // TODO(Dmitry): communicating only few updates to parent for now. It's possible we need more.
-        parent.bound_right_bottom.x = parent.bound_right_bottom.x.max(turtle.bound_right_bottom.x);
-        parent.pos = turtle.pos;
-    }
-
-    /// Starts alignment element that fills all remaining space in turtle and centers content by x and y
-    pub fn begin_center_x_and_y_align(&mut self) {
-        let parent = self.turtles.last().unwrap();
-        let turtle = CxTurtle {
-            align_list_x_start_index: self.turtle_align_list.len(),
-            align_list_y_start_index: self.turtle_align_list.len(),
-            origin: parent.pos,
-            pos: parent.pos,
-            // fills out all remaining space by both axis
-            layout: Layout { walk: Walk { width: Width::Fill, height: Height::Fill }, ..parent.layout },
-            biggest: 0.0,
-            bound_right_bottom: Vec2 { x: std::f32::NEG_INFINITY, y: std::f32::NEG_INFINITY },
-            width: self.get_width_left(),
-            height: self.get_height_left(),
-            abs_size: parent.abs_size,
-            turtle_type: CxTurtleType::CenterXYAlign,
-            available_width: parent.get_available_width_left(),
-            available_height: parent.get_available_height_left(),
-        };
-        self.turtles.push(turtle);
-    }
-
-    pub fn end_center_x_and_y_align(&mut self) {
-        self.assert_last_turtle_type_matches(CxTurtleType::CenterXYAlign);
-        let turtle = self.turtles.pop().unwrap();
-
-        let dx = Cx::compute_align_turtle_x(&turtle, AlignX::CENTER);
-        self.do_align_x(dx, turtle.align_list_x_start_index);
-
-        let dy = Cx::compute_align_turtle_y(&turtle, AlignY::CENTER);
-        self.do_align_y(dy, turtle.align_list_y_start_index);
-
-        // TODO(Dmitry): we are not communicating any changes back to parent since we are filling all remaining place
-        // it's possible this breaks in some cases
-    }
-
-    pub fn begin_row_turtle(&mut self) -> Turtle {
-        self.begin_turtle(Layout {
-            direction: Direction::Right,
-            walk: Walk { width: Width::Fill, height: Height::Compute },
-            ..Layout::default()
-        })
-    }
-
-    pub fn begin_column_turtle(&mut self) -> Turtle {
-        self.begin_turtle(Layout {
-            direction: Direction::Down,
-            walk: Walk { width: Width::Compute, height: Height::Fill },
-            ..Layout::default()
-        })
-    }
-
-    /// Start alignment element that pushes content at the bottom by y axis
-    pub fn begin_bottom_align(&mut self) {
-        let parent = self.turtles.last().unwrap();
-        let turtle = CxTurtle {
-            align_list_x_start_index: self.turtle_align_list.len(),
-            align_list_y_start_index: self.turtle_align_list.len(),
-            origin: parent.pos,
-            pos: parent.pos,
-            layout: parent.layout,
-            biggest: 0.0,
-            bound_right_bottom: Vec2 { x: std::f32::NEG_INFINITY, y: std::f32::NEG_INFINITY },
-            width: parent.width,
-            height: parent.height,
-            abs_size: parent.abs_size,
-            turtle_type: CxTurtleType::BottomAlign,
-            available_width: parent.get_available_width_left(),
-            available_height: parent.get_available_height_left(),
-        };
-        self.turtles.push(turtle);
-    }
-
-    pub fn end_bottom_align(&mut self) {
-        self.assert_last_turtle_type_matches(CxTurtleType::BottomAlign);
-
-        let turtle = self.turtles.pop().unwrap();
-        let parent = self.turtles.last_mut().unwrap();
-
-        let drawn_height = turtle.bound_right_bottom.y - turtle.origin.y;
-        let last_y = parent.origin.y + parent.available_height;
-        let dy = last_y - turtle.bound_right_bottom.y;
-        // update parent
-        parent.available_height -= drawn_height;
-        parent.pos = turtle.origin;
-        parent.bound_right_bottom.x = parent.bound_right_bottom.x.max(turtle.bound_right_bottom.x);
-        parent.bound_right_bottom.y = last_y;
-
-        let align_start = turtle.align_list_y_start_index;
-        self.do_align_y(dy, align_start);
-    }
-
-    /// Starts alignment element that fills all remaining space by x axis and centers content by it
-    pub fn begin_center_x_align(&mut self) {
-        let parent = self.turtles.last().unwrap();
-        let turtle = CxTurtle {
-            align_list_x_start_index: self.turtle_align_list.len(),
-            align_list_y_start_index: self.turtle_align_list.len(),
-            origin: parent.pos,
-            pos: parent.pos,
-            // fills out all remaining space by x axis
-            layout: Layout { walk: Walk { width: Width::Fill, ..parent.layout.walk }, ..parent.layout },
-            biggest: 0.0,
-            bound_right_bottom: Vec2 { x: std::f32::NEG_INFINITY, y: std::f32::NEG_INFINITY },
-            width: self.get_width_left(),
-            height: self.get_height_left(),
-            abs_size: parent.abs_size,
-            turtle_type: CxTurtleType::CenterXAlign,
-            available_width: parent.get_available_width_left(),
-            available_height: parent.get_available_height_left(),
-        };
-        self.turtles.push(turtle);
-    }
-
-    pub fn end_center_x_align(&mut self) {
-        self.assert_last_turtle_type_matches(CxTurtleType::CenterXAlign);
-
-        let turtle = self.turtles.pop().unwrap();
-        let dx = Cx::compute_align_turtle_x(&turtle, AlignX::CENTER);
-        let align_start = turtle.align_list_x_start_index;
-        self.do_align_x(dx, align_start);
-
-        let parent = self.turtles.last_mut().unwrap();
-        // TODO(Dmitry): communicating only few updates to parent for now. It's possible we need more.
-        parent.bound_right_bottom.y = parent.bound_right_bottom.y.max(turtle.bound_right_bottom.y);
-        parent.pos = turtle.pos;
-    }
-
-    // Start alignment element that pushes content to the right by x axis
-    pub fn begin_right_align(&mut self) {
-        let parent = self.turtles.last().unwrap();
-        let turtle = CxTurtle {
-            align_list_x_start_index: self.turtle_align_list.len(),
-            align_list_y_start_index: self.turtle_align_list.len(),
-            origin: parent.pos,
-            pos: parent.pos,
-            layout: parent.layout,
-            biggest: 0.0,
-            bound_right_bottom: Vec2 { x: std::f32::NEG_INFINITY, y: std::f32::NEG_INFINITY },
-            width: parent.width,
-            height: parent.height,
-            abs_size: parent.abs_size,
-            turtle_type: CxTurtleType::RightAlign,
-            available_width: parent.get_available_width_left(),
-            available_height: parent.get_available_height_left(),
-        };
-        self.turtles.push(turtle);
-    }
-
-    pub fn end_right_align(&mut self) {
-        self.assert_last_turtle_type_matches(CxTurtleType::RightAlign);
-
-        let turtle = self.turtles.pop().unwrap();
-        let parent = self.turtles.last_mut().unwrap();
-
-        let drawn_width = turtle.bound_right_bottom.x - turtle.origin.x;
-        let last_x = parent.origin.x + parent.available_width;
-        let dx = last_x - turtle.bound_right_bottom.x;
-        // update parent
-        parent.available_width -= drawn_width;
-        parent.pos = turtle.origin;
-        parent.bound_right_bottom.x = last_x;
-        parent.bound_right_bottom.y = parent.bound_right_bottom.y.max(turtle.bound_right_bottom.y);
-
-        let align_start = turtle.align_list_x_start_index;
-        self.do_align_x(dx, align_start);
-    }
-
-    /// Starts a new box that adds padding to current turtle context
-    pub fn begin_padding_box(&mut self, padding: Padding) {
-        self.begin_typed_turtle(
-            Layout { walk: Walk { width: Width::Compute, height: Height::Compute }, padding, ..Layout::default() },
-            CxTurtleType::Padding,
-        );
-    }
-
-    /// Ends the current block that was opened by "begin_padding_box"
-    pub fn end_padding_box(&mut self) {
-        self.assert_last_turtle_type_matches(CxTurtleType::Padding);
-        self.end_last_turtle_unchecked();
     }
 
     /// Walk the current [`CxTurtle`], returning a [`Rect`] that it ended up walking.
@@ -561,7 +329,7 @@ impl Cx {
                 Direction::Right => {
                     match turtle.layout.line_wrap {
                         LineWrap::Overflow => {
-                            if (turtle.pos.x + w) > (turtle.origin.x + turtle.available_width - turtle.layout.padding.r) + 0.01 {
+                            if (turtle.pos.x + w) > (turtle.origin.x + turtle.available_width) + 0.01 {
                                 // what is the move delta.
                                 let old_x = turtle.pos.x;
                                 let old_y = turtle.pos.y;
@@ -694,7 +462,7 @@ impl Cx {
     }
 
     /// Actually perform a horizontal movement of items in [`Cx::turtle_align_list`], but only for positive dx
-    fn do_align_x(&mut self, dx: f32, align_start: usize) {
+    pub(crate) fn do_align_x(&mut self, dx: f32, align_start: usize) {
         if dx < 0. {
             // do only forward moving alignment
             // backwards alignment could happen if the size of content became larger than the container
@@ -737,7 +505,7 @@ impl Cx {
     }
 
     /// Actually perform a vertical movement of items in [`Cx::turtle_align_list`], but only for positive dy
-    fn do_align_y(&mut self, dy: f32, align_start: usize) {
+    pub(crate) fn do_align_y(&mut self, dy: f32, align_start: usize) {
         if dy < 0. {
             // do only forward moving alignment
             // backwards alignment could happen if the size of content became larger than the container
@@ -883,7 +651,7 @@ impl Cx {
     /// subtract that from the width of this turtle. That "remaining width" is
     /// then multiplied with the ratio. If there is no inherent width then this
     /// will return 0.
-    fn compute_align_turtle_x(turtle: &CxTurtle, align: AlignX) -> f32 {
+    pub(crate) fn compute_align_turtle_x(turtle: &CxTurtle, align: AlignX) -> f32 {
         let AlignX(fx) = align;
         if fx > 0.0 {
             // TODO(Dmitry): check if we need use padding here
@@ -905,7 +673,7 @@ impl Cx {
     /// subtract that from the height of this turtle. That "remaining height" is
     /// then multiplied with the ratio. If there is no inherent height then this
     /// will return 0.
-    fn compute_align_turtle_y(turtle: &CxTurtle, align: AlignY) -> f32 {
+    pub(crate) fn compute_align_turtle_y(turtle: &CxTurtle, align: AlignY) -> f32 {
         let AlignY(fy) = align;
         if fy > 0.0 {
             // TODO(Dmitry): check if we need use padding here
@@ -951,29 +719,12 @@ impl Cx {
         }
     }
 
-    fn _get_width_left(&self, abs: bool, abs_size: f32) -> f32 {
-        if !abs {
-            self.get_width_left()
-        } else {
-            abs_size
-        }
-    }
-
     /// Get some notion of the width that is "left" for the current [`CxTurtle`].
     ///
     /// See also [`Cx::get_width_total`].
     pub fn get_width_left(&self) -> f32 {
         if let Some(turtle) = self.turtles.last() {
-            let nan_val = max_zero_keep_nan(turtle.width - (turtle.pos.x - turtle.origin.x));
-            if nan_val.is_nan() {
-                // if we are a computed width, if some value is known, use that
-                // TODO(JP): this makes no sense to me. This kind of makes sense for the total
-                // width, but not for the remaining width? Shouldn't we just be returning NaN here?
-                if turtle.bound_right_bottom.x != std::f32::NEG_INFINITY {
-                    return turtle.bound_right_bottom.x - turtle.origin.x;
-                }
-            }
-            return nan_val;
+            return max_zero_keep_nan(turtle.width - (turtle.pos.x - turtle.origin.x));
         }
         0.
     }
@@ -983,14 +734,6 @@ impl Cx {
             turtle.get_available_width_left()
         } else {
             0.
-        }
-    }
-
-    fn _get_width_total(&self, abs: bool, abs_size: f32) -> f32 {
-        if !abs {
-            self.get_width_total()
-        } else {
-            abs_size
         }
     }
 
@@ -1012,46 +755,21 @@ impl Cx {
         0.
     }
 
-    fn _get_height_left(&self, abs: bool, abs_size: f32) -> f32 {
-        if !abs {
-            self.get_height_left()
-        } else {
-            abs_size
-        }
-    }
-
     /// Get some notion of the height that is "left" for the current [`CxTurtle`].
     ///
     /// See also [`Cx::get_height_total`].
     pub fn get_height_left(&self) -> f32 {
         if let Some(turtle) = self.turtles.last() {
-            let nan_val = max_zero_keep_nan(turtle.height - (turtle.pos.y - turtle.origin.y));
-            if nan_val.is_nan() {
-                // if we are a computed height, if some value is known, use that
-                // TODO(JP): this makes no sense to me. This kind of makes sense for the total
-                // height, but not for the remaining height? Shouldn't we just be returning NaN here?
-                if turtle.bound_right_bottom.y != std::f32::NEG_INFINITY {
-                    return turtle.bound_right_bottom.y - turtle.origin.y;
-                }
-            }
-            return nan_val;
+            return max_zero_keep_nan(turtle.height - (turtle.pos.y - turtle.origin.y));
         }
         0.
     }
 
-    fn get_available_height_left(&self) -> f32 {
+    pub fn get_available_height_left(&self) -> f32 {
         if let Some(turtle) = self.turtles.last() {
             turtle.get_available_height_left()
         } else {
             0.
-        }
-    }
-
-    fn _get_height_total(&self, abs: bool, abs_size: f32) -> f32 {
-        if !abs {
-            self.get_height_total()
-        } else {
-            abs_size
         }
     }
 
@@ -1085,16 +803,25 @@ impl Cx {
         false
     }
 
-    fn eval_width(&self, width: &Width, abs: bool, abs_size: f32) -> f32 {
+    // TODO(Dmitry): simplify all the following eval functions
+    fn eval_width(&self, width: &Width) -> f32 {
         match width {
             Width::Compute => std::f32::NAN,
             Width::Fix(v) => max_zero_keep_nan(*v),
-            Width::Fill => max_zero_keep_nan(self._get_width_left(abs, abs_size)),
-            Width::FillUntil(v) => min_keep_nan(*v, self._get_width_left(abs, abs_size)),
+            Width::Fill => max_zero_keep_nan(self.get_width_left()),
+            Width::FillUntil(v) => min_keep_nan(*v, self.get_width_left()),
         }
     }
 
-    // TODO(Dmitry): unify with eval_width or get rid of one
+    fn eval_absolute_width(&self, width: &Width, abs_size: f32) -> f32 {
+        match width {
+            Width::Compute => std::f32::NAN,
+            Width::Fix(v) => max_zero_keep_nan(*v),
+            Width::Fill => max_zero_keep_nan(abs_size),
+            Width::FillUntil(v) => min_keep_nan(*v, abs_size),
+        }
+    }
+
     fn eval_walking_width(&self, width: &Width) -> f32 {
         match width {
             Width::Compute => panic!("Walking with Width:Compute is not supported"),
@@ -1104,22 +831,54 @@ impl Cx {
         }
     }
 
-    fn eval_height(&self, height: &Height, abs: bool, abs_size: f32) -> f32 {
-        match height {
-            Height::Compute => std::f32::NAN,
-            Height::Fix(v) => max_zero_keep_nan(*v),
-            Height::Fill => max_zero_keep_nan(self._get_height_left(abs, abs_size)),
-            Height::FillUntil(v) => min_keep_nan(*v, self._get_height_left(abs, abs_size)),
+    fn eval_available_width_left(&self, width: &Width, abs_size: Vec2) -> f32 {
+        if let Some(parent) = self.turtles.last() {
+            match width {
+                Width::Fix(v) => *v,
+                Width::FillUntil(v) => parent.get_available_width_left().min(*v),
+                Width::Compute | Width::Fill => parent.get_available_width_left(),
+            }
+        } else {
+            abs_size.x
         }
     }
 
-    // TODO(Dmitry): unify with eval_height or get rid of one
+    fn eval_height(&self, height: &Height) -> f32 {
+        match height {
+            Height::Compute => std::f32::NAN,
+            Height::Fix(v) => max_zero_keep_nan(*v),
+            Height::Fill => max_zero_keep_nan(self.get_height_left()),
+            Height::FillUntil(v) => min_keep_nan(*v, self.get_height_left()),
+        }
+    }
+
+    fn eval_absolute_height(&self, height: &Height, abs_size: f32) -> f32 {
+        match height {
+            Height::Compute => std::f32::NAN,
+            Height::Fix(v) => max_zero_keep_nan(*v),
+            Height::Fill => max_zero_keep_nan(abs_size),
+            Height::FillUntil(v) => min_keep_nan(*v, abs_size),
+        }
+    }
+
     fn eval_walking_height(&self, height: &Height) -> f32 {
         match height {
             Height::Compute => panic!("Walking with Height:Compute is not supported"),
             Height::Fix(v) => v.max(0.),
             Height::Fill => self.get_available_height_left(),
             Height::FillUntil(v) => self.get_available_height_left().min(*v),
+        }
+    }
+
+    fn eval_available_height_left(&self, height: &Height, abs_size: Vec2) -> f32 {
+        if let Some(parent) = self.turtles.last() {
+            match height {
+                Height::Fix(v) => *v,
+                Height::FillUntil(v) => parent.get_available_height_left().min(*v),
+                Height::Compute | Height::Fill => parent.get_available_height_left(),
+            }
+        } else {
+            abs_size.y
         }
     }
 

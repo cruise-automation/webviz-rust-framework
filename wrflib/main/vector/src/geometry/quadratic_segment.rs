@@ -24,6 +24,11 @@ impl QuadraticSegment {
 
     /// Returns true if `self` is approximately linear with tolerance `epsilon`.
     pub(crate) fn is_approximately_linear(self, epsilon: f32) -> bool {
+        debug_assert!(!epsilon.is_nan());
+        debug_assert!(!self.p0.x.is_nan());
+        debug_assert!(!self.p0.y.is_nan());
+        debug_assert!(!self.p1.x.is_nan());
+        debug_assert!(!self.p1.y.is_nan());
         let v1 = self.p1 - self.p0;
         (if let Some(vx) = (self.p2 - self.p0).normalize() {
             // If the baseline is a line segment, the segment is approximately linear if the

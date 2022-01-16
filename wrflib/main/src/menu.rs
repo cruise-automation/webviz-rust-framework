@@ -6,7 +6,7 @@
 
 //! Defining native menus.
 
-use crate::cx::*;
+use crate::*;
 
 impl Cx {
     pub const COMMAND_QUIT: CommandId = location_hash!();

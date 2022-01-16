@@ -124,7 +124,7 @@ impl Default for Viewport3D {
 }
 
 impl Viewport3D {
-    pub fn handle_viewport_2d(&mut self, cx: &mut Cx, event: &mut Event) -> Option<PassMatrixMode> {
+    pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) -> Option<PassMatrixMode> {
         match event.hits(cx, &self.component_base, HitOpt::default()) {
             Event::FingerHover(_fe) => {
                 // cx.set_hover_mouse_cursor(MouseCursor::Move);
@@ -221,7 +221,7 @@ impl Viewport3D {
     /// so if we just don't call [`Pass::begin_pass`] then it will happily keep on rendering. Is this a bug
     /// or a feature? I'm not sure.. See [`Pass::begin_pass`] for more thoughts.
     #[must_use]
-    pub fn skip_viewport_3d(&mut self, cx: &mut Cx) -> bool {
+    pub fn skip_draw(&mut self, cx: &mut Cx) -> bool {
         // We have to manually check if the size has changed. See [`Pass:begin_pass`] for more info.
         if self.measured_size != vec2(cx.get_width_total(), cx.get_height_total()) {
             return false;
@@ -230,7 +230,7 @@ impl Viewport3D {
         true
     }
 
-    pub fn begin_viewport_3d(&mut self, cx: &mut Cx, props: Viewport3DProps) {
+    pub fn begin_draw(&mut self, cx: &mut Cx, props: Viewport3DProps) {
         if !self.has_read_props {
             self.camera_position = match props.initial_camera_position {
                 Coordinates::Cartesian(cartesian) => cartesian_to_spherical(cartesian),
@@ -253,7 +253,7 @@ impl Viewport3D {
         self.view_3d.begin_view(cx, Layout::default());
     }
 
-    pub fn end_viewport_3d(&mut self, cx: &mut Cx) -> PassMatrixMode {
+    pub fn end_draw(&mut self, cx: &mut Cx) -> PassMatrixMode {
         let matrix_mode = self.pass_set_matrix_mode(cx);
 
         self.view_3d.end_view(cx);

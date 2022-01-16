@@ -16,10 +16,10 @@ wrflib/scripts/ci/common.sh
 export RUSTFLAGS="-D warnings"
 
 # Run a check (not a build) for the various target triples.
-cargo check --all-targets --workspace --target x86_64-unknown-linux-gnu --exclude register_functions_example
+cargo check --all-targets --workspace --target x86_64-unknown-linux-gnu --exclude tutorial_js_rust_bridge
 cargo check --all-targets --workspace --target wasm32-unknown-unknown
 # `--no-default-features` is to disable TLS since it breaks cross-compilation
 # `--exclude wrflib_cef(_sys)` and `test_suite` since we currently don't support cross-compiling with CEF.
-cargo check --all-targets --workspace --target x86_64-apple-darwin --no-default-features --exclude wrflib_cef --exclude wrflib_cef_sys --exclude test_suite --exclude register_functions_example
-cargo check --all-targets --workspace --target x86_64-pc-windows-msvc --no-default-features --exclude wrflib_cef --exclude wrflib_cef_sys --exclude test_suite --exclude register_functions_example
-cargo check --all-targets --workspace --target x86_64-pc-windows-gnu --no-default-features --exclude wrflib_cef --exclude wrflib_cef_sys --exclude test_suite --exclude register_functions_example
+cargo check --all-targets --workspace --target x86_64-apple-darwin --no-default-features --exclude wrflib_cef --exclude wrflib_cef_sys --exclude test_suite --exclude tutorial_js_rust_bridge
+cargo check --all-targets --workspace --target x86_64-pc-windows-msvc --no-default-features --exclude wrflib_cef --exclude wrflib_cef_sys --exclude test_suite --exclude tutorial_js_rust_bridge
+cargo check --all-targets --workspace --target x86_64-pc-windows-gnu --no-default-features --exclude wrflib_cef --exclude wrflib_cef_sys --exclude test_suite --exclude tutorial_js_rust_bridge

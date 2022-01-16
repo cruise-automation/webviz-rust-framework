@@ -192,12 +192,9 @@ impl TabControl {
     }
 
     pub fn end_tabs(&mut self, cx: &mut Cx) {
-        let turtle = self.tab_fill.begin_turtle(
-            cx,
-            Layout { walk: Walk::wh(Width::Fill, Height::Fill), ..Layout::DEFAULT },
-            COLOR_BG_NORMAL,
-        );
-        self.tab_fill.end_turtle(cx, turtle);
+        self.tab_fill.begin_draw(cx, Width::Fill, Height::Compute, COLOR_BG_NORMAL);
+        self.tab_fill.end_draw(cx);
+
         self.tabs.truncate(self._tab_id_alloc);
         if let Some((fe, id)) = &self._dragging_tab {
             self.drag_tab_view.begin_view(cx, Layout::abs_origin_zero());

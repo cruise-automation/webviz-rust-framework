@@ -22,38 +22,42 @@ struct FpsCounterUniforms {
     max_fps: f32,
 }
 
-static SHADER: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER, QuadIns::SHADER],
-    code_fragment!(
-        r#"
-        texture texture: texture2D;
-        uniform sample_length: float;
-        uniform max_fps: float;
+static SHADER: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            texture texture: texture2D;
+            uniform sample_length: float;
+            uniform max_fps: float;
 
-        const line_width: float = 0.05;
+            const line_width: float = 0.05;
 
-        fn plot(position: vec2, point: float) -> float {
-            return smoothstep(point - line_width, point, position.y) - smoothstep(point, point + line_width, position.y);
-        }
+            fn plot(position: vec2, point: float) -> float {
+                return smoothstep(point - line_width, point, position.y) - smoothstep(point, point + line_width, position.y);
+            }
 
-        fn pixel() -> vec4 {
-            // Flip Y
-            pos.y = 1. - pos.y;
+            fn pixel() -> vec4 {
+                // Flip Y
+                pos.y = 1. - pos.y;
 
-            // Normalize across number of samples
-            let texture_position = vec2(pos.x * sample_length/300., 0.);
+                // Normalize across number of samples
+                let texture_position = vec2(pos.x * sample_length/300., 0.);
 
-            let color = vec3(plot(pos, floor(sample2d(texture, texture_position).x*255.)/max_fps));
-            return vec4(color, 1.0);
-        }"#
-    ),
-);
+                let color = vec3(plot(pos, floor(sample2d(texture, texture_position).x*255.)/max_fps));
+                return vec4(color, 1.0);
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
 
 #[derive(Default)]
 pub struct FpsCounter {
     points: Vec<PerfPoint>,
-    enable_button: NormalButton,
+    enable_button: Button,
     enabled: bool,
     texture: Texture,
 }
@@ -122,20 +126,14 @@ impl FpsCounter {
     }
 
     pub fn draw(&mut self, cx: &mut Cx) {
-        let turtle = cx.begin_turtle(Layout::default());
+        cx.begin_row(Width::Fill, Height::Fill);
         let third_of_width = cx.get_width_left() / 3.;
         if self.enabled {
-            let graph_turtle = cx.begin_turtle(Layout {
-                walk: Walk { width: Width::Fix(third_of_width), ..Walk::default() },
-                ..Layout::default()
-            });
+            cx.begin_row(Width::Fix(third_of_width), Height::Fill);
             self.draw_graph(cx);
-            cx.end_turtle(graph_turtle);
+            cx.end_row();
 
-            let fps_turtle = cx.begin_turtle(Layout {
-                walk: Walk { width: Width::Fix(third_of_width), ..Walk::default() },
-                ..Layout::default()
-            });
+            cx.begin_row(Width::Fix(third_of_width), Height::Fill);
             let value = self.points.last().unwrap().value;
             let fps = if value == 0. { 0. } else { 1. / value };
             let avg: f64 = self.points.len() as f64 / self.points.iter().map(|p| p.value).sum::<f64>();
@@ -151,15 +149,15 @@ impl FpsCounter {
                 cx.get_turtle_origin() + Vec2 { x: 0., y: TOP_PADDING + cx.get_height_left() / 2. },
                 &TextInsProps::DEFAULT,
             );
-            cx.end_turtle(fps_turtle);
+            cx.end_row();
         }
 
-        let button_turtle =
-            cx.begin_turtle(Layout { walk: Walk { width: Width::Fix(third_of_width), ..Walk::default() }, ..Layout::default() });
+        cx.begin_row(Width::Fix(third_of_width), Height::Fill);
         cx.begin_center_y_align();
         self.enable_button.draw(cx, if self.enabled { "Hide FPS" } else { "Show FPS" });
         cx.end_center_y_align();
-        cx.end_turtle(button_turtle);
-        cx.end_turtle(turtle);
+        cx.end_row();
+
+        cx.end_row();
     }
 }

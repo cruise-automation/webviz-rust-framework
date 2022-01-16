@@ -6,57 +6,65 @@
 
 use wrflib::*;
 
-static BACKGROUND_SHADER: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER, QuadIns::SHADER],
-    code_fragment!(
-        r#"
-        instance min_norm: float;
-        instance max_norm: float;
-        instance color: vec4;
-        instance height_pixels: float;
+static BACKGROUND_SHADER: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            instance min_norm: float;
+            instance max_norm: float;
+            instance color: vec4;
+            instance height_pixels: float;
 
-        // TODO(JP): make it easier to include outside constants in shaders, instead of
-        // having to import them through uniforms.
-        uniform hor_pad: float;
+            // TODO(JP): make it easier to include outside constants in shaders, instead of
+            // having to import them through uniforms.
+            uniform hor_pad: float;
 
-        fn pixel() -> vec4 {
-            let df = Df::viewport(pos * rect_size);
-            let x1 = hor_pad + (rect_size.x-hor_pad*2.) * min_norm;
-            let x2 = hor_pad + (rect_size.x-hor_pad*2.) * max_norm;
-            df.rect(x1, rect_size.y/2. - height_pixels/2., x2 - x1, height_pixels);
-            return df.fill(color);
-        }"#
-    ),
-);
-static KNOB_SHADER: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER, QuadIns::SHADER],
-    code_fragment!(
-        r#"
-        instance norm_value: float;
-        instance hover: float;
-        instance down: float;
+            fn pixel() -> vec4 {
+                let df = Df::viewport(pos * rect_size);
+                let x1 = hor_pad + (rect_size.x-hor_pad*2.) * min_norm;
+                let x2 = hor_pad + (rect_size.x-hor_pad*2.) * max_norm;
+                df.rect(x1, rect_size.y/2. - height_pixels/2., x2 - x1, height_pixels);
+                return df.fill(color);
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
+static KNOB_SHADER: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            instance norm_value: float;
+            instance hover: float;
+            instance down: float;
 
-        // TODO(JP): make it easier to include outside constants in shaders, instead of
-        // having to import them through uniforms.
-        uniform hor_pad: float;
+            // TODO(JP): make it easier to include outside constants in shaders, instead of
+            // having to import them through uniforms.
+            uniform hor_pad: float;
 
-        fn pixel() -> vec4 {
-            let df = Df::viewport(pos * rect_size);
+            fn pixel() -> vec4 {
+                let df = Df::viewport(pos * rect_size);
 
-            let width = 7.;
-            let height = 15.;
-            df.box(hor_pad + (rect_size.x-hor_pad*2.) * norm_value -
-                width*0.5, rect_size.y/2. - height/2., width, height, 1.);
+                let width = 7.;
+                let height = 15.;
+                df.box(hor_pad + (rect_size.x-hor_pad*2.) * norm_value -
+                    width*0.5, rect_size.y/2. - height/2., width, height, 1.);
 
-            let color = mix(mix(#7, #B, hover), #F, down);
-            df.fill(color);
+                let color = mix(mix(#7, #B, hover), #F, down);
+                df.fill(color);
 
-            return df.result;
-        }"#
-    ),
-);
+                return df.result;
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
 
 #[derive(Clone, Default)]
 #[repr(C)]

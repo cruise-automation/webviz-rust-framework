@@ -42,7 +42,7 @@ impl MaybeCefBrowser {
 
     /// Queues up messages if the browser isn't initialized yet; otherwise calls them directly.
     pub(crate) fn call_js(&mut self, name: &str, params: Vec<WrfParam>) {
-        let call_js_event = CallJsEvent { name: name.to_string(), params: params.to_vec() };
+        let call_js_event = CallJsEvent { name: name.to_string(), params };
         match self {
             MaybeCefBrowser::Initialized(cef_browser) => cef_browser.call_js(call_js_event),
             MaybeCefBrowser::Uninitialized { messages_channel, .. } => messages_channel.0.send(call_js_event).unwrap(),
@@ -109,7 +109,7 @@ impl MaybeCefBrowser {
 
     #[allow(dead_code)] // We never call this in win/linux currently.
     pub(crate) fn return_to_js(&mut self, callback_id: u32, mut params: Vec<WrfParam>) {
-        params.insert(0, WrfParam::String(format!("{}", callback_id)));
+        params.insert(0, format!("{}", callback_id).into_param());
         self.call_js("_wrflibReturnParams", params);
     }
 }
@@ -127,40 +127,58 @@ struct MyRenderProcessHandler {
     call_rust_in_same_thread_sync_fn: Arc<RwLock<Option<CallRustInSameThreadSyncFn>>>,
 }
 
+fn make_mutable_buffer<T>(param_type: u32, mut buffer: Vec<T>) -> V8Value {
+    let ptr = buffer.as_mut_ptr();
+    let len = buffer.len();
+    let callback = Arc::new(MyV8ArrayBufferReleaseCallback { buffer: Arc::new(buffer) });
+
+    let buffer_data = V8Value::create_array(3);
+
+    let v8_buffer = V8Value::create_array_buffer(ptr as *const u8, len * std::mem::size_of::<T>(), callback);
+    buffer_data.set_value_byindex(0, &v8_buffer);
+
+    // Purposefully leave the second array element blank to set arc_ptr as undefined
+
+    buffer_data.set_value_byindex(2, &V8Value::create_uint(param_type));
+
+    buffer_data
+}
+
+fn make_readonly_buffer<T>(param_type: u32, buffer: Arc<Vec<T>>) -> V8Value {
+    let callback = Arc::new(MyV8ArrayBufferReleaseCallback { buffer: Arc::clone(&buffer) });
+
+    let buffer_data = V8Value::create_array(3);
+
+    let v8_buffer = V8Value::create_array_buffer(buffer.as_ptr() as *const u8, buffer.len() * std::mem::size_of::<T>(), callback);
+    buffer_data.set_value_byindex(0, &v8_buffer);
+
+    let arc_ptr = V8Value::create_uint(Arc::as_ptr(&buffer) as u32);
+    buffer_data.set_value_byindex(1, &arc_ptr);
+
+    buffer_data.set_value_byindex(2, &V8Value::create_uint(param_type));
+
+    buffer_data
+}
+
 fn make_buffers_and_arc_ptrs(params: Vec<WrfParam>) -> V8Value {
     let values = V8Value::create_array(params.len());
 
     for (index, param) in params.into_iter().enumerate() {
+        let param_type = match &param {
+            WrfParam::String(_) => WRF_PARAM_STRING,
+            WrfParam::ReadOnlyU8Buffer(_) => WRF_PARAM_READ_ONLY_UINT8_BUFFER,
+            WrfParam::U8Buffer(_) => WRF_PARAM_UINT8_BUFFER,
+            WrfParam::ReadOnlyF32Buffer(_) => WRF_PARAM_READ_ONLY_FLOAT32_BUFFER,
+            WrfParam::F32Buffer(_) => WRF_PARAM_FLOAT32_BUFFER,
+        };
         let value = match param {
             WrfParam::String(str) => V8Value::create_string(&str),
-            WrfParam::ReadOnlyBuffer(buffer) => {
-                let callback = Arc::new(MyV8ArrayBufferReleaseCallback { buffer: Arc::clone(&buffer) });
-
-                let buffer_data = V8Value::create_array(2);
-
-                let v8_buffer = V8Value::create_array_buffer(buffer.as_ptr(), buffer.len(), callback);
-                buffer_data.set_value_byindex(0, &v8_buffer);
-
-                let arc_ptr = V8Value::create_uint(Arc::as_ptr(&buffer) as u32);
-                buffer_data.set_value_byindex(1, &arc_ptr);
-
-                buffer_data
-            }
-            WrfParam::Buffer(mut buffer) => {
-                let ptr = buffer.as_mut_ptr();
-                let len = buffer.len();
-                let callback = Arc::new(MyV8ArrayBufferReleaseCallback { buffer: Arc::new(buffer) });
-
-                let buffer_data = V8Value::create_array(2);
-
-                let v8_buffer = V8Value::create_array_buffer(ptr, len, callback);
-                buffer_data.set_value_byindex(0, &v8_buffer);
-
-                // Purposefully leave the second array element blank to set arc_ptr as undefined
-
-                buffer_data
-            }
+            WrfParam::ReadOnlyU8Buffer(buffer) => make_readonly_buffer(param_type, buffer),
+            WrfParam::U8Buffer(buffer) => make_mutable_buffer(param_type, buffer),
+            WrfParam::ReadOnlyF32Buffer(buffer) => make_readonly_buffer(param_type, buffer),
+            WrfParam::F32Buffer(buffer) => make_mutable_buffer(param_type, buffer),
         };
+
         values.set_value_byindex(index, &value);
     }
     values
@@ -173,19 +191,36 @@ fn get_wrf_params(array: &V8Value) -> Vec<WrfParam> {
         let param = array.get_value_byindex(index).unwrap();
 
         let wrf_param = if param.is_string() {
-            WrfParam::String(param.get_string_value())
+            param.get_string_value().into_param()
         } else {
             let array_buffer = param.get_value_byindex(0).unwrap();
-            let readonly = param.get_value_byindex(1).unwrap().get_bool_value();
+            let param_type = param.get_value_byindex(1).unwrap().get_int_value() as u32;
 
-            let callback = array_buffer.get_array_buffer_release_callback::<MyV8ArrayBufferReleaseCallback>().unwrap();
-
-            if readonly {
-                WrfParam::ReadOnlyBuffer(Arc::clone(&callback.buffer))
-            } else {
-                // TODO(Paras): Figure out a way to transfer ownership of the buffer here without copying.
-                // This copy is okay in the short term while we think of CEF as a dev-tool.
-                WrfParam::Buffer(callback.buffer.to_vec())
+            // TODO(Paras): Figure out a way to transfer ownership of mutable buffers without copying.
+            // This copy is okay in the short term while we think of CEF as a dev-tool.
+            // TODO(Paras): Figure out a way to extract this to a generic function to avoid code duplication :(
+            match param_type {
+                WRF_PARAM_READ_ONLY_UINT8_BUFFER => {
+                    let callback =
+                        array_buffer.get_array_buffer_release_callback::<MyV8ArrayBufferReleaseCallback<u8>>().unwrap();
+                    Arc::clone(&callback.buffer).into_param()
+                }
+                WRF_PARAM_UINT8_BUFFER => {
+                    let callback =
+                        array_buffer.get_array_buffer_release_callback::<MyV8ArrayBufferReleaseCallback<u8>>().unwrap();
+                    callback.buffer.to_vec().into_param()
+                }
+                WRF_PARAM_FLOAT32_BUFFER => {
+                    let callback =
+                        array_buffer.get_array_buffer_release_callback::<MyV8ArrayBufferReleaseCallback<f32>>().unwrap();
+                    callback.buffer.to_vec().into_param()
+                }
+                WRF_PARAM_READ_ONLY_FLOAT32_BUFFER => {
+                    let callback =
+                        array_buffer.get_array_buffer_release_callback::<MyV8ArrayBufferReleaseCallback<f32>>().unwrap();
+                    Arc::clone(&callback.buffer).into_param()
+                }
+                v => panic!("Invalid param type: {}", v),
             }
         };
         params.push(wrf_param);
@@ -223,18 +258,30 @@ fn process_messages(receive_channel: &mpsc::Receiver<CallJsEvent>, frame: &Frame
     }
 }
 
-struct MyV8ArrayBufferReleaseCallback {
+struct MyV8ArrayBufferReleaseCallback<T> {
     #[allow(dead_code)]
-    buffer: Arc<Vec<u8>>,
+    buffer: Arc<Vec<T>>,
 }
 
-impl V8ArrayBufferReleaseCallback for MyV8ArrayBufferReleaseCallback {
-    fn release_buffer(&self, _buffer: *const u8) {
-        // The memory is managed automatically when MyV8ArrayBufferReleaseCallback goes out of scope,
-        // this will deallocate self.buffer and decrement corresponding refcount
-        // This relies on assumption that inside CEF the callback is deallocated soon after release_buffer is called:
-        // see https://github.com/chromiumembedded/cef/blob/62a9f00bd3/libcef/renderer/v8_impl.cc#L1411-L1414
-    }
+// The memory is managed automatically when MyV8ArrayBufferReleaseCallback goes out of scope,
+// this will deallocate self.buffer and decrement corresponding refcount
+// This relies on assumption that inside CEF the callback is deallocated soon after release_buffer is called:
+// see https://github.com/chromiumembedded/cef/blob/62a9f00bd3/libcef/renderer/v8_impl.cc#L1411-L1414
+impl<T> V8ArrayBufferReleaseCallback for MyV8ArrayBufferReleaseCallback<T> {}
+
+fn create_array_buffer<T: Default + Clone>(count: i32) -> V8Value {
+    let callback = Arc::new(MyV8ArrayBufferReleaseCallback::<T> { buffer: Arc::new(vec![T::default(); count as usize]) });
+
+    let value = V8Value::create_array(2);
+    let arc_ptr = V8Value::create_uint(Arc::as_ptr(&callback.buffer) as u32);
+    let v8_buffer = V8Value::create_array_buffer(
+        callback.buffer.as_ptr() as *const u8,
+        callback.buffer.len() * std::mem::size_of::<T>(),
+        callback,
+    );
+    value.set_value_byindex(0, &v8_buffer);
+    value.set_value_byindex(1, &arc_ptr);
+    value
 }
 
 impl RenderProcessHandler for MyRenderProcessHandler {
@@ -306,20 +353,18 @@ impl RenderProcessHandler for MyRenderProcessHandler {
             }
 
             let count = args[0].get_int_value();
-            let buffer: Arc<Vec<u8>> = Arc::new(vec![0; count as usize]);
-            let callback = Arc::new(MyV8ArrayBufferReleaseCallback { buffer });
-
-            let value = V8Value::create_array(2);
-            let arc_ptr = V8Value::create_uint(Arc::as_ptr(&callback.buffer) as u32);
-            let v8_buffer = V8Value::create_array_buffer(callback.buffer.as_ptr(), callback.buffer.len(), callback);
-            value.set_value_byindex(0, &v8_buffer);
-            value.set_value_byindex(1, &arc_ptr);
+            let param_type = args[1].get_int_value() as u32;
+            let value = match param_type {
+                WRF_PARAM_READ_ONLY_UINT8_BUFFER | WRF_PARAM_UINT8_BUFFER => create_array_buffer::<u8>(count),
+                WRF_PARAM_FLOAT32_BUFFER | WRF_PARAM_READ_ONLY_FLOAT32_BUFFER => create_array_buffer::<f32>(count),
+                v => panic!("Invalid param type: {}", v),
+            };
 
             Some(Ok(value))
         }));
 
         assert!(window.set_fn_value("cefHandleKeyboardEvent", (), |_name, _obj, args, _other_data| {
-            let callback = args[0].get_array_buffer_release_callback::<MyV8ArrayBufferReleaseCallback>();
+            let callback = args[0].get_array_buffer_release_callback::<MyV8ArrayBufferReleaseCallback<u8>>();
             let buffer = &callback.unwrap().buffer;
             let mut zerde_parser = ZerdeParser::from(buffer.as_ptr() as u64);
             let msg_type = zerde_parser.parse_u32();

@@ -8,7 +8,7 @@
 
 use std::sync::RwLock;
 
-use crate::cx::*;
+use crate::*;
 
 #[derive(Clone, Debug)]
 #[repr(C)]
@@ -41,112 +41,115 @@ struct TextInsUniforms {
     curve: f32,
 }
 
-pub static TEXT_INS_SHADER: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER],
-    code_fragment!(
-        r#"
-        uniform brightness: float;
-        uniform curve: float;
+pub static TEXT_INS_SHADER: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        code_fragment!(
+            r#"
+            uniform brightness: float;
+            uniform curve: float;
 
-        texture texture: texture2D;
+            texture texture: texture2D;
 
-        instance font_t1: vec2;
-        instance font_t2: vec2;
-        instance color: vec4;
-        instance rect_pos: vec2;
-        instance rect_size: vec2;
-        instance char_depth: float;
-        instance base: vec2;
-        instance font_size: float;
-        instance char_offset: float;
-        instance marker: float;
+            instance font_t1: vec2;
+            instance font_t2: vec2;
+            instance color: vec4;
+            instance rect_pos: vec2;
+            instance rect_size: vec2;
+            instance char_depth: float;
+            instance base: vec2;
+            instance font_size: float;
+            instance char_offset: float;
+            instance marker: float;
 
-        geometry geom: vec2;
+            geometry geom: vec2;
 
-        varying tex_coord1: vec2;
-        varying tex_coord2: vec2;
-        varying tex_coord3: vec2;
-        varying clipped: vec2;
+            varying tex_coord1: vec2;
+            varying tex_coord2: vec2;
+            varying tex_coord3: vec2;
+            varying clipped: vec2;
 
-        fn get_color() -> vec4 {
-            return color;
-        }
-
-        fn pixel() -> vec4 {
-            let dx = dFdx(vec2(tex_coord1.x * 2048.0, 0.)).x;
-            let dp = 1.0 / 2048.0;
-
-            // basic hardcoded mipmapping so it stops 'swimming' in VR
-            // mipmaps are stored in red/green/blue channel
-            let s = 1.0;
-
-            if dx > 7.0 {
-                s = 0.7;
-            }
-            else if dx > 2.75 {
-                s = (
-                    sample2d(texture, tex_coord3.xy + vec2(0., 0.)).z
-                        + sample2d(texture, tex_coord3.xy + vec2(dp, 0.)).z
-                        + sample2d(texture, tex_coord3.xy + vec2(0., dp)).z
-                        + sample2d(texture, tex_coord3.xy + vec2(dp, dp)).z
-                ) * 0.25;
-            }
-            else if dx > 1.75 {
-                s = sample2d(texture, tex_coord3.xy).z;
-            }
-            else if dx > 1.3 {
-                s = sample2d(texture, tex_coord2.xy).y;
-            }
-            else {
-                s = sample2d(texture, tex_coord1.xy).x;
+            fn get_color() -> vec4 {
+                return color;
             }
 
-            s = pow(s, curve);
-            let col = get_color(); //color!(white);//get_color();
-            return vec4(s * col.rgb * brightness * col.a, s * col.a);
-        }
+            fn pixel() -> vec4 {
+                let dx = dFdx(vec2(tex_coord1.x * 2048.0, 0.)).x;
+                let dp = 1.0 / 2048.0;
 
-        fn vertex() -> vec4 {
-            let min_pos = vec2(rect_pos.x, rect_pos.y);
-            let max_pos = vec2(rect_pos.x + rect_size.x, rect_pos.y - rect_size.y);
+                // basic hardcoded mipmapping so it stops 'swimming' in VR
+                // mipmaps are stored in red/green/blue channel
+                let s = 1.0;
 
-            clipped = clamp(
-                mix(min_pos, max_pos, geom) - draw_scroll,
-                draw_clip.xy,
-                draw_clip.zw
-            );
+                if dx > 7.0 {
+                    s = 0.7;
+                }
+                else if dx > 2.75 {
+                    s = (
+                        sample2d(texture, tex_coord3.xy + vec2(0., 0.)).z
+                            + sample2d(texture, tex_coord3.xy + vec2(dp, 0.)).z
+                            + sample2d(texture, tex_coord3.xy + vec2(0., dp)).z
+                            + sample2d(texture, tex_coord3.xy + vec2(dp, dp)).z
+                    ) * 0.25;
+                }
+                else if dx > 1.75 {
+                    s = sample2d(texture, tex_coord3.xy).z;
+                }
+                else if dx > 1.3 {
+                    s = sample2d(texture, tex_coord2.xy).y;
+                }
+                else {
+                    s = sample2d(texture, tex_coord1.xy).x;
+                }
 
-            let normalized: vec2 = (clipped - min_pos + draw_scroll) / vec2(rect_size.x, -rect_size.y);
-            //rect = vec4(min_pos.x, min_pos.y, max_pos.x, max_pos.y) - draw_scroll.xyxy;
+                s = pow(s, curve);
+                let col = get_color(); //color!(white);//get_color();
+                return vec4(s * col.rgb * brightness * col.a, s * col.a);
+            }
 
-            tex_coord1 = mix(
-                font_t1.xy,
-                font_t2.xy,
-                normalized.xy
-            );
+            fn vertex() -> vec4 {
+                let min_pos = vec2(rect_pos.x, rect_pos.y);
+                let max_pos = vec2(rect_pos.x + rect_size.x, rect_pos.y - rect_size.y);
 
-            tex_coord2 = mix(
-                font_t1.xy,
-                font_t1.xy + (font_t2.xy - font_t1.xy) * 0.75,
-                normalized.xy
-            );
+                clipped = clamp(
+                    mix(min_pos, max_pos, geom) - draw_scroll,
+                    draw_clip.xy,
+                    draw_clip.zw
+                );
 
-            tex_coord3 = mix(
-                font_t1.xy,
-                font_t1.xy + (font_t2.xy - font_t1.xy) * 0.6,
-                normalized.xy
-            );
+                let normalized: vec2 = (clipped - min_pos + draw_scroll) / vec2(rect_size.x, -rect_size.y);
+                //rect = vec4(min_pos.x, min_pos.y, max_pos.x, max_pos.y) - draw_scroll.xyxy;
 
-            return camera_projection * (camera_view * vec4(
-                clipped.x,
-                clipped.y,
-                char_depth + draw_zbias,
-                1.
-            ));
-        }"#
-    ),
-);
+                tex_coord1 = mix(
+                    font_t1.xy,
+                    font_t2.xy,
+                    normalized.xy
+                );
+
+                tex_coord2 = mix(
+                    font_t1.xy,
+                    font_t1.xy + (font_t2.xy - font_t1.xy) * 0.75,
+                    normalized.xy
+                );
+
+                tex_coord3 = mix(
+                    font_t1.xy,
+                    font_t1.xy + (font_t2.xy - font_t1.xy) * 0.6,
+                    normalized.xy
+                );
+
+                return camera_projection * (camera_view * vec4(
+                    clipped.x,
+                    clipped.y,
+                    char_depth + draw_zbias,
+                    1.
+                ));
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
 
 // Some constants for text anchoring
 // Addition can be used to combine them together: LEFT + TOP
@@ -243,7 +246,7 @@ impl TextIns {
     where
         F: FnMut(char, usize, f32, f32) -> f32,
     {
-        let mut ret = Vec::new();
+        let mut ret = Vec::with_capacity(chunk.len());
 
         let font_id = text_style.font.font_id;
 
@@ -268,7 +271,7 @@ impl TextIns {
                     continue;
                 }
 
-                let glyph = cxfont.glyphs[glyph_id].clone();
+                let glyph = &cxfont.glyphs[glyph_id];
 
                 let advance = glyph.horizontal_metrics.advance_width * font_size_logical * font_scale;
 
@@ -365,26 +368,29 @@ impl TextIns {
     }
 
     pub fn draw_glyphs(cx: &mut Cx, glyphs: &[TextIns], props: &DrawGlyphsProps) -> Area {
-        // The horizontal offset is based on the total size of the string
-        let horizontal_offset = glyphs.iter().map(|g| g.rect_size.x).sum();
-        let vertical_offset = {
-            // The vertical offset is the logical size of the font
-            let text_style = TextInsProps::DEFAULT.text_style;
-            text_style.font_size * text_style.top_drop
+        let area = if props.position_anchoring != vec2(0., 0.) {
+            // The horizontal offset is based on the total size of the string
+            let horizontal_offset = glyphs.iter().map(|g| g.rect_size.x).sum();
+            let vertical_offset = {
+                // The vertical offset is the logical size of the font
+                let text_style = TextInsProps::DEFAULT.text_style;
+                text_style.font_size * text_style.top_drop
+            };
+            let offset = vec2(horizontal_offset, vertical_offset);
+            let anchor_offset = offset * props.position_anchoring;
+
+            let moved_glyphs: Vec<TextIns> = glyphs
+                .iter()
+                .map(|g| {
+                    let mut g = g.clone();
+                    g.rect_pos -= anchor_offset; // Offset must be subtracted
+                    g
+                })
+                .collect();
+            cx.add_instances(&TEXT_INS_SHADER, &moved_glyphs)
+        } else {
+            cx.add_instances(&TEXT_INS_SHADER, glyphs)
         };
-        let offset = vec2(horizontal_offset, vertical_offset);
-        let anchor_offset = offset * props.position_anchoring;
-
-        let glyphs: Vec<TextIns> = glyphs
-            .iter()
-            .map(|g| {
-                let mut g = g.clone();
-                g.rect_pos -= anchor_offset; // Offset must be subtracted
-                g
-            })
-            .collect();
-
-        let area = cx.add_instances(&TEXT_INS_SHADER, &glyphs);
         Self::write_uniforms(cx, &area, &props.text_style);
         area
     }
@@ -443,13 +449,9 @@ impl TextIns {
         let mut buf = Vec::with_capacity(text.len());
         let mut glyphs: Vec<TextIns> = Vec::with_capacity(text.len());
 
-        let text_turtle = cx.begin_turtle(Layout {
-            direction: Direction::Right,
-            walk: Walk { width: Width::Compute, height: Height::Compute },
-            padding: props.padding,
-            line_wrap: LineWrap::Overflow,
-            ..Layout::default()
-        });
+        cx.begin_row(Width::Compute, Height::Compute);
+        cx.begin_padding_box(props.padding);
+        cx.begin_wrapping_box();
 
         while let Some(c) = iter.next() {
             let last = iter.peek().is_none();
@@ -530,7 +532,10 @@ impl TextIns {
                 }
             }
         }
-        cx.end_turtle(text_turtle);
+
+        cx.end_wrapping_box();
+        cx.end_padding_box();
+        cx.end_row();
 
         Self::draw_glyphs(
             cx,

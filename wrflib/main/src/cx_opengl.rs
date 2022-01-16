@@ -6,8 +6,8 @@
 
 //! Linux OpenGL bindings.
 
-use crate::cx::*;
 use crate::cx_xlib::*;
+use crate::*;
 use std::ffi::{CStr, CString};
 use std::mem;
 use std::os::raw::{c_ulong, c_void};
@@ -47,6 +47,8 @@ impl Cx {
                     zbias_step,
                 );
             } else {
+                let gpu_geometry_id = GpuGeometry::get_id(self, view_id, draw_call_id);
+
                 let cxview = &mut self.views[view_id];
                 //view.platform.uni_vw.update_with_f32_data(device, &view.uniforms);
                 let draw_call = &mut cxview.draw_calls[draw_call_id];
@@ -58,16 +60,8 @@ impl Cx {
                     draw_call.platform.inst_vb.update_with_f32_data(opengl_cx, &draw_call.instances);
                 }
 
-                let geometry_id = if let Some(geometry) = draw_call.props.geometry {
-                    geometry.geometry_id
-                } else if let Some(geometry) = sh.default_geometry {
-                    geometry.geometry_id
-                } else {
-                    continue;
-                };
-
-                let geometry = &mut self.geometries[geometry_id];
-                let indices = geometry.indices.len();
+                let geometry = &mut self.gpu_geometries[gpu_geometry_id];
+                let indices = geometry.geometry.indices_u32_slice().len();
 
                 draw_call.set_zbias(*zbias);
                 draw_call.set_local_scroll(scroll, local_scroll);
@@ -79,10 +73,10 @@ impl Cx {
                 }
 
                 // update geometry?
-                let geometry = &mut self.geometries[geometry_id];
+                let geometry = &mut self.gpu_geometries[gpu_geometry_id];
                 if geometry.dirty || geometry.platform.vb.gl_buffer.is_none() || geometry.platform.ib.gl_buffer.is_none() {
-                    geometry.platform.vb.update_with_f32_data(opengl_cx, &geometry.vertices);
-                    geometry.platform.ib.update_with_u32_data(opengl_cx, &geometry.indices);
+                    geometry.platform.vb.update_with_f32_data(opengl_cx, geometry.geometry.vertices_f32_slice());
+                    geometry.platform.ib.update_with_u32_data(opengl_cx, geometry.geometry.indices_u32_slice());
                     geometry.dirty = false;
                 }
 
@@ -1022,7 +1016,7 @@ pub(crate) struct OpenglUniform {
 }
 
 #[derive(Clone, Default)]
-pub(crate) struct CxPlatformGeometry {
+pub(crate) struct CxPlatformGpuGeometry {
     pub(crate) vb: OpenglBuffer,
     pub(crate) ib: OpenglBuffer,
 }

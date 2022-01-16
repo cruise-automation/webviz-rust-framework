@@ -4,7 +4,6 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
-import { RpcEvent } from "./make_rpc_event";
 import {
   TextareaEventKeyDown,
   TextareaEventKeyUp,
@@ -12,7 +11,12 @@ import {
 } from "./make_textarea";
 import { ZerdeBuilder } from "./zerde";
 
-export function packKeyModifier(e: RpcEvent): number {
+export function packKeyModifier(e: {
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  metaKey: boolean;
+}): number {
   return (
     (e.shiftKey ? 1 : 0) |
     (e.ctrlKey ? 2 : 0) |

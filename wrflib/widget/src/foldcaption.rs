@@ -97,35 +97,39 @@ struct FoldCaptionIns {
     open: f32,
 }
 
-static SHADER: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER, QuadIns::SHADER],
-    code_fragment!(
-        r#"
-    instance hover: float;
-    instance down: float;
-    instance open: float;
+static SHADER: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            instance hover: float;
+            instance down: float;
+            instance open: float;
 
-    const shadow: float = 3.0;
-    const border_radius: float = 2.5;
+            const shadow: float = 3.0;
+            const border_radius: float = 2.5;
 
-    fn pixel() -> vec4 {
-        let sz = 3.;
-        let c = vec2(5.0,0.5*rect_size.y);
-        let df = Df::viewport(pos * rect_size);
-        df.clear(#2);
-        // we have 3 points, and need to rotate around its center
-        df.rotate(open*0.5*PI+0.5*PI, c.x, c.y);
-        df.move_to(c.x - sz, c.y + sz);
-        df.line_to(c.x, c.y - sz);
-        df.line_to(c.x + sz, c.y + sz);
-        df.close_path();
-        df.fill(mix(#a,#f,hover));
+            fn pixel() -> vec4 {
+                let sz = 3.;
+                let c = vec2(5.0,0.5*rect_size.y);
+                let df = Df::viewport(pos * rect_size);
+                df.clear(#2);
+                // we have 3 points, and need to rotate around its center
+                df.rotate(open*0.5*PI+0.5*PI, c.x, c.y);
+                df.move_to(c.x - sz, c.y + sz);
+                df.line_to(c.x, c.y - sz);
+                df.line_to(c.x + sz, c.y + sz);
+                df.close_path();
+                df.fill(mix(#a,#f,hover));
 
-        return df.result;
-    }"#
-    ),
-);
+                return df.result;
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
 
 #[derive(Default)]
 pub struct FoldCaption {
@@ -134,7 +138,6 @@ pub struct FoldCaption {
     text_area: Area,
     animator: Animator,
     open_state: FoldOpenState,
-    turtle: Option<Turtle>,
 }
 
 const ANIM_DEFAULT: Anim = Anim {
@@ -210,11 +213,8 @@ impl FoldCaption {
         self.bg_area = cx.add_instances(&SHADER, &[FoldCaptionIns { open: open_value, ..Default::default() }]);
 
         cx.begin_padding_box(Padding::all(1.0));
-        self.turtle = Some(cx.begin_turtle(Layout {
-            walk: Walk { width: Width::Fill, height: Height::Compute },
-            padding: Padding { l: 14.0, t: 8.0, r: 14.0, b: 8.0 },
-            ..Layout::default()
-        }));
+        cx.begin_row(Width::Fill, Height::Compute); // fold
+        cx.begin_padding_box(Padding { l: 14.0, t: 8.0, r: 14.0, b: 8.0 }); // fold content
 
         if self.open_state.do_time_step(0.6) {
             cx.request_draw();
@@ -226,13 +226,13 @@ impl FoldCaption {
     pub fn end_fold_caption(&mut self, cx: &mut Cx, label: &str) {
         cx.reset_turtle_pos();
 
-        cx.begin_right_align();
+        cx.begin_right_box();
         let draw_str_props = TextInsProps { wrapping: Wrapping::Ellipsis(cx.get_width_left() - 10.), ..TextInsProps::DEFAULT };
         TextIns::draw_walk(cx, label, &draw_str_props);
-        cx.end_right_align();
+        cx.end_right_box();
 
-        let rect = cx.end_turtle(self.turtle.take().unwrap());
-
+        cx.end_padding_box(); // fold content
+        let rect = cx.end_row(); // fold
         cx.end_padding_box();
 
         let bg = self.bg_area.get_first_mut::<FoldCaptionIns>(cx);

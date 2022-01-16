@@ -4,14 +4,19 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
-import { createWasmBuffer, makeZerdeBuilder } from "./common";
+import { createWasmBuffer, getWrfParamType, makeZerdeBuilder } from "./common";
 import { Dependency, Finger, FingerScroll, WasmApp } from "./wrf_wasm_worker";
 import {
   TextareaEventKeyDown,
   TextareaEventKeyUp,
   TextareaEventTextInput,
 } from "./make_textarea";
-import { FileHandle, PostMessageTypedArray, WrfParamType } from "./types";
+import {
+  FileHandle,
+  PostMessageTypedArray,
+  WrfArray,
+  WrfParamType,
+} from "./types";
 import { ZerdeBuilder } from "./zerde";
 import { zerdeKeyboardHandlers } from "./zerde_keyboard_handlers";
 
@@ -51,13 +56,17 @@ export class ZerdeEventloopEvents {
     this._zerdeBuilder.sendString(location.hash);
   }
 
-  createWasmBuffer(data: Uint8Array): number {
+  createWasmBuffer(data: WrfArray): number {
     return createWasmBuffer(this._wasmApp.memory, this._wasmApp.exports, data);
   }
 
-  createArcVec(vecPtr: number, vecLen: number): number {
+  createArcVec(vecPtr: number, data: WrfArray): number {
     return Number(
-      this._wasmApp.exports.createArcVec(BigInt(vecPtr), BigInt(vecLen))
+      this._wasmApp.exports.createArcVec(
+        BigInt(vecPtr),
+        BigInt(data.length),
+        BigInt(getWrfParamType(data, true))
+      )
     );
   }
 
@@ -112,6 +121,7 @@ export class ZerdeEventloopEvents {
     this._zerdeBuilder.sendU32(6);
     this._zerdeBuilder.sendF32(finger.x);
     this._zerdeBuilder.sendF32(finger.y);
+    this._zerdeBuilder.sendU32(finger.button);
     this._zerdeBuilder.sendU32(finger.digit);
     this._zerdeBuilder.sendU32(finger.touch ? 1 : 0);
     this._zerdeBuilder.sendU32(finger.modifiers);
@@ -122,6 +132,7 @@ export class ZerdeEventloopEvents {
     this._zerdeBuilder.sendU32(7);
     this._zerdeBuilder.sendF32(finger.x);
     this._zerdeBuilder.sendF32(finger.y);
+    this._zerdeBuilder.sendU32(finger.button);
     this._zerdeBuilder.sendU32(finger.digit);
     this._zerdeBuilder.sendU32(finger.touch ? 1 : 0);
     this._zerdeBuilder.sendU32(finger.modifiers);
@@ -262,7 +273,7 @@ export class ZerdeEventloopEvents {
     this._zerdeBuilder.sendU32(success);
   }
 
-  sendEventFromAnyThread(eventPtr: bigint): void {
+  sendEventFromAnyThread(eventPtr: BigInt): void {
     this._zerdeBuilder.sendU32(26);
     this._zerdeBuilder.sendU64(eventPtr);
   }
@@ -308,7 +319,7 @@ export class ZerdeEventloopEvents {
 
   callRust(
     name: string,
-    params: (string | Uint8Array | PostMessageTypedArray)[],
+    params: (string | WrfArray | PostMessageTypedArray)[],
     callbackId: number
   ): void {
     this._zerdeBuilder.sendU32(30);
@@ -320,11 +331,10 @@ export class ZerdeEventloopEvents {
         this._zerdeBuilder.sendString(param);
       } else {
         if ("bufferData" in param) {
-          if (param.bufferData.arcPtr) {
-            this._zerdeBuilder.sendU32(WrfParamType.ReadOnlyBuffer);
+          this._zerdeBuilder.sendU32(param.bufferData.paramType);
+          if (param.bufferData.readonly) {
             this._zerdeBuilder.sendU32(param.bufferData.arcPtr);
           } else {
-            this._zerdeBuilder.sendU32(WrfParamType.Buffer);
             this._zerdeBuilder.sendU32(param.bufferData.bufferPtr);
             this._zerdeBuilder.sendU32(param.bufferData.bufferLen);
             this._zerdeBuilder.sendU32(param.bufferData.bufferCap);
@@ -332,7 +342,7 @@ export class ZerdeEventloopEvents {
         } else {
           const vecLen = param.byteLength;
           const vecPtr = this.createWasmBuffer(param);
-          this._zerdeBuilder.sendU32(WrfParamType.Buffer);
+          this._zerdeBuilder.sendU32(getWrfParamType(param, false));
           this._zerdeBuilder.sendU32(vecPtr);
           this._zerdeBuilder.sendU32(vecLen);
           this._zerdeBuilder.sendU32(vecLen);

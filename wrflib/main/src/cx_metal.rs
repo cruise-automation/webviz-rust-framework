@@ -6,15 +6,25 @@
 
 //! Mac OS X Metal bindings.
 
-use crate::cx::*;
+use std::ffi::c_void;
+use std::mem;
+use std::os::raw::c_int;
+use std::os::raw::c_ulong;
+use std::ptr;
+use std::ptr::NonNull;
+use std::sync::Arc;
+use std::sync::Condvar;
+use std::sync::Mutex;
+
 use crate::cx_apple::*;
 use crate::cx_cocoa::*;
+use crate::*;
 use wrflib_objc_sys::msg_send;
 use wrflib_objc_sys::runtime::YES;
 use wrflib_shader_compiler::generate_metal;
 
 impl Cx {
-    pub(crate) fn render_view(
+    fn render_view(
         &mut self,
         pass_id: usize,
         view_id: usize,
@@ -23,6 +33,7 @@ impl Cx {
         zbias: &mut f32,
         zbias_step: f32,
         encoder: id,
+        gpu_read_guards: &mut Vec<MetalRwLockGpuReadGuard>,
         metal_cx: &MetalCx,
     ) {
         // tad ugly otherwise the borrow checker locks 'self' and we can't recur
@@ -43,9 +54,12 @@ impl Cx {
                     zbias,
                     zbias_step,
                     encoder,
+                    gpu_read_guards,
                     metal_cx,
                 );
             } else {
+                let gpu_geometry_id = GpuGeometry::get_id(self, view_id, draw_call_id);
+
                 let cxview = &mut self.views[view_id];
                 //view.platform.uni_vw.update_with_f32_data(device, &view.uniforms);
                 let draw_call = &mut cxview.draw_calls[draw_call_id];
@@ -56,7 +70,7 @@ impl Cx {
                     draw_call.instance_dirty = false;
                     // update the instance buffer data
                     self.platform.bytes_written += draw_call.instances.len() * 4;
-                    draw_call.platform.inst_vbuf.update_with_f32_data(metal_cx, &draw_call.instances);
+                    draw_call.platform.instance_buffer.cpu_write().update(metal_cx, &draw_call.instances);
                 }
 
                 // update the zbias uniform if we have it.
@@ -74,51 +88,43 @@ impl Cx {
                 if instances == 0 {
                     continue;
                 }
-                let pipeline_state = shp.pipeline_state;
+                let render_pipeline_state = shp.render_pipeline_state.as_id();
                 unsafe {
-                    let () = msg_send![encoder, setRenderPipelineState: pipeline_state];
+                    let () = msg_send![encoder, setRenderPipelineState: render_pipeline_state];
                 }
 
-                let geometry_id = if let Some(geometry) = draw_call.props.geometry {
-                    geometry.geometry_id
-                } else if let Some(geometry) = sh.default_geometry {
-                    geometry.geometry_id
-                } else {
-                    continue;
-                };
-
-                let geometry = &mut self.geometries[geometry_id];
+                let geometry = &mut self.gpu_geometries[gpu_geometry_id];
 
                 if geometry.dirty {
-                    geometry.platform.geom_ibuf.update_with_u32_data(metal_cx, &geometry.indices);
-                    geometry.platform.geom_vbuf.update_with_f32_data(metal_cx, &geometry.vertices);
+                    geometry.platform.vertex_buffer.cpu_write().update(metal_cx, geometry.geometry.vertices_f32_slice());
+                    geometry.platform.index_buffer.cpu_write().update(metal_cx, geometry.geometry.indices_u32_slice());
                     geometry.dirty = false;
                 }
 
-                if let Some(buf) = geometry.platform.geom_vbuf.multi_buffer_read().buffer {
+                if let Some(inner) = geometry.platform.vertex_buffer.cpu_read().inner.as_ref() {
                     unsafe {
                         msg_send![
                             encoder,
-                            setVertexBuffer: buf
+                            setVertexBuffer: inner.buffer.as_id()
                             offset: 0
                             atIndex: 0
                         ]
                     }
                 } else {
-                    println!("Drawing error: geom_vbuf None")
+                    println!("Drawing error: vertex_buffer None")
                 }
 
-                if let Some(buf) = draw_call.platform.inst_vbuf.multi_buffer_read().buffer {
+                if let Some(inner) = draw_call.platform.instance_buffer.cpu_read().inner.as_ref() {
                     unsafe {
                         msg_send![
                             encoder,
-                            setVertexBuffer: buf
+                            setVertexBuffer: inner.buffer.as_id()
                             offset: 0
                             atIndex: 1
                         ]
                     }
                 } else {
-                    println!("Drawing error: inst_vbuf None")
+                    println!("Drawing error: instance_buffer None")
                 }
 
                 let pass_uniforms = self.passes[pass_id].pass_uniforms.as_slice();
@@ -151,39 +157,43 @@ impl Cx {
                     if cxtexture.update_image {
                         metal_cx.update_platform_texture_image2d(cxtexture);
                     }
-                    if let Some(mtl_texture) = cxtexture.platform.mtl_texture {
+                    if let Some(inner) = cxtexture.platform.inner.as_ref() {
                         let () = unsafe {
                             msg_send![
                                 encoder,
-                                setFragmentTexture: mtl_texture
+                                setFragmentTexture: inner.texture.as_id()
                                 atIndex: i as u64
                             ]
                         };
                         let () = unsafe {
                             msg_send![
                                 encoder,
-                                setVertexTexture: mtl_texture
+                                setVertexTexture: inner.texture.as_id()
                                 atIndex: i as u64
                             ]
                         };
                     }
                 }
                 self.platform.draw_calls_done += 1;
-                if let Some(buf) = geometry.platform.geom_ibuf.multi_buffer_read().buffer {
+                if let Some(inner) = geometry.platform.index_buffer.cpu_read().inner.as_ref() {
                     let () = unsafe {
                         msg_send![
                             encoder,
                             drawIndexedPrimitives: MTLPrimitiveType::Triangle
-                            indexCount: geometry.indices.len() as u64
+                            indexCount: geometry.geometry.indices_u32_slice().len() as u64
                             indexType: MTLIndexType::UInt32
-                            indexBuffer: buf
+                            indexBuffer: inner.buffer.as_id()
                             indexBufferOffset: 0
                             instanceCount: instances
                         ]
                     };
                 } else {
-                    println!("Drawing error: geom_ibuf None")
+                    println!("Drawing error: index_buffer None")
                 }
+
+                gpu_read_guards.push(draw_call.platform.instance_buffer.gpu_read());
+                gpu_read_guards.push(geometry.platform.vertex_buffer.gpu_read());
+                gpu_read_guards.push(geometry.platform.index_buffer.gpu_read());
             }
         }
         self.debug_draw_tree(view_id);
@@ -224,10 +234,16 @@ impl Cx {
                 is_initial = true;
             } else {
                 let cxtexture = &mut self.textures[color_texture.texture_id as usize];
-                is_initial = metal_cx.update_platform_render_target(cxtexture, dpi_factor, pass_size, false);
+                cxtexture.platform.update(metal_cx, AttachmentKind::Color, &cxtexture.desc, dpi_factor * pass_size);
+                is_initial = !cxtexture.platform.inner.as_ref().unwrap().is_inited;
 
-                if let Some(mtl_texture) = cxtexture.platform.mtl_texture {
-                    let () = unsafe { msg_send![color_attachment, setTexture: mtl_texture] };
+                if let Some(inner) = cxtexture.platform.inner.as_ref() {
+                    let () = unsafe {
+                        msg_send![
+                            color_attachment,
+                            setTexture: inner.texture.as_id()
+                        ]
+                    };
                 } else {
                     println!("draw_pass_to_texture invalid render target");
                 }
@@ -266,12 +282,13 @@ impl Cx {
         // attach depth texture
         if let Some(depth_texture_id) = self.passes[pass_id].depth_texture {
             let cxtexture = &mut self.textures[depth_texture_id as usize];
-            let is_initial = metal_cx.update_platform_render_target(cxtexture, dpi_factor, pass_size, true);
+            cxtexture.platform.update(metal_cx, AttachmentKind::Depth, &cxtexture.desc, dpi_factor * pass_size);
+            let is_initial = !cxtexture.platform.inner.as_ref().unwrap().is_inited;
 
             let depth_attachment: id = unsafe { msg_send![render_pass_descriptor, depthAttachment] };
 
-            if let Some(mtl_texture) = cxtexture.platform.mtl_texture {
-                unsafe { msg_send![depth_attachment, setTexture: mtl_texture] }
+            if let Some(inner) = cxtexture.platform.inner.as_ref() {
+                unsafe { msg_send![depth_attachment, setTexture: inner.texture.as_id()] }
             } else {
                 println!("draw_pass_to_texture invalid render target");
             }
@@ -315,13 +332,21 @@ impl Cx {
     We can do the draw/paint in a callback when the first buffer is done, instead of as part of our event loop.
     Or we can block but only if the CPU is too far ahead: <https://developer.apple.com/forums/thread/651581>
     */
-    pub(crate) fn draw_pass_to_layer(&mut self, pass_id: usize, dpi_factor: f32, layer: id, metal_cx: &mut MetalCx) {
+    pub(crate) fn draw_pass_to_layer(
+        &mut self,
+        pass_id: usize,
+        dpi_factor: f32,
+        layer: id,
+        metal_cx: &mut MetalCx,
+        is_resizing: bool,
+    ) {
         self.platform.bytes_written = 0;
         self.platform.draw_calls_done = 0;
         let view_id = self.passes[pass_id].main_view_id.unwrap();
 
         let pool: id = unsafe { msg_send![class!(NSAutoreleasePool), new] };
 
+        //let command_buffer = command_queue.new_command_buffer();
         let drawable: id = unsafe { msg_send![layer, nextDrawable] };
         if drawable != nil {
             let render_pass_descriptor: id = unsafe { msg_send![class!(MTLRenderPassDescriptorInternal), renderPassDescriptor] };
@@ -341,6 +366,7 @@ impl Cx {
             let mut zbias = 0.0;
             let zbias_step = self.passes[pass_id].zbias_step;
 
+            let mut gpu_read_guards = Vec::new();
             self.render_view(
                 pass_id,
                 view_id,
@@ -349,12 +375,19 @@ impl Cx {
                 &mut zbias,
                 zbias_step,
                 encoder,
+                &mut gpu_read_guards,
                 metal_cx,
             );
 
             let () = unsafe { msg_send![encoder, endEncoding] };
-            let () = unsafe { msg_send![command_buffer, presentDrawable: drawable] };
-            let () = unsafe { msg_send![command_buffer, commit] };
+            if is_resizing {
+                self.commit_command_buffer(command_buffer, gpu_read_guards);
+                let () = unsafe { msg_send![command_buffer, waitUntilScheduled] };
+                let () = unsafe { msg_send![drawable, present] };
+            } else {
+                let () = unsafe { msg_send![command_buffer, presentDrawable: drawable] };
+                self.commit_command_buffer(command_buffer, gpu_read_guards);
+            }
         }
         let () = unsafe { msg_send![pool, release] };
     }
@@ -376,6 +409,7 @@ impl Cx {
 
         let mut zbias = 0.0;
         let zbias_step = self.passes[pass_id].zbias_step;
+        let mut gpu_read_guards = Vec::new();
         self.render_view(
             pass_id,
             view_id,
@@ -384,166 +418,76 @@ impl Cx {
             &mut zbias,
             zbias_step,
             encoder,
+            &mut gpu_read_guards,
             metal_cx,
         );
         let () = unsafe { msg_send![encoder, textureBarrier] };
         let () = unsafe { msg_send![encoder, endEncoding] };
-        let () = unsafe { msg_send![command_buffer, commit] };
-        //command_buffer.wait_until_scheduled();
+        self.commit_command_buffer(command_buffer, gpu_read_guards);
         let () = unsafe { msg_send![pool, release] };
+    }
+
+    fn commit_command_buffer(&mut self, command_buffer: id, gpu_read_guards: Vec<MetalRwLockGpuReadGuard>) {
+        #[repr(C)]
+        struct BlockDescriptor {
+            reserved: c_ulong,
+            size: c_ulong,
+            copy_helper: extern "C" fn(*mut c_void, *const c_void),
+            dispose_helper: extern "C" fn(*mut c_void),
+        }
+
+        static DESCRIPTOR: BlockDescriptor =
+            BlockDescriptor { reserved: 0, size: mem::size_of::<BlockLiteral>() as c_ulong, copy_helper, dispose_helper };
+
+        extern "C" fn copy_helper(dst: *mut c_void, src: *const c_void) {
+            unsafe {
+                ptr::write(&mut (*(dst as *mut BlockLiteral)).inner as *mut _, (*(src as *const BlockLiteral)).inner.clone());
+            }
+        }
+
+        extern "C" fn dispose_helper(src: *mut c_void) {
+            unsafe {
+                ptr::drop_in_place(src as *mut BlockLiteral);
+            }
+        }
+
+        #[repr(C)]
+        struct BlockLiteral {
+            isa: *const c_void,
+            flags: c_int,
+            reserved: c_int,
+            invoke: extern "C" fn(*mut BlockLiteral, id),
+            descriptor: *const BlockDescriptor,
+            inner: Arc<BlockLiteralInner>,
+        }
+
+        #[repr(C)]
+        struct BlockLiteralInner {
+            gpu_read_guards: Mutex<Option<Vec<MetalRwLockGpuReadGuard>>>,
+        }
+
+        let literal = BlockLiteral {
+            isa: unsafe { _NSConcreteStackBlock.as_ptr() as *const c_void },
+            flags: 1 << 25,
+            reserved: 0,
+            invoke,
+            descriptor: &DESCRIPTOR,
+            inner: Arc::new(BlockLiteralInner { gpu_read_guards: Mutex::new(Some(gpu_read_guards)) }),
+        };
+
+        extern "C" fn invoke(literal: *mut BlockLiteral, _command_buffer: id) {
+            let literal = unsafe { &mut *literal };
+            drop(literal.inner.gpu_read_guards.lock().unwrap().take().unwrap());
+        }
+
+        let () = unsafe { msg_send![command_buffer, addCompletedHandler: &literal] };
+        let () = unsafe { msg_send![command_buffer, commit] };
     }
 }
 
 pub(crate) struct MetalCx {
     pub(crate) device: id,
     pub(crate) command_queue: id,
-}
-
-impl MetalCx {
-    pub(crate) fn new() -> MetalCx {
-        /*
-        let devices = get_all_metal_devices();
-        for device in devices {
-            let is_low_power: BOOL = unsafe {msg_send![device, isLowPower]};
-            let command_queue: id = unsafe {msg_send![device, newCommandQueue]};
-            if is_low_power == YES {
-                return MetalCx {
-                    command_queue: command_queue,
-                    device: device
-                }
-            }
-        }*/
-        let device = get_default_metal_device().expect("Cannot get default metal device");
-        MetalCx { command_queue: unsafe { msg_send![device, newCommandQueue] }, device }
-    }
-
-    pub(crate) fn update_platform_render_target(
-        &self,
-        cxtexture: &mut CxTexture,
-        dpi_factor: f32,
-        size: Vec2,
-        is_depth: bool,
-    ) -> bool {
-        let width = if let Some(width) = cxtexture.desc.width { width as u64 } else { (size.x * dpi_factor) as u64 };
-        let height = if let Some(height) = cxtexture.desc.height { height as u64 } else { (size.y * dpi_factor) as u64 };
-
-        if cxtexture.platform.width == width
-            && cxtexture.platform.height == height
-            && cxtexture.platform.alloc_desc == cxtexture.desc
-        {
-            return false;
-        }
-        cxtexture.platform.mtl_texture = None;
-
-        let mdesc: id = unsafe { msg_send![class!(MTLTextureDescriptor), new] };
-        if !is_depth {
-            match cxtexture.desc.format {
-                TextureFormat::ImageRGBA => unsafe {
-                    let () = msg_send![mdesc, setPixelFormat: MTLPixelFormat::RGBA8Unorm];
-                    let () = msg_send![mdesc, setTextureType: MTLTextureType::D2];
-                    let () = msg_send![mdesc, setStorageMode: MTLStorageMode::Private];
-                    let () = msg_send![mdesc, setUsage: MTLTextureUsage::RenderTarget];
-                },
-                _ => {
-                    println!("update_platform_render_target unsupported texture format");
-                    return false;
-                }
-            }
-        } else {
-            match cxtexture.desc.format {
-                TextureFormat::Depth32Stencil8 => unsafe {
-                    let () = msg_send![mdesc, setPixelFormat: MTLPixelFormat::Depth32Float_Stencil8];
-                    let () = msg_send![mdesc, setTextureType: MTLTextureType::D2];
-                    let () = msg_send![mdesc, setStorageMode: MTLStorageMode::Private];
-                    let () = msg_send![mdesc, setUsage: MTLTextureUsage::RenderTarget];
-                },
-                _ => {
-                    println!("update_platform_render_target unsupported texture format");
-                    return false;
-                }
-            }
-        }
-        let () = unsafe { msg_send![mdesc, setWidth: width as u64] };
-        let () = unsafe { msg_send![mdesc, setHeight: height as u64] };
-        let () = unsafe { msg_send![mdesc, setDepth: 1u64] };
-
-        let tex: id = unsafe { msg_send![self.device, newTextureWithDescriptor: mdesc] };
-
-        cxtexture.platform.width = width;
-        cxtexture.platform.height = height;
-        cxtexture.platform.alloc_desc = cxtexture.desc.clone();
-        cxtexture.platform.mtl_texture = Some(tex);
-        true
-    }
-
-    pub(crate) fn update_platform_texture_image2d(&self, cxtexture: &mut CxTexture) {
-        if cxtexture.desc.width.is_none() || cxtexture.desc.height.is_none() {
-            println!("update_platform_texture_image2d without width/height");
-            return;
-        }
-
-        let width = cxtexture.desc.width.unwrap();
-        let height = cxtexture.desc.height.unwrap();
-
-        // allocate new texture if descriptor change
-        if cxtexture.platform.alloc_desc != cxtexture.desc {
-            cxtexture.platform.mtl_texture = None;
-
-            let mdesc: id = unsafe { msg_send![class!(MTLTextureDescriptor), new] };
-            unsafe {
-                let () = msg_send![mdesc, setTextureType: MTLTextureType::D2];
-                let () = msg_send![mdesc, setStorageMode: MTLStorageMode::Managed];
-                let () = msg_send![mdesc, setUsage: MTLTextureUsage::RenderTarget];
-                let () = msg_send![mdesc, setWidth: width as u64];
-                let () = msg_send![mdesc, setHeight: height as u64];
-            }
-
-            match cxtexture.desc.format {
-                TextureFormat::ImageRGBA => {
-                    let () = unsafe { msg_send![mdesc, setPixelFormat: MTLPixelFormat::RGBA8Unorm] };
-                    let tex: id = unsafe { msg_send![self.device, newTextureWithDescriptor: mdesc] };
-                    cxtexture.platform.mtl_texture = Some(tex);
-                }
-                _ => {
-                    println!("update_platform_texture_image2d with unsupported format");
-                    return;
-                }
-            }
-            cxtexture.platform.alloc_desc = cxtexture.desc.clone();
-            cxtexture.platform.width = width as u64;
-            cxtexture.platform.height = height as u64;
-        }
-
-        // always allocate new image
-        match cxtexture.desc.format {
-            TextureFormat::ImageRGBA => {
-                if cxtexture.image_u32.len() != width * height {
-                    println!("update_platform_texture_image2d with wrong buffer_u32 size!");
-                    cxtexture.platform.mtl_texture = None;
-                    return;
-                }
-                let region = MTLRegion {
-                    origin: MTLOrigin { x: 0, y: 0, z: 0 },
-                    size: MTLSize { width: width as u64, height: height as u64, depth: 1 },
-                };
-                let mtl_texture = cxtexture.platform.mtl_texture.unwrap();
-                let () = unsafe {
-                    msg_send![
-                        mtl_texture,
-                        replaceRegion: region
-                        mipmapLevel: 0
-                        withBytes: cxtexture.image_u32.as_ptr() as *const std::ffi::c_void
-                        bytesPerRow: (width * std::mem::size_of::<u32>()) as u64
-                    ]
-                };
-            }
-            _ => {
-                println!("update_platform_texture_image2d with unsupported format");
-                return;
-            }
-        }
-        cxtexture.update_image = false;
-    }
 }
 
 #[derive(Clone)]
@@ -554,6 +498,7 @@ pub(crate) struct MetalWindow {
     pub(crate) cal_size: Vec2,
     pub(crate) ca_layer: id,
     pub(crate) cocoa_window: CocoaWindow,
+    pub(crate) is_resizing: bool,
 }
 
 impl MetalWindow {
@@ -593,6 +538,7 @@ impl MetalWindow {
         }
 
         MetalWindow {
+            is_resizing: false,
             first_draw: true,
             window_id,
             cal_size: Vec2::default(),
@@ -602,12 +548,14 @@ impl MetalWindow {
         }
     }
 
-    pub(crate) fn set_vsync_enable(&mut self, _enable: bool) {
-        let () = unsafe { msg_send![self.ca_layer, setDisplaySyncEnabled: true] };
+    pub(crate) fn start_resize(&mut self) {
+        self.is_resizing = true;
+        let () = unsafe { msg_send![self.ca_layer, setPresentsWithTransaction: YES] };
     }
 
-    pub(crate) fn set_buffer_count(&mut self, _count: u64) {
-        let () = unsafe { msg_send![self.ca_layer, setMaximumDrawableCount: 3] };
+    pub(crate) fn stop_resize(&mut self) {
+        self.is_resizing = false;
+        let () = unsafe { msg_send![self.ca_layer, setPresentsWithTransaction: NO] };
     }
 
     pub(crate) fn resize_core_animation_layer(&mut self, _metal_cx: &MetalCx) -> bool {
@@ -621,7 +569,6 @@ impl MetalWindow {
                 let () = msg_send![self.ca_layer, setDrawableSize: CGSize {width: cal_size.x as f64, height: cal_size.y as f64}];
                 let () = msg_send![self.ca_layer, setContentsScale: self.window_geom.dpi_factor as f64];
             }
-            //self.msam_target = Some(RenderTarget::new(device, self.cal_size.x as u64, self.cal_size.y as u64, 2));
             true
         } else {
             false
@@ -633,154 +580,8 @@ impl MetalWindow {
 pub(crate) struct CxPlatformView {}
 
 #[derive(Default, Clone)]
-pub(crate) struct CxPlatformDrawCall {
-    //pub(crate) uni_dr: MetalBuffer,
-    pub(crate) inst_vbuf: MetalBuffer,
-}
-
-#[derive(Default, Clone)]
-pub(crate) struct CxPlatformTexture {
-    pub(crate) alloc_desc: TextureDesc,
-    pub(crate) width: u64,
-    pub(crate) height: u64,
-    pub(crate) mtl_texture: Option<id>,
-}
-
-#[derive(Default, Clone)]
 pub(crate) struct CxPlatformPass {
     pub(crate) mtl_depth_state: Option<id>,
-}
-
-#[derive(Default, Clone)]
-pub(crate) struct MultiMetalBuffer {
-    pub(crate) buffer: Option<id>,
-    pub(crate) size: usize,
-    pub(crate) used: usize,
-}
-
-#[derive(Default, Clone)]
-pub(crate) struct MetalBuffer {
-    pub(crate) last_written: usize,
-    pub(crate) multi1: MultiMetalBuffer,
-    pub(crate) multi2: MultiMetalBuffer,
-    pub(crate) multi3: MultiMetalBuffer,
-    pub(crate) multi4: MultiMetalBuffer,
-    pub(crate) multi5: MultiMetalBuffer,
-}
-
-impl MetalBuffer {
-    pub(crate) fn multi_buffer_read(&self) -> &MultiMetalBuffer {
-        match self.last_written {
-            0 => &self.multi1,
-            1 => &self.multi2,
-            2 => &self.multi3,
-            3 => &self.multi4,
-            _ => &self.multi5,
-        }
-    }
-
-    pub(crate) fn multi_buffer_write(&mut self) -> &mut MultiMetalBuffer {
-        self.last_written = (self.last_written + 1) % 5;
-        match self.last_written {
-            0 => &mut self.multi1,
-            1 => &mut self.multi2,
-            2 => &mut self.multi3,
-            3 => &mut self.multi4,
-            _ => &mut self.multi5,
-        }
-    }
-
-    pub(crate) fn update_with_f32_data(&mut self, metal_cx: &MetalCx, data: &[f32]) {
-        let elem = self.multi_buffer_write();
-        if elem.size < data.len() {
-            elem.buffer = None;
-        }
-        if elem.buffer.is_none() {
-            let buffer: id = unsafe {
-                msg_send![
-                    metal_cx.device,
-                    newBufferWithLength: (data.len() * std::mem::size_of::<f32>()) as u64
-                    options: MTLResourceOptions::StorageModeShared
-                ]
-            };
-            if buffer == nil {
-                elem.buffer = None
-            } else {
-                elem.buffer = Some(buffer)
-            }
-            elem.size = data.len()
-        }
-
-        if let Some(buffer) = elem.buffer {
-            unsafe {
-                let p: *mut std::ffi::c_void = msg_send![buffer, contents];
-                std::ptr::copy(data.as_ptr(), p as *mut f32, data.len());
-                let () = msg_send![
-                    buffer,
-                    didModifyRange: NSRange {
-                        location: 0,
-                        length: (data.len() * std::mem::size_of::<f32>()) as u64
-                    }
-                ];
-            }
-        }
-        elem.used = data.len()
-    }
-
-    pub(crate) fn update_with_u32_data(&mut self, metal_cx: &MetalCx, data: &[u32]) {
-        let elem = self.multi_buffer_write();
-        if elem.size < data.len() {
-            elem.buffer = None;
-        }
-        if elem.buffer.is_none() {
-            let buffer: id = unsafe {
-                msg_send![
-                    metal_cx.device,
-                    newBufferWithLength: (data.len() * std::mem::size_of::<u32>()) as u64
-                    options: MTLResourceOptions::StorageModeShared
-                ]
-            };
-            if buffer == nil {
-                elem.buffer = None
-            } else {
-                elem.buffer = Some(buffer)
-            }
-            elem.size = data.len()
-        }
-        if let Some(buffer) = elem.buffer {
-            unsafe {
-                let p: *mut std::ffi::c_void = msg_send![buffer, contents];
-                std::ptr::copy(data.as_ptr(), p as *mut u32, data.len());
-                let () = msg_send![
-                    buffer,
-                    didModifyRange: NSRange {
-                        location: 0,
-                        length: (data.len() * std::mem::size_of::<f32>()) as u64
-                    }
-                ];
-            }
-        }
-        elem.used = data.len()
-    }
-}
-
-#[derive(Clone, Default)]
-pub(crate) struct CxPlatformGeometry {
-    pub(crate) geom_vbuf: MetalBuffer,
-    pub(crate) geom_ibuf: MetalBuffer,
-}
-
-#[derive(Clone)]
-pub(crate) struct CxPlatformShader {
-    pub(crate) library: id,
-    pub(crate) metal_shader: String,
-    pub(crate) pipeline_state: id,
-}
-
-impl PartialEq for CxPlatformShader {
-    fn eq(&self, _other: &Self) -> bool {
-        false
-    }
 }
 
 impl Cx {
@@ -789,70 +590,371 @@ impl Cx {
             let shader = unsafe { self.shaders.get_unchecked_mut(shader_id) };
             let shader_ast = shader.shader_ast.as_ref().unwrap();
             let mtlsl = generate_metal::generate_shader(shader_ast);
-            let debug = shader_ast.debug;
-            if debug {
-                println!("--------------- Shader {} --------------- \n{}\n---------------\n", shader.name, mtlsl);
-            }
+            shader.platform = Some(CxPlatformShader::new(metal_cx, mtlsl));
+            shader.shader_ast = None;
+        }
+    }
+}
 
-            let mtl_compile_options: id = unsafe { msg_send![class!(MTLCompileOptions), new] };
-            unsafe {
-                let _: id = msg_send![mtl_compile_options, setFastMathEnabled: true];
-            };
-            let ns_mtlsl: id = str_to_nsstring(&mtlsl);
-            let mut err: id = nil;
-            let library: id = unsafe {
+impl MetalCx {
+    pub(crate) fn new() -> MetalCx {
+        /*
+        let devices = get_all_metal_devices();
+        for device in devices {
+            let is_low_power: BOOL = unsafe {msg_send![device, isLowPower]};
+            let command_queue: id = unsafe {msg_send![device, newCommandQueue]};
+            if is_low_power == YES {
+                return MetalCx {
+                    command_queue: command_queue,
+                    device: device
+                }
+            }
+        }
+        */
+        let device = get_default_metal_device().expect("Cannot get default metal device");
+        MetalCx { command_queue: unsafe { msg_send![device, newCommandQueue] }, device }
+    }
+
+    pub(crate) fn update_platform_texture_image2d(&self, cxtexture: &mut CxTexture) {
+        if cxtexture.desc.width.is_none() || cxtexture.desc.height.is_none() {
+            println!("update_platform_texture_image2d without width/height");
+            return;
+        }
+
+        let width = cxtexture.desc.width.unwrap() as u64;
+        let height = cxtexture.desc.height.unwrap() as u64;
+
+        let mut desc_changed = true;
+        if let Some(inner) = &cxtexture.platform.inner {
+            desc_changed = inner.format != cxtexture.desc.format
+                || inner.width != width
+                || inner.height != height
+                || inner.multisample != cxtexture.desc.multisample;
+        }
+
+        // allocate new texture if descriptor change
+        if desc_changed {
+            let descriptor = RcObjcId::from_owned(NonNull::new(unsafe { msg_send![class!(MTLTextureDescriptor), new] }).unwrap());
+            let texture = RcObjcId::from_owned(
+                NonNull::new(unsafe {
+                    let _: () = msg_send![descriptor.as_id(), setTextureType: MTLTextureType::D2];
+                    let _: () = msg_send![descriptor.as_id(), setWidth: width as u64];
+                    let _: () = msg_send![descriptor.as_id(), setHeight: height as u64];
+                    let _: () = msg_send![descriptor.as_id(), setStorageMode: MTLStorageMode::Managed];
+                    let _: () = msg_send![descriptor.as_id(), setUsage: MTLTextureUsage::RenderTarget];
+                    match cxtexture.desc.format {
+                        TextureFormat::ImageRGBA => {
+                            let _: () = msg_send![descriptor.as_id(), setPixelFormat: MTLPixelFormat::RGBA8Unorm];
+                        }
+                        _ => {
+                            panic!("update_platform_texture_image2d with unsupported format");
+                        }
+                    }
+                    msg_send![self.device, newTextureWithDescriptor: descriptor]
+                })
+                .unwrap(),
+            );
+
+            cxtexture.platform.inner = Some(CxPlatformTextureInner {
+                is_inited: false,
+                width,
+                height,
+                format: cxtexture.desc.format,
+                multisample: cxtexture.desc.multisample,
+                texture,
+            });
+        }
+
+        // always allocate new image
+        let inner = cxtexture.platform.inner.as_ref().unwrap();
+        match cxtexture.desc.format {
+            TextureFormat::ImageRGBA => {
+                if cxtexture.image_u32.len() as u64 != width * height {
+                    panic!("update_platform_texture_image2d with wrong buffer_u32 size!");
+                }
+                let region = MTLRegion {
+                    origin: MTLOrigin { x: 0, y: 0, z: 0 },
+                    size: MTLSize { width: width as u64, height: height as u64, depth: 1 },
+                };
+                let mtl_texture = inner.texture.as_id();
+                let () = unsafe {
+                    msg_send![
+                        mtl_texture,
+                        replaceRegion: region
+                        mipmapLevel: 0
+                        withBytes: cxtexture.image_u32.as_ptr() as *const std::ffi::c_void
+                        bytesPerRow: (width as usize * std::mem::size_of::<u32>()) as u64
+                    ]
+                };
+            }
+            _ => {
+                println!("update_platform_texture_image2d with unsupported format");
+                return;
+            }
+        }
+        cxtexture.update_image = false;
+    }
+}
+
+pub(crate) struct CxPlatformShader {
+    render_pipeline_state: RcObjcId,
+}
+
+impl CxPlatformShader {
+    pub(crate) fn new(metal_cx: &MetalCx, mtlsl: String) -> Self {
+        let options = RcObjcId::from_owned(unsafe { msg_send![class!(MTLCompileOptions), new] });
+        unsafe {
+            let _: () = msg_send![options.as_id(), setFastMathEnabled: YES];
+        };
+
+        let mut error: id = nil;
+
+        let library = RcObjcId::from_owned(
+            match NonNull::new(unsafe {
                 msg_send![
                     metal_cx.device,
-                    newLibraryWithSource: ns_mtlsl
-                    options: mtl_compile_options
-                    error: &mut err
+                    newLibraryWithSource: str_to_nsstring(&mtlsl)
+                    options: options
+                    error: &mut error
                 ]
-            };
-            if library == nil {
-                let err_str: id = unsafe { msg_send![err, localizedDescription] };
-                panic!("{}", nsstring_to_string(err_str));
-            }
+            }) {
+                Some(library) => library,
+                None => {
+                    let description: id = unsafe { msg_send![error, localizedDescription] };
+                    panic!("{}", nsstring_to_string(description));
+                }
+            },
+        );
 
-            shader.platform = Some(CxPlatformShader {
-                metal_shader: mtlsl,
-                pipeline_state: unsafe {
-                    let vert: id = msg_send![library, newFunctionWithName: str_to_nsstring("mpsc_vertex_main")];
-                    let frag: id = msg_send![library, newFunctionWithName: str_to_nsstring("mpsc_fragment_main")];
-                    let rpd: id = msg_send![class!(MTLRenderPipelineDescriptor), new];
+        let descriptor =
+            RcObjcId::from_owned(NonNull::new(unsafe { msg_send![class!(MTLRenderPipelineDescriptor), new] }).unwrap());
 
-                    let () = msg_send![rpd, setVertexFunction: vert];
-                    let () = msg_send![rpd, setFragmentFunction: frag];
+        let vertex_function = RcObjcId::from_owned(
+            NonNull::new(unsafe { msg_send![library.as_id(), newFunctionWithName: str_to_nsstring("mpsc_vertex_main")] })
+                .unwrap(),
+        );
 
-                    let color_attachments: id = msg_send![rpd, colorAttachments];
+        let fragment_function = RcObjcId::from_owned(
+            NonNull::new(unsafe { msg_send![library.as_id(), newFunctionWithName: str_to_nsstring("mpsc_fragment_main")] })
+                .unwrap(),
+        );
 
-                    let ca: id = msg_send![color_attachments, objectAtIndexedSubscript: 0u64];
+        let render_pipeline_state = RcObjcId::from_owned(
+            NonNull::new(unsafe {
+                let _: () = msg_send![descriptor.as_id(), setVertexFunction: vertex_function];
+                let _: () = msg_send![descriptor.as_id(), setFragmentFunction: fragment_function];
 
-                    let () = msg_send![ca, setPixelFormat: MTLPixelFormat::BGRA8Unorm];
-                    let () = msg_send![ca, setBlendingEnabled: YES];
-                    let () = msg_send![ca, setSourceRGBBlendFactor: MTLBlendFactor::One];
-                    let () = msg_send![ca, setDestinationRGBBlendFactor: MTLBlendFactor::OneMinusSourceAlpha];
+                let color_attachments: id = msg_send![descriptor.as_id(), colorAttachments];
+                let color_attachment: id = msg_send![color_attachments, objectAtIndexedSubscript: 0];
+                let () = msg_send![color_attachment, setPixelFormat: MTLPixelFormat::BGRA8Unorm];
+                let () = msg_send![color_attachment, setBlendingEnabled: YES];
+                let () = msg_send![color_attachment, setRgbBlendOperation: MTLBlendOperation::Add];
+                let () = msg_send![color_attachment, setAlphaBlendOperation: MTLBlendOperation::Add];
+                let () = msg_send![color_attachment, setSourceRGBBlendFactor: MTLBlendFactor::One];
+                let () = msg_send![color_attachment, setSourceAlphaBlendFactor: MTLBlendFactor::One];
+                let () = msg_send![color_attachment, setDestinationRGBBlendFactor: MTLBlendFactor::OneMinusSourceAlpha];
+                let () = msg_send![color_attachment, setDestinationAlphaBlendFactor: MTLBlendFactor::OneMinusSourceAlpha];
 
-                    let () = msg_send![ca, setSourceAlphaBlendFactor: MTLBlendFactor::One];
-                    let () = msg_send![ca, setDestinationAlphaBlendFactor: MTLBlendFactor::OneMinusSourceAlpha];
-                    let () = msg_send![ca, setRgbBlendOperation: MTLBlendOperation::Add];
-                    let () = msg_send![ca, setAlphaBlendOperation: MTLBlendOperation::Add];
+                let () = msg_send![descriptor.as_id(), setDepthAttachmentPixelFormat: MTLPixelFormat::Depth32Float_Stencil8];
 
-                    let () = msg_send![rpd, setDepthAttachmentPixelFormat: MTLPixelFormat::Depth32Float_Stencil8];
+                let mut error: id = nil;
+                msg_send![
+                    metal_cx.device,
+                    newRenderPipelineStateWithDescriptor: descriptor
+                    error: &mut error
+                ]
+            })
+            .unwrap(),
+        );
 
-                    let mut err: id = nil;
-                    let rps: id = msg_send![
-                        metal_cx.device,
-                        newRenderPipelineStateWithDescriptor: rpd
-                        error: &mut err
-                    ];
-                    if rps == nil {
-                        panic!("Could not create render pipeline state")
-                    }
-                    rps
-                },
-                library,
+        Self { render_pipeline_state }
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct CxPlatformDrawCall {
+    //pub(crate) uni_dr: MetalBuffer,
+    instance_buffer: MetalRwLock<MetalBuffer>,
+}
+
+#[derive(Default)]
+pub(crate) struct CxPlatformGpuGeometry {
+    vertex_buffer: MetalRwLock<MetalBuffer>,
+    index_buffer: MetalRwLock<MetalBuffer>,
+}
+
+#[derive(Default)]
+struct MetalBuffer {
+    inner: Option<MetalBufferInner>,
+}
+
+impl MetalBuffer {
+    fn update<T>(&mut self, metal_cx: &MetalCx, data: &[T]) {
+        let len = data.len() * std::mem::size_of::<T>();
+        if len == 0 {
+            self.inner = None;
+            return;
+        }
+        if self.inner.as_ref().map_or(0, |inner| inner.len) < len {
+            self.inner = Some(MetalBufferInner {
+                len,
+                buffer: RcObjcId::from_owned(
+                    NonNull::new(unsafe {
+                        msg_send![
+                            metal_cx.device,
+                            newBufferWithLength: len as u64
+                            options: nil
+                        ]
+                    })
+                    .unwrap(),
+                ),
             });
-            shader.shader_ast = None;
+        }
+        let inner = self.inner.as_ref().unwrap();
+        unsafe {
+            let contents: *mut u8 = msg_send![inner.buffer.as_id(), contents];
+            std::ptr::copy(data.as_ptr() as *const u8, contents, len);
+            let _: () = msg_send![
+                inner.buffer.as_id(),
+                didModifyRange: NSRange {
+                    location: 0,
+                    length: len as u64
+                }
+            ];
+        }
+    }
+}
+
+struct MetalBufferInner {
+    len: usize,
+    buffer: RcObjcId,
+}
+
+#[derive(Default)]
+pub(crate) struct CxPlatformTexture {
+    inner: Option<CxPlatformTextureInner>,
+}
+
+impl CxPlatformTexture {
+    fn update(&mut self, metal_cx: &MetalCx, attachment_kind: AttachmentKind, desc: &TextureDesc, default_size: Vec2) {
+        let width = desc.width.unwrap_or(default_size.x as usize) as u64;
+        let height = desc.height.unwrap_or(default_size.y as usize) as u64;
+
+        if self.inner.as_mut().map_or(false, |inner| {
+            if inner.width != width {
+                return false;
+            }
+            if inner.height != height {
+                return false;
+            }
+            if inner.format != desc.format {
+                return false;
+            }
+            if inner.multisample != desc.multisample {
+                return false;
+            }
+            inner.is_inited = true;
+            true
+        }) {
+            return;
+        }
+
+        let descriptor = RcObjcId::from_owned(NonNull::new(unsafe { msg_send![class!(MTLTextureDescriptor), new] }).unwrap());
+        let texture = RcObjcId::from_owned(
+            NonNull::new(unsafe {
+                let _: () = msg_send![descriptor.as_id(), setTextureType: MTLTextureType::D2];
+                let _: () = msg_send![descriptor.as_id(), setWidth: width as u64];
+                let _: () = msg_send![descriptor.as_id(), setHeight: height as u64];
+                let _: () = msg_send![descriptor.as_id(), setDepth: 1u64];
+                let _: () = msg_send![descriptor.as_id(), setStorageMode: MTLStorageMode::Private];
+                let _: () = msg_send![descriptor.as_id(), setUsage: MTLTextureUsage::RenderTarget];
+                match attachment_kind {
+                    AttachmentKind::Color => match desc.format {
+                        TextureFormat::ImageRGBA => {
+                            let _: () = msg_send![descriptor.as_id(), setPixelFormat: MTLPixelFormat::RGBA8Unorm];
+                        }
+                        _ => panic!(),
+                    },
+                    AttachmentKind::Depth => match desc.format {
+                        TextureFormat::Depth32Stencil8 => {
+                            let _: () = msg_send![descriptor.as_id(), setPixelFormat: MTLPixelFormat::Depth32Float_Stencil8];
+                        }
+                        _ => panic!(),
+                    },
+                }
+                msg_send![metal_cx.device, newTextureWithDescriptor: descriptor]
+            })
+            .unwrap(),
+        );
+
+        self.inner = Some(CxPlatformTextureInner {
+            is_inited: false,
+            width,
+            height,
+            format: desc.format,
+            multisample: desc.multisample,
+            texture,
+        });
+    }
+}
+
+struct CxPlatformTextureInner {
+    is_inited: bool,
+    width: u64,
+    height: u64,
+    format: TextureFormat,
+    multisample: Option<usize>,
+    texture: RcObjcId,
+}
+
+enum AttachmentKind {
+    Color,
+    Depth,
+}
+
+/// TODO(JP): Can we use a regular [`std::sync::RwLock`] here instead?
+#[derive(Default)]
+struct MetalRwLock<T> {
+    inner: Arc<MetalRwLockInner>,
+    value: T,
+}
+
+impl<T> MetalRwLock<T> {
+    fn cpu_read(&self) -> &T {
+        &self.value
+    }
+
+    fn gpu_read(&self) -> MetalRwLockGpuReadGuard {
+        let mut reader_count = self.inner.reader_count.lock().unwrap();
+        *reader_count += 1;
+        MetalRwLockGpuReadGuard { inner: self.inner.clone() }
+    }
+
+    fn cpu_write(&mut self) -> &mut T {
+        let mut reader_count = self.inner.reader_count.lock().unwrap();
+        while *reader_count != 0 {
+            reader_count = self.inner.condvar.wait(reader_count).unwrap();
+        }
+        &mut self.value
+    }
+}
+
+#[derive(Default)]
+struct MetalRwLockInner {
+    reader_count: Mutex<usize>,
+    condvar: Condvar,
+}
+
+struct MetalRwLockGpuReadGuard {
+    inner: Arc<MetalRwLockInner>,
+}
+
+impl Drop for MetalRwLockGpuReadGuard {
+    fn drop(&mut self) {
+        let mut reader_count = self.inner.reader_count.lock().unwrap();
+        *reader_count -= 1;
+        if *reader_count == 0 {
+            self.inner.condvar.notify_one();
         }
     }
 }

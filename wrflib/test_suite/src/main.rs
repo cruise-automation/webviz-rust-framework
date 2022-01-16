@@ -13,26 +13,22 @@ pub struct TestSuiteApp {
     window: Window,
     pass: Pass,
     main_view: View,
-    send_button: NormalButton,
-    worker_button: NormalButton,
-    dump_button: NormalButton,
+    send_button: Button,
+    worker_button: Button,
+    dump_button: Button,
     buffers: Vec<Arc<Vec<u8>>>,
 }
 
 fn array_multiply(params: &[WrfParam]) -> Vec<WrfParam> {
     let value: u8 = serde_json::from_str(params[0].as_string()).unwrap();
-    let mut outputs = Vec::new();
-    for p in params[1..].iter() {
-        let buffer = match p {
-            WrfParam::String(_) => panic!(),
-            WrfParam::ReadOnlyBuffer(b) => b,
-            WrfParam::Buffer(b) => b,
-        };
-        let output: Vec<_> = buffer.iter().map(|x| *x * value).collect();
-        outputs.push(WrfParam::ReadOnlyBuffer(Arc::new(output)));
-    }
-
-    outputs
+    let output = match &params[1] {
+        WrfParam::String(_) => panic!(),
+        WrfParam::ReadOnlyU8Buffer(b) => Arc::<Vec<u8>>::new(b.iter().map(|x| *x * value).collect()).into_param(),
+        WrfParam::U8Buffer(b) => Arc::<Vec<u8>>::new(b.iter().map(|x| *x * value).collect()).into_param(),
+        WrfParam::F32Buffer(b) => Arc::<Vec<f32>>::new(b.iter().map(|x| *x * value as f32).collect()).into_param(),
+        WrfParam::ReadOnlyF32Buffer(b) => Arc::<Vec<f32>>::new(b.iter().map(|x| *x * value as f32).collect()).into_param(),
+    };
+    vec![output]
 }
 
 impl TestSuiteApp {
@@ -50,9 +46,9 @@ impl TestSuiteApp {
             },
             pass: Pass::default(),
             main_view: View::default(),
-            send_button: NormalButton::default(),
-            worker_button: NormalButton::default(),
-            dump_button: NormalButton::default(),
+            send_button: Button::default(),
+            worker_button: Button::default(),
+            dump_button: Button::default(),
             buffers,
         }
     }
@@ -66,15 +62,15 @@ impl TestSuiteApp {
         }
 
         if let ButtonEvent::Clicked = self.send_button.handle(cx, event) {
-            let mut params = vec![WrfParam::String("hello world :-)".to_string())];
+            let mut params = vec!["hello world :-)".to_string().into_param()];
             for buffer in &self.buffers {
-                params.push(WrfParam::ReadOnlyBuffer(buffer.clone()));
+                params.push(buffer.clone().into_param());
             }
             cx.call_js("log", params);
         }
         if let ButtonEvent::Clicked = self.worker_button.handle(cx, event) {
             let buffer = Arc::new(vec![1; 8]);
-            let params = vec![WrfParam::ReadOnlyBuffer(Arc::clone(&buffer))];
+            let params = vec![Arc::clone(&buffer).into_param()];
             cx.call_js("sendWorker", params);
             self.buffers.push(buffer);
         }
@@ -93,9 +89,9 @@ impl TestSuiteApp {
         match name.as_str() {
             "array_multiply" => array_multiply(&params),
             "total_sum" => {
-                let buffer = params[0].as_buffer();
+                let buffer = params[0].as_u8_buffer();
                 let sum: u8 = buffer.iter().sum();
-                vec![WrfParam::String(sum.to_string())]
+                vec![sum.to_string().into_param()]
             }
             "call_rust_no_return" => {
                 // Note: not returning anything to test destructor behavior
@@ -106,7 +102,7 @@ impl TestSuiteApp {
                 let arc: Arc<Vec<u8>> = unsafe { Arc::from_raw(arc_ptr) };
                 let count = Arc::strong_count(&arc);
                 Arc::into_raw(arc);
-                vec![WrfParam::Buffer(vec![count as u8])]
+                vec![vec![count as u8].into_param()]
             }
             unknown_name => {
                 panic!("Unknown function name: {}", unknown_name)
@@ -119,15 +115,17 @@ impl TestSuiteApp {
         self.pass.begin_pass(cx, Vec4::all(0.));
 
         self.main_view.begin_view(cx, Layout::default());
-        let main_turtle = cx.begin_turtle(Layout { direction: Direction::Down, ..Layout::default() });
+        cx.begin_column(Width::Fill, Height::Fill);
 
         cx.walk_turtle(Walk::wh(Width::Fix(0.), Height::Fix(30.)));
-        cx.begin_right_align();
+        cx.begin_right_box();
         self.send_button.draw(cx, "send log event");
         self.worker_button.draw(cx, "send to worker");
         self.dump_button.draw(cx, "dump rc counts");
-        cx.end_right_align();
-        cx.end_turtle(main_turtle);
+        cx.end_right_box();
+
+        cx.end_column();
+
         self.main_view.end_view(cx);
         self.pass.end_pass(cx);
         self.window.end_window(cx);

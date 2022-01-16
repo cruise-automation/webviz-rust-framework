@@ -6,8 +6,8 @@
 
 //! Drawing [`Texture`]s.
 
-use crate::cx::*;
 use crate::quad_ins::*;
+use crate::*;
 
 /// For drawing a [`Texture`].
 #[derive(Clone)]
@@ -20,39 +20,43 @@ pub struct ImageIns {
     alpha: f32,
 }
 
-static SHADER: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER, QuadIns::SHADER],
-    code_fragment!(
-        r#"
-        texture texture: texture2D;
-        instance pt1: vec2;
-        instance pt2: vec2;
-        instance alpha: float;
-        varying tc: vec2;
-        varying v_pixel: vec2;
-        //let dpi_dilate: float<Uniform>;
+static SHADER: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            texture texture: texture2D;
+            instance pt1: vec2;
+            instance pt2: vec2;
+            instance alpha: float;
+            varying tc: vec2;
+            varying v_pixel: vec2;
+            //let dpi_dilate: float<Uniform>;
 
-        fn vertex() -> vec4 {
-            // return vec4(geom.x-0.5, geom.y, 0., 1.);
-            let shift: vec2 = -draw_scroll;
-            let clipped: vec2 = clamp(
-                geom * rect_size + rect_pos + shift,
-                draw_clip.xy,
-                draw_clip.zw
-            );
-            let pos = (clipped - shift - rect_pos) / rect_size;
-            tc = mix(pt1, pt2, pos);
-            v_pixel = clipped;
-            // only pass the clipped position forward
-            return camera_projection * vec4(clipped.x, clipped.y, draw_depth, 1.);
-        }
+            fn vertex() -> vec4 {
+                // return vec4(geom.x-0.5, geom.y, 0., 1.);
+                let shift: vec2 = -draw_scroll;
+                let clipped: vec2 = clamp(
+                    geom * rect_size + rect_pos + shift,
+                    draw_clip.xy,
+                    draw_clip.zw
+                );
+                let pos = (clipped - shift - rect_pos) / rect_size;
+                tc = mix(pt1, pt2, pos);
+                v_pixel = clipped;
+                // only pass the clipped position forward
+                return camera_projection * vec4(clipped.x, clipped.y, draw_depth, 1.);
+            }
 
-        fn pixel() -> vec4 {
-            return vec4(sample2d(texture, tc.xy).rgb * alpha, alpha);
-        }"#
-    ),
-);
+            fn pixel() -> vec4 {
+                return vec4(sample2d(texture, tc.xy).rgb * alpha, alpha);
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
 
 impl Default for ImageIns {
     fn default() -> Self {

@@ -4,7 +4,15 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
-export type Uniform = { ty: string; name: string };
+export type UniformType =
+  | "float"
+  | "vec2"
+  | "vec3"
+  | "vec4"
+  | "mat2"
+  | "mat3"
+  | "mat4";
+export type Uniform = { ty: UniformType; name: string };
 
 export type ShaderAttributes = {
   shaderId: number;
@@ -64,7 +72,7 @@ export type WasmExports = {
   decrementArc: (arcPtr: BigInt) => void;
   callRustInSameThreadSync: (appcx: BigInt, msgBytes: BigInt) => BigInt;
   incrementArc: (arcPtr: BigInt) => void;
-  createArcVec: (vecPtr: BigInt, vecLen: BigInt) => BigInt;
+  createArcVec: (vecPtr: BigInt, vecLen: BigInt, paramType: BigInt) => BigInt;
   deallocVec: (vecPtr: BigInt, vecLen: BigInt, vecCap: BigInt) => BigInt;
   runFunctionPointer: (ctxPtr: BigInt) => void;
   // __tls_size and __wasm_init_tls are automatically generated; see e.g.
@@ -81,15 +89,20 @@ export type WasmExports = {
   __stack_pointer: { value: number };
 };
 
-// TODO(Paras): This structure is used for both vectors and Arcs for read-only vectors,
-// and therefore has optional bufferCap and arcPtr fields. If these structures diverge more,
-// we should split this into different types entirely.
-export type BufferData = {
+type BufferDataCommon = {
   bufferPtr: number;
   bufferLen: number;
-  bufferCap: number | null;
-  arcPtr: number | null;
+  paramType: WrfParamType;
 };
+export type ReadonlyBufferData = BufferDataCommon & {
+  readonly: true;
+  arcPtr: number;
+};
+export type MutableBufferData = BufferDataCommon & {
+  readonly: false;
+  bufferCap: number;
+};
+export type BufferData = ReadonlyBufferData | MutableBufferData;
 
 export type PostMessageTypedArray = {
   bufferData: BufferData;
@@ -97,12 +110,11 @@ export type PostMessageTypedArray = {
   byteLength: number;
 };
 
-export type CallJSData = {
-  fnName: string;
-  params: (string | BufferData)[];
-};
+export type WrfArray = Uint8Array | Float32Array;
+export type WrfParam = WrfArray | string;
+export type RustWrfParam = BufferData | string;
 
-export type WrfParam = Uint8Array | string;
+export type CreateBuffer = <T extends WrfArray>(data: T) => Promise<T>;
 
 export type CallJsCallback = (params: WrfParam[]) => void;
 
@@ -115,83 +127,13 @@ export type CallRustInSameThreadSync = (
   ...args: Parameters<CallRust>
 ) => WrfParam[];
 
+// Keep in sync with `param.rs`
 export enum WrfParamType {
   String = 0,
-  ReadOnlyBuffer = 1,
-  Buffer = 2,
-}
-
-export type AsyncWorkerRunValue = {
-  wasmModule: WebAssembly.Module;
-  memory: WebAssembly.Memory;
-  taskWorkerSab: SharedArrayBuffer;
-  ctxPtr: BigInt;
-  fileHandles: FileHandle[];
-  baseUri: string;
-  tlsAndStackData: TlsAndStackData;
-};
-
-export type UserWorkerInitReturnValue = {
-  wasmModule: WebAssembly.Module;
-  memory: WebAssembly.Memory;
-  taskWorkerSab: SharedArrayBuffer;
-  appPtr: BigInt;
-  baseUri: string;
-  tlsAndStackData: TlsAndStackData;
-};
-
-export enum WorkerEvent {
-  CallRust = "CallRust",
-  CreateBuffer = "CreateBuffer",
-  CreateReadOnlyBuffer = "CreateReadOnlyBuffer",
-  BindUserWorkerPortOnMainThread = "BindUserWorkerPortOnMainThread",
-  DecrementArc = "DecrementArc",
-  DeallocVec = "DeallocVec",
-  IncrementArc = "IncrementArc",
-  DragEnter = "DragEnter",
-  DragOver = "DragOver",
-  DragLeave = "DragLeave",
-  Drop = "Drop",
-  WindowMouseUp = "WindowMouseUp",
-  CanvasMouseDown = "CanvasMouseDown",
-  WindowMouseMove = "WindowMouseMove",
-  WindowMouseOut = "WindowMouseOut",
-  WindowFocus = "WindowFocus",
-  WindowBlur = "WindowBlur",
-  ScreenResize = "ScreenResize",
-  CanvasWheel = "CanvasWheel",
-  ShowIncompatibleBrowserNotification = "ShowIncompatibleBrowserNotification",
-  RemoveLoadingIndicators = "RemoveLoadingIndicators",
-  SetDocumentTitle = "SetDocumentTitle",
-  SetMouseCursor = "SetMouseCursor",
-  Fullscreen = "Fullscreen",
-  Normalscreen = "Normalscreen",
-  TextCopyResponse = "TextCopyResponse",
-  EnableGlobalFileDropTarget = "EnableGlobalFileDropTarget",
-  CallJs = "CallJs",
-  ShowTextIME = "ShowTextIME",
-  TextInput = "TextInput",
-  TextCopy = "TextCopy",
-  KeyDown = "KeyDown",
-  KeyUp = "KeyUp",
-  Init = "Init",
-}
-
-export enum UserWorkerEvent {
-  Init = "Init",
-  BindUserWorkerPortOnMainThread = "BindUserWorkerPortOnMainThread",
-  CallRust = "CallRust",
-  SendEventFromAnyThread = "SendEventFromAnyThread",
-}
-
-export enum AsyncWorkerEvent {
-  SendEventFromAnyThread = "SendEventFromAnyThread",
-  Run = "Run",
-  ThreadSpawn = "ThreadSpawn",
-}
-
-export enum TaskWorkerEvent {
-  Init = "Init",
+  ReadOnlyU8Buffer = 1,
+  U8Buffer = 2,
+  F32Buffer = 3,
+  ReadOnlyF32Buffer = 4,
 }
 
 export type SizingData = {

@@ -6,7 +6,7 @@
 
 //! Performance profiling.
 
-use crate::cx::*;
+use crate::*;
 
 impl Cx {
     pub fn profile_start(&mut self, id: u64) {

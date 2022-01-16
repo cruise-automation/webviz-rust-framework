@@ -8,7 +8,7 @@
 //!
 //! Be sure to keep this in sync with cursor_map.ts!
 
-use crate::cx::*;
+use crate::*;
 
 /// The type of mouse cursor to show. Enjoy the ASCII art here.
 #[derive(Clone, Debug, Hash, PartialEq)]

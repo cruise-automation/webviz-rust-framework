@@ -20,29 +20,31 @@ declare let self: WorkerGlobalScope;
 import {
   createWasmBuffer,
   getWasmEnv,
+  getWrfParamType,
   initThreadLocalStorageAndStackOtherWorkers,
   makeZerdeBuilder,
   Rpc,
+  transformParamsFromRustImpl,
 } from "./common";
+import { MainWorkerChannelEvent, WebWorkerRpc } from "./rpc_types";
 import {
-  BufferData,
   CallRust,
   CallRustInSameThreadSync,
   PostMessageTypedArray,
-  UserWorkerEvent,
-  UserWorkerInitReturnValue,
   WasmExports,
   WrfParam,
   WrfParamType,
+  WrfArray,
+  RustWrfParam,
+  MutableBufferData,
 } from "./types";
 import {
-  getCachedUint8Buffer,
   getWrfBufferWasm,
   isWrfBuffer,
   overwriteTypedArraysWithWrfArrays,
   unregisterMutableBuffer,
   WrfBuffer,
-  wrfArrayCoversWrfBuffer,
+  checkValidWrfArray,
 } from "./wrf_buffer";
 import { ZerdeParser } from "./zerde";
 
@@ -51,10 +53,10 @@ declare global {
     initWrfUserWorkerRuntime: (arg0: MessagePort) => void;
     wrfNewWorkerPort: () => MessagePort;
     callRust: CallRust;
-    wrfInitialized: Promise<void>;
+    wrfInitialized: Promise<void> | undefined;
     callRustInSameThreadSync: CallRustInSameThreadSync;
-    createBuffer: (data: Uint8Array) => Uint8Array;
-    createReadOnlyBuffer: (data: Uint8Array) => Uint8Array;
+    createBuffer: <T extends WrfArray>(data: T) => T;
+    createReadOnlyBuffer: <T extends WrfArray>(data: T) => T;
     isWrfBuffer: (potentialWrfBuffer: unknown) => boolean;
     serializeWrfArrayForPostMessage: (wrfArray: any) => PostMessageTypedArray;
     deserializeWrfArrayFromPostMessage: (
@@ -65,7 +67,7 @@ declare global {
 
 overwriteTypedArraysWithWrfArrays();
 
-let _wrfWorkerRpc: Rpc;
+let _wrfWorkerRpc: Rpc<WebWorkerRpc>;
 
 self.initWrfUserWorkerRuntime = (wrfWorkerPort: MessagePort) => {
   if (self.wrfInitialized) {
@@ -78,15 +80,15 @@ self.initWrfUserWorkerRuntime = (wrfWorkerPort: MessagePort) => {
     self.wrfNewWorkerPort = () => {
       const channel = new MessageChannel();
       _wrfWorkerRpc.send(
-        UserWorkerEvent.BindUserWorkerPortOnMainThread,
-        { port: channel.port1 },
+        MainWorkerChannelEvent.BindMainWorkerPort,
+        channel.port1,
         [channel.port1]
       );
       return channel.port2;
     };
 
     _wrfWorkerRpc
-      .send<UserWorkerInitReturnValue>(UserWorkerEvent.Init)
+      .send(MainWorkerChannelEvent.Init)
       .then(
         ({
           wasmModule,
@@ -108,7 +110,7 @@ self.initWrfUserWorkerRuntime = (wrfWorkerPort: MessagePort) => {
             fileHandles: [], // TODO(JP): implement at some point..
             sendEventFromAnyThread: (eventPtr: BigInt) => {
               _wrfWorkerRpc.send(
-                UserWorkerEvent.SendEventFromAnyThread,
+                MainWorkerChannelEvent.SendEventFromAnyThread,
                 eventPtr
               );
             },
@@ -133,7 +135,7 @@ self.initWrfUserWorkerRuntime = (wrfWorkerPort: MessagePort) => {
               bufferPtr,
               bufferLen,
               bufferCap,
-            }: BufferData) => {
+            }: MutableBufferData) => {
               wasmExports.deallocVec(
                 BigInt(bufferPtr),
                 BigInt(bufferLen),
@@ -141,28 +143,16 @@ self.initWrfUserWorkerRuntime = (wrfWorkerPort: MessagePort) => {
               );
             };
 
-            function transformParamsFromRust(params: (string | BufferData)[]) {
-              return params.map((param) => {
-                if (typeof param === "string") {
-                  return param;
-                } else {
-                  const wrfBuffer = getWrfBufferWasm(
-                    memory,
-                    param,
-                    destructor,
-                    mutableDestructor
-                  );
-                  return getCachedUint8Buffer(
-                    wrfBuffer,
-                    // This actually creates a WrfUint8Array as this was overwritten above in overwriteTypedArraysWithWrfArrays()
-                    new Uint8Array(wrfBuffer, param.bufferPtr, param.bufferLen)
-                  );
-                }
-              });
-            }
+            const transformParamsFromRust = (params: RustWrfParam[]) =>
+              transformParamsFromRustImpl(
+                memory,
+                destructor,
+                mutableDestructor,
+                params
+              );
 
             // TODO(JP): Allocate buffers on the wasm memory directly here.
-            self.callRust = async (name, params): Promise<WrfParam[]> => {
+            self.callRust = async (name, params = []): Promise<WrfParam[]> => {
               for (const param of params) {
                 if (
                   typeof param !== "string" &&
@@ -174,8 +164,8 @@ self.initWrfUserWorkerRuntime = (wrfWorkerPort: MessagePort) => {
                 }
               }
 
-              const result = await _wrfWorkerRpc.send<(string | BufferData)[]>(
-                UserWorkerEvent.CallRust,
+              const result = await _wrfWorkerRpc.send(
+                MainWorkerChannelEvent.CallRust,
                 {
                   name,
                   params,
@@ -195,27 +185,21 @@ self.initWrfUserWorkerRuntime = (wrfWorkerPort: MessagePort) => {
                   zerdeBuilder.sendString(param);
                 } else {
                   if (param.buffer instanceof WrfBuffer) {
-                    if (!wrfArrayCoversWrfBuffer(param)) {
-                      throw new Error(
-                        "callRustInSameThreadSync only supports buffers that span the entire underlying WrfBuffer"
-                      );
-                    }
-                    if (param.buffer.readonly) {
-                      zerdeBuilder.sendU32(WrfParamType.ReadOnlyBuffer);
+                    checkValidWrfArray(param);
+                    if (param.buffer.__wrflibBufferData.readonly) {
+                      zerdeBuilder.sendU32(getWrfParamType(param, true));
+
+                      const arcPtr = param.buffer.__wrflibBufferData.arcPtr;
 
                       // WrfParam parsing code will construct an Arc without incrementing
                       // the count, so we do it here ahead of time.
-                      wasmExports.incrementArc(
-                        BigInt(param.buffer.__wrflibBufferData.arcPtr)
-                      );
-                      zerdeBuilder.sendU32(
-                        param.buffer.__wrflibBufferData.arcPtr
-                      );
+                      wasmExports.incrementArc(BigInt(arcPtr));
+                      zerdeBuilder.sendU32(arcPtr);
                     } else {
                       // TODO(Paras): User should not be able to access the buffer after
                       // passing it to Rust here
                       unregisterMutableBuffer(param.buffer);
-                      zerdeBuilder.sendU32(WrfParamType.Buffer);
+                      zerdeBuilder.sendU32(getWrfParamType(param, false));
                       zerdeBuilder.sendU32(
                         param.buffer.__wrflibBufferData.bufferPtr
                       );
@@ -233,7 +217,7 @@ self.initWrfUserWorkerRuntime = (wrfWorkerPort: MessagePort) => {
 
                     const vecLen = param.byteLength;
                     const vecPtr = createWasmBuffer(memory, wasmExports, param);
-                    zerdeBuilder.sendU32(WrfParamType.Buffer);
+                    zerdeBuilder.sendU32(getWrfParamType(param, false));
                     zerdeBuilder.sendU32(vecPtr);
                     zerdeBuilder.sendU32(vecLen);
                     zerdeBuilder.sendU32(vecLen);
@@ -255,29 +239,35 @@ self.initWrfUserWorkerRuntime = (wrfWorkerPort: MessagePort) => {
               const bufferPtr = createWasmBuffer(memory, wasmExports, data);
               return transformParamsFromRust([
                 {
+                  paramType: getWrfParamType(data, false),
                   bufferPtr,
                   bufferLen,
                   bufferCap: bufferLen,
-                  arcPtr: null,
+                  readonly: false,
                 },
-              ])[0] as Uint8Array;
+              ])[0] as typeof data;
             };
 
             self.createReadOnlyBuffer = (data) => {
-              const bufferLen = data.byteLength;
               const bufferPtr = createWasmBuffer(memory, wasmExports, data);
+              const paramType = getWrfParamType(data, true);
               const arcPtr = Number(
-                wasmExports.createArcVec(BigInt(bufferPtr), BigInt(bufferLen))
+                wasmExports.createArcVec(
+                  BigInt(bufferPtr),
+                  BigInt(data.length),
+                  BigInt(paramType)
+                )
               );
 
               return transformParamsFromRust([
                 {
+                  paramType,
                   bufferPtr,
-                  bufferLen,
-                  bufferCap: undefined,
+                  bufferLen: data.byteLength,
                   arcPtr,
+                  readonly: true,
                 },
-              ])[0] as Uint8Array;
+              ])[0] as typeof data;
             };
 
             self.isWrfBuffer = isWrfBuffer;

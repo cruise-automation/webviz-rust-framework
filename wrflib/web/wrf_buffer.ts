@@ -6,7 +6,8 @@
 
 // Wrapper around SharedArrayBuffer to encapsulate ownership of particular segments of it
 
-import { BufferData } from "./types";
+import { getWrfParamType } from "./common";
+import { BufferData, MutableBufferData, WrfArray, WrfParamType } from "./types";
 import { inTest } from "./wrf_test";
 
 // TODO(Paras) - Make sure we monkeypatch on web workers as well
@@ -16,20 +17,17 @@ export class WrfBuffer extends SharedArrayBuffer {
   __wrflibWasmBuffer: SharedArrayBuffer | ArrayBuffer;
   __wrflibBufferData: BufferData;
 
-  // TODO(Paras): Actually enforce this flag and prevent mutation of WrfArrays marked as readonly.
-  // Potentially, we can do this by hashing read only buffer data and periodically checking in debug
-  // builds if they have been modified/raising errors.
-  readonly: boolean;
-
-  constructor(
-    buffer: SharedArrayBuffer | ArrayBuffer,
-    bufferData: BufferData,
-    readonly = false
-  ) {
+  constructor(buffer: SharedArrayBuffer | ArrayBuffer, bufferData: BufferData) {
     super(0);
     this.__wrflibWasmBuffer = buffer;
     this.__wrflibBufferData = bufferData;
-    this.readonly = readonly;
+  }
+
+  // TODO(Paras): Actually enforce this flag and prevent mutation of WrfArrays marked as readonly.
+  // Potentially, we can do this by hashing read only buffer data and periodically checking in debug
+  // builds if they have been modified/raising errors.
+  get readonly(): boolean {
+    return this.__wrflibBufferData.readonly;
   }
 
   // The only 2 methods on SharedArrayBuffer class to override:
@@ -53,9 +51,9 @@ export class WrfBuffer extends SharedArrayBuffer {
 // The Rust side assumes that underlying data buffer is immutable,
 // however it still could be accidentally modified on JS side leading to weird behavior
 // TODO(Dmitry): Throw an error if there is mutation of the data
-function wrfBufferExtends(cls) {
+function wrfBufferExtends(cls: any) {
   return class WrfTypedArray extends cls {
-    constructor(...args) {
+    constructor(...args: any) {
       const buffer = args[0];
       if (typeof buffer === "object" && buffer instanceof WrfBuffer) {
         // Fill in byteOffset if that's omitted.
@@ -97,13 +95,7 @@ function wrfBufferExtends(cls) {
       return this.__wrflibBuffer || super.buffer;
     }
 
-    subarray(begin?: number, end?: number) {
-      if (begin == null) {
-        begin = 0;
-      }
-      if (end == null) {
-        end = this.length;
-      }
+    subarray(begin = 0, end = this.length) {
       if (begin < 0) {
         begin = this.length + begin;
       }
@@ -133,6 +125,7 @@ export const classesToExtend = {
   Uint16ClampedArray: "WrfUint16ClampedArray",
   Int32Array: "WrfInt32Array",
   Uint32Array: "WrfUint32Array",
+  Float32Array: "WrfFloat32Array",
   Float64Array: "WrfFloat64Array",
   BigInt64Array: "WrfBigInt64Array",
   BigUint64Array: "WrfBigUint64Array",
@@ -143,6 +136,7 @@ for (const [cls, wrfCls] of Object.entries(classesToExtend)) {
   // Get a new type name by prefixing old one with "Wrf".
   // e.g. Uint8Array is extended by WrfUint8Array, etc
   if (cls in self) {
+    // @ts-ignore
     self[wrfCls] = wrfBufferExtends(self[cls]);
   }
 }
@@ -194,6 +188,7 @@ function patchPostMessage(cls: any) {
 export function overwriteTypedArraysWithWrfArrays(): void {
   for (const [cls, wrfCls] of Object.entries(classesToExtend)) {
     if (cls in self) {
+      // @ts-ignore
       self[cls] = self[wrfCls];
     }
   }
@@ -202,15 +197,24 @@ export function overwriteTypedArraysWithWrfArrays(): void {
   patchPostMessage(self.MessagePort);
 }
 
-const uint8BufferCache = new WeakMap<WrfBuffer, Uint8Array>();
-export function getCachedUint8Buffer(
+const wrfBufferCache = new WeakMap<WrfBuffer, WrfArray>();
+export function getCachedWrfBuffer(
   wrfBuffer: WrfBuffer,
-  fallbackUint8Array: Uint8Array
-): Uint8Array {
-  if (!uint8BufferCache.has(wrfBuffer)) {
-    uint8BufferCache.set(wrfBuffer, fallbackUint8Array);
+  fallbackArray: WrfArray
+): WrfArray {
+  if (
+    !(
+      // Overwrite the cached value if we return a pointer to a buffer of a different type
+      // For example, Rust code may cast a float to an u8 and return the same buffer pointer.
+      (
+        wrfBufferCache.get(wrfBuffer)?.BYTES_PER_ELEMENT ===
+        fallbackArray.BYTES_PER_ELEMENT
+      )
+    )
+  ) {
+    wrfBufferCache.set(wrfBuffer, fallbackArray);
   }
-  return uint8BufferCache.get(wrfBuffer);
+  return wrfBufferCache.get(wrfBuffer) as WrfArray;
 }
 
 export function isWrfBuffer(potentialWrfBuffer: unknown): boolean {
@@ -220,18 +224,29 @@ export function isWrfBuffer(potentialWrfBuffer: unknown): boolean {
   );
 }
 
-export function wrfArrayCoversWrfBuffer(wrfArray: Uint8Array): boolean {
+export function checkValidWrfArray(wrfArray: WrfArray): void {
   if (!isWrfBuffer(wrfArray.buffer)) {
-    throw new Error(
-      "wrfArray.buffer is not a WrfBuffer in wrfArrayCoversWrfBuffer"
-    );
+    throw new Error("wrfArray.buffer is not a WrfBuffer in checkValidWrfArray");
   }
   const buffer = wrfArray.buffer as WrfBuffer;
 
-  return (
+  const bufferCoversWrfBuffer =
     wrfArray.byteOffset === buffer.__wrflibBufferData.bufferPtr &&
-    wrfArray.byteLength === buffer.__wrflibBufferData.bufferLen
-  );
+    wrfArray.byteLength === buffer.__wrflibBufferData.bufferLen;
+  if (!bufferCoversWrfBuffer) {
+    throw new Error(
+      "Called Rust with a buffer that does not span the entire underlying WrfBuffer"
+    );
+  }
+
+  const paramType = getWrfParamType(wrfArray, buffer.readonly);
+  if (paramType !== buffer.__wrflibBufferData.paramType) {
+    throw new Error(
+      `Cannot call Rust with a buffer which has been cast to a different type. Expected ${
+        WrfParamType[buffer.__wrflibBufferData.paramType]
+      } but got ${WrfParamType[paramType]}`
+    );
+  }
 }
 
 // Cache WrfBuffers so that we have a stable identity for WrfBuffers pointing to the same
@@ -268,8 +283,8 @@ const mutableWrfBufferRegistry = new FinalizationRegistry(
     bufferData,
     destructor,
   }: {
-    bufferData: BufferData;
-    destructor: (bufferData: BufferData) => void;
+    bufferData: MutableBufferData;
+    destructor: (bufferData: MutableBufferData) => void;
   }) => {
     if (inTest) {
       const { bufferPtr } = bufferData;
@@ -293,15 +308,15 @@ export const getWrfBufferWasm = (
   wasmMemory: WebAssembly.Memory,
   bufferData: BufferData,
   destructor: (arcPtr: number) => void,
-  mutableDestructor: (bufferData: BufferData) => void
+  mutableDestructor: (bufferData: MutableBufferData) => void
 ): WrfBuffer => {
-  if (bufferData.arcPtr) {
+  if (bufferData.readonly) {
     if (!bufferCache[bufferData.arcPtr]?.deref()) {
       if (inTest) {
         allocatedArcs[bufferData.arcPtr] = true;
       }
 
-      const wrfBuffer = new WrfBuffer(wasmMemory.buffer, bufferData, true);
+      const wrfBuffer = new WrfBuffer(wasmMemory.buffer, bufferData);
 
       bufferRegistry.register(wrfBuffer, {
         arcPtr: bufferData.arcPtr,
@@ -316,13 +331,13 @@ export const getWrfBufferWasm = (
       destructor(bufferData.arcPtr);
     }
 
-    return bufferCache[bufferData.arcPtr].deref();
+    return bufferCache[bufferData.arcPtr].deref() as WrfBuffer;
   } else {
     if (inTest) {
       allocatedVecs[bufferData.bufferPtr] = true;
     }
 
-    const wrfBuffer = new WrfBuffer(wasmMemory.buffer, bufferData, false);
+    const wrfBuffer = new WrfBuffer(wasmMemory.buffer, bufferData);
 
     mutableWrfBufferRegistry.register(
       wrfBuffer,
@@ -356,35 +371,31 @@ export const unregisterMutableBuffer = (wrfBuffer: WrfBuffer): void => {
 // Return a buffer with a stable identity based on arcPtr
 export const getWrfBufferCef = (
   buffer: ArrayBuffer,
-  arcPtr: number | undefined
+  arcPtr: number | undefined,
+  paramType: WrfParamType
 ): WrfBuffer => {
   if (arcPtr) {
     if (!bufferCache[arcPtr]?.deref()) {
-      const wrfBuffer = new WrfBuffer(
-        buffer,
-        {
-          bufferPtr: 0,
-          bufferLen: buffer.byteLength,
-          bufferCap: buffer.byteLength,
-          arcPtr: -1,
-        },
-        true
-      );
+      const wrfBuffer = new WrfBuffer(buffer, {
+        bufferPtr: 0,
+        bufferLen: buffer.byteLength,
+        readonly: true,
+        paramType,
+        // TODO(Paras): These fields below do not apply to CEF
+        arcPtr: -1,
+      });
 
       bufferRegistry.register(wrfBuffer, { arcPtr });
       bufferCache[arcPtr] = new WeakRef(wrfBuffer);
     }
-    return bufferCache[arcPtr].deref();
+    return bufferCache[arcPtr].deref() as WrfBuffer;
   } else {
-    return new WrfBuffer(
-      buffer,
-      {
-        bufferPtr: 0,
-        bufferLen: buffer.byteLength,
-        bufferCap: buffer.byteLength,
-        arcPtr: -1,
-      },
-      false
-    );
+    return new WrfBuffer(buffer, {
+      bufferPtr: 0,
+      bufferLen: buffer.byteLength,
+      bufferCap: buffer.byteLength,
+      paramType,
+      readonly: false,
+    });
   }
 };

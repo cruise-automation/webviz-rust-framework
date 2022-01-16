@@ -6,7 +6,7 @@
 
 //! For creating different rendering contexts ([`Pass`]es).
 
-use crate::cx::*;
+use crate::*;
 
 /// A rendering context e.g. for doing 3d rendering.
 ///
@@ -92,6 +92,8 @@ impl Pass {
     }
 
     pub fn set_size(&mut self, cx: &mut Cx, pass_size: Vec2) {
+        debug_assert!(!pass_size.x.is_nan());
+        debug_assert!(!pass_size.y.is_nan());
         let mut pass_size = pass_size;
         if pass_size.x < 1.0 {
             pass_size.x = 1.0

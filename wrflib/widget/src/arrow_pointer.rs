@@ -33,26 +33,30 @@ pub struct ArrowPointerIns {
     pub direction: f32,
 }
 
-static MAIN_SHADER: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER, QuadIns::SHADER],
-    code_fragment!(
-        r#"
-        instance in_color: vec4;
-        instance in_direction: float;
+static MAIN_SHADER: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            instance in_color: vec4;
+            instance in_direction: float;
 
-        fn pixel() -> vec4 {
-            let df = Df::viewport(pos * vec2(10., 10.));
-            if in_direction == 0. {
-                df.triangle(vec2(5., 0.), vec2(10., 10.), vec2(0., 10.));
-            } else {
-                df.triangle(vec2(5., 10.), vec2(10., 0.), vec2(0., 0.));
-            }
-            df.fill_keep(in_color);
-            return df.result;
-        }"#
-    ),
-);
+            fn pixel() -> vec4 {
+                let df = Df::viewport(pos * vec2(10., 10.));
+                if in_direction == 0. {
+                    df.triangle(vec2(5., 0.), vec2(10., 10.), vec2(0., 10.));
+                } else {
+                    df.triangle(vec2(5., 10.), vec2(10., 0.), vec2(0., 0.));
+                }
+                df.fill_keep(in_color);
+                return df.result;
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
 
 impl ArrowPointerIns {
     pub fn draw(cx: &mut Cx, pos: Vec2, color: Vec4, direction: ArrowPointerDirection, size: Vec2) {

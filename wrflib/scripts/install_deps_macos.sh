@@ -24,7 +24,7 @@ rustup toolchain install nightly-2021-08-03
 rustup target add wasm32-unknown-unknown
 rustup component add rustfmt
 rustup component add clippy
-cargo install cargo-bundle
+cargo install cargo-bundle mdbook
 rustup component add rust-src
 
 rm -rf ../main/bind/cef-sys/deps/cef_binary_*

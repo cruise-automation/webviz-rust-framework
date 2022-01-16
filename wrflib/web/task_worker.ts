@@ -10,8 +10,9 @@ import {
   TW_SAB_MESSAGE_COUNT_PTR,
   mutexLock,
   mutexUnlock,
+  assertNotNull,
 } from "./common";
-import { TaskWorkerEvent } from "./types";
+import { Worker, TaskWorkerRpc, TaskWorkerEvent } from "./rpc_types";
 import { ZerdeParser } from "./zerde";
 
 /// <reference lib="WebWorker" />
@@ -71,8 +72,8 @@ type TaskWorkerMessage = {
 const _TASK_WORKER_INITIAL_RETURN_VALUE = -1;
 const TASK_WORKER_ERROR_RETURN_VALUE = -2;
 
-const rpc = new Rpc(self);
-rpc.receive(TaskWorkerEvent.Init, ({ taskWorkerSab, memory }) => {
+const rpc = new Rpc<Worker<TaskWorkerRpc>>(self);
+rpc.receive(TaskWorkerEvent.Init, ({ taskWorkerSab, wasmMemory }) => {
   const taskWorkerSabi32 = new Int32Array(taskWorkerSab);
 
   // Number of async tasks that require the Javascript even loop to have control. If zero, we'll
@@ -89,13 +90,13 @@ rpc.receive(TaskWorkerEvent.Init, ({ taskWorkerSab, memory }) => {
       done: boolean;
       values: Uint8Array[];
       error: boolean;
-      currentTwMessage: TaskWorkerMessage;
+      currentTwMessage: TaskWorkerMessage | undefined;
     }
   > = {};
 
   // Send back an i32 return value, and wake up the original thread.
-  function sendi32ReturnValue(returnValPtr, returnValue) {
-    const memoryReturni32 = new Int32Array(memory.buffer, returnValPtr, 1);
+  function sendi32ReturnValue(returnValPtr: number, returnValue: number) {
+    const memoryReturni32 = new Int32Array(wasmMemory.buffer, returnValPtr, 1);
     if (memoryReturni32[0] === returnValue) {
       throw new Error(
         "Have to set the return value to something different than the initial value, otherwise Atomics.notify won't do anything"
@@ -136,7 +137,7 @@ rpc.receive(TaskWorkerEvent.Init, ({ taskWorkerSab, memory }) => {
   // * There is a new read call, and there is a sufficient amount of data to give it.
   // * There is new data, and there is an existing read call to hand it to.
   // In other cases we buffer the data or block the read call, and wait until we have enough of both.
-  function handleHttpStreamRead(streamId) {
+  function handleHttpStreamRead(streamId: number) {
     const stream = streams[streamId];
     if (!stream.currentTwMessage) {
       // If there isn't a read call we can satisfy, bail.
@@ -182,7 +183,7 @@ rpc.receive(TaskWorkerEvent.Init, ({ taskWorkerSab, memory }) => {
         bytesToReadFromValue
       );
       new Uint8Array(
-        memory.buffer,
+        wasmMemory.buffer,
         stream.currentTwMessage.bufPtr + bytesRead,
         bytesToReadFromValue
       ).set(sourceBuffer);
@@ -222,7 +223,7 @@ rpc.receive(TaskWorkerEvent.Init, ({ taskWorkerSab, memory }) => {
       const method = zerdeParser.parseString();
       const body = zerdeParser.parseU8Slice();
       const numberOfHeaders = zerdeParser.parseU32();
-      const headers = {};
+      const headers: Record<string, string> = {};
       for (let headerIndex = 0; headerIndex < numberOfHeaders; headerIndex++) {
         headers[zerdeParser.parseString()] = zerdeParser.parseString();
       }
@@ -238,7 +239,7 @@ rpc.receive(TaskWorkerEvent.Init, ({ taskWorkerSab, memory }) => {
               // An asynchronous reader, which returns "chunks"/"values" of data.
               // TODO(JP): Switch to "byob" when that's supported here; see
               // https://bugs.chromium.org/p/chromium/issues/detail?id=614302#c23
-              reader: response.body.getReader(),
+              reader: assertNotNull(response.body).getReader(),
               // The buffered "chunks"/"values".
               values: [],
               // Whether we've read the whole stream into `values`.
@@ -309,7 +310,7 @@ rpc.receive(TaskWorkerEvent.Init, ({ taskWorkerSab, memory }) => {
         ) {
           // Use unsigned numbers for the actual pointer, since they can be >2GB.
           const messagePtr = new Uint32Array(taskWorkerSab)[messageIndex + 2];
-          handleTwMessage(new ZerdeParser(memory, messagePtr));
+          handleTwMessage(new ZerdeParser(wasmMemory, messagePtr));
         }
 
         // Reset the number of messages to 0.

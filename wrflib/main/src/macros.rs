@@ -17,7 +17,6 @@ macro_rules! main_app {
         fn main() {
             //TODO do this with a macro to generate both entrypoints for App and Cx
             let mut cx = Cx::new(std::any::TypeId::of::<$app>());
-            cx.app_load();
             let mut app = $app::new(&mut cx);
             let mut cxafterdraw = CxAfterDraw::new(&mut cx);
             cx.event_loop(|cx, mut event| {
@@ -67,7 +66,6 @@ macro_rules! main_app {
         pub extern "C" fn create_wasm_app() -> u64 {
             Cx::init_error_handlers();
             let mut cx = Box::new(Cx::new(std::any::TypeId::of::<$app>()));
-            cx.app_load();
             let app = Box::new($app::new(&mut cx));
             let cxafterdraw = Box::new(CxAfterDraw::new(&mut cx));
             Box::into_raw(Box::new((Box::into_raw(app), Box::into_raw(cx), Box::into_raw(cxafterdraw)))) as u64

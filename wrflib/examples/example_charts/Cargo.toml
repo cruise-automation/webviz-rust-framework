@@ -1,0 +1,9 @@
+[package]
+name = "example_charts"
+version = "0.0.1"
+edition = "2018"
+publish = false
+
+[dependencies]
+wrflib = { path="../../main" }
+wrflib_widget = { path="../../widget" }

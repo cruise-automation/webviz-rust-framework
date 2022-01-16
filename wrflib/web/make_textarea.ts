@@ -4,16 +4,16 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
-import { makeRpcEvent, RpcEvent } from "./make_rpc_event";
-import { WorkerEvent } from "./types";
+import { RpcKeyboardEvent, makeRpcKeyboardEvent } from "./make_rpc_event";
+import { WorkerEvent } from "./rpc_types";
 
 export type TextareaEventKeyDown = {
   type: WorkerEvent.KeyDown;
-  event: RpcEvent;
+  event: RpcKeyboardEvent;
 };
 export type TextareaEventKeyUp = {
   type: WorkerEvent.KeyUp;
-  event: RpcEvent;
+  event: RpcKeyboardEvent;
 };
 export type TextareaEventTextInput = {
   type: WorkerEvent.TextInput;
@@ -35,7 +35,7 @@ export function makeTextarea(callback: (taEvent: TextareaEvent) => void): {
   showTextIME: (pos: { x: number; y: number }) => void;
   textareaHasFocus: () => boolean;
 } {
-  let ta;
+  let ta: HTMLTextAreaElement;
 
   // NOTE(JP): This looks a bit convoluted, but it's the most reliable method I could find to return the focus to the textarea!
   function fixFocus() {
@@ -54,7 +54,7 @@ export function makeTextarea(callback: (taEvent: TextareaEvent) => void): {
   document.addEventListener("focus", fixFocus, true);
   document.addEventListener("blur", fixFocus, true);
 
-  let textAreaPos;
+  let textAreaPos: { x: number; y: number } | undefined;
   const updateTextAreaPos = () => {
     if (!textAreaPos) {
       ta.style.left = -100 + "px";
@@ -65,7 +65,7 @@ export function makeTextarea(callback: (taEvent: TextareaEvent) => void): {
     }
   };
 
-  function showTextIME({ x, y }) {
+  function showTextIME({ x, y }: { x: number; y: number }) {
     textAreaPos = { x, y };
     updateTextAreaPos();
   }
@@ -117,8 +117,8 @@ export function makeTextarea(callback: (taEvent: TextareaEvent) => void): {
     document.body.appendChild(style);
     ta.style.left = -100 + "px";
     ta.style.top = -100 + "px";
-    ta.style.height = 1;
-    ta.style.width = 1;
+    ta.style.height = 1 + "px";
+    ta.style.width = 1 + "px";
 
     ta.addEventListener("contextmenu", (event) => {
       event.preventDefault();
@@ -211,7 +211,10 @@ export function makeTextarea(callback: (taEvent: TextareaEvent) => void): {
         event.preventDefault();
       }
 
-      callback({ type: WorkerEvent.KeyDown, event: makeRpcEvent(event) });
+      callback({
+        type: WorkerEvent.KeyDown,
+        event: makeRpcKeyboardEvent(event),
+      });
     });
 
     ta.addEventListener("keyup", (event) => {
@@ -223,7 +226,10 @@ export function makeTextarea(callback: (taEvent: TextareaEvent) => void): {
         recreateTextarea();
       }
 
-      callback({ type: WorkerEvent.KeyUp, event: makeRpcEvent(event) });
+      callback({
+        type: WorkerEvent.KeyUp,
+        event: makeRpcKeyboardEvent(event),
+      });
     });
   };
   recreateTextarea();

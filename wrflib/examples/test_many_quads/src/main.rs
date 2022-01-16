@@ -1,0 +1,83 @@
+// Copyright (c) 2021-present, Cruise LLC
+//
+// This source code is licensed under the Apache License, Version 2.0,
+// found in the LICENSE-APACHE file in the root directory of this source tree.
+// You may not use this file except in compliance with the License.
+
+use wrflib::*;
+
+static SHADER: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            instance counter: float;
+            fn pixel() -> vec4 {
+                return mix(#f00, #0f0, abs(sin(counter)));
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
+
+#[derive(Clone)]
+#[repr(C)]
+struct CounterQuad {
+    quad: QuadIns,
+    counter: f32,
+}
+
+#[derive(Default)]
+pub struct BareExampleApp {
+    window: Window,
+    pass: Pass,
+    main_view: View,
+    count: f32,
+}
+
+impl BareExampleApp {
+    pub fn new(_cx: &mut Cx) -> Self {
+        Self::default()
+    }
+
+    pub fn handle(&mut self, _cx: &mut Cx, event: &mut Event) {
+        match event {
+            Event::Construct => {}
+            Event::FingerMove(fm) => {
+                self.count = fm.abs.x * 0.01;
+            }
+            _ => (),
+        }
+    }
+
+    pub fn draw(&mut self, cx: &mut Cx) {
+        self.window.begin_window(cx);
+        self.pass.begin_pass(cx, Vec4::color("300"));
+        self.main_view.begin_view(cx, Layout::default());
+        cx.profile_start(1);
+        let data: Vec<CounterQuad> = (0..1000000)
+            .map(|i| {
+                let v = 0.3 * (i as f32);
+                let x = 400. + (v + self.count).sin() * 400.;
+                let y = 400. + (v * 1.12 + self.count * 18.).cos() * 400.;
+                CounterQuad {
+                    quad: QuadIns::from_rect(Rect { pos: vec2(x, y), size: vec2(10., 10.0) }),
+                    counter: (i as f32).sin(),
+                }
+            })
+            .collect();
+        cx.add_instances(&SHADER, &data);
+        self.count += 0.001;
+
+        self.main_view.end_view(cx);
+        cx.profile_end(1);
+
+        self.pass.end_pass(cx);
+        self.window.end_window(cx);
+        cx.request_draw();
+    }
+}
+
+main_app!(BareExampleApp);

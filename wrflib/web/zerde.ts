@@ -8,7 +8,7 @@
 //
 // Keep in sync with zerde.rs, and see there for more information.
 
-import { BufferData, WrfParamType } from "./types";
+import { RustWrfParam, WrfParamType } from "./types";
 
 type GrowCallback = (
   _buffer: ArrayBuffer,
@@ -26,10 +26,10 @@ export class ZerdeBuilder {
   private _slots: number;
   private _growCallback: GrowCallback;
   private _used: number;
-  private _f32: Float32Array;
-  private _u32: Uint32Array;
-  private _f64: Float64Array;
-  private _u64: BigUint64Array;
+  private _f32!: Float32Array;
+  private _u32!: Uint32Array;
+  private _f64!: Float64Array;
+  private _u64!: BigUint64Array;
 
   constructor({
     buffer,
@@ -107,14 +107,14 @@ export class ZerdeBuilder {
     }
   }
 
-  sendU64(value: bigint): void {
+  sendU64(value: BigInt): void {
     if (this._used & 1) {
       // 64-bit alignment.
       const pos = this._fit(3) + 1;
-      this._u64[pos >> 1] = value;
+      this._u64[pos >> 1] = value as bigint;
     } else {
       const pos = this._fit(2);
-      this._u64[pos >> 1] = value;
+      this._u64[pos >> 1] = value as bigint;
     }
   }
 
@@ -167,7 +167,7 @@ export class ZerdeParser {
     return ret;
   }
 
-  parseU64(): bigint {
+  parseU64(): BigInt {
     if (this._usedSlots & 1) {
       // 64-bit alignment.
       this._usedSlots++;
@@ -217,29 +217,42 @@ export class ZerdeParser {
     return data;
   }
 
-  parseWrfParams(): (string | BufferData)[] {
+  parseWrfParams(): RustWrfParam[] {
     const len = this.parseU32();
-    const params: (string | BufferData)[] = [];
+    const params: RustWrfParam[] = [];
     for (let i = 0; i < len; ++i) {
       const paramType: WrfParamType = this.parseU32();
       if (paramType === WrfParamType.String) {
         params.push(this.parseString());
-      } else if (paramType === WrfParamType.ReadOnlyBuffer) {
+      } else if (
+        paramType === WrfParamType.ReadOnlyU8Buffer ||
+        paramType === WrfParamType.ReadOnlyF32Buffer
+      ) {
         const bufferPtr = this.parseU32();
         const bufferLen = this.parseU32();
         const arcPtr = this.parseU32();
+
         params.push({
+          paramType,
           bufferPtr,
           bufferLen,
-          // We only care about capacity for mutable buffers, since it is necessary for de-allocation
-          bufferCap: null,
           arcPtr,
+          readonly: true,
         });
-      } else if (paramType === WrfParamType.Buffer) {
+      } else if (
+        paramType === WrfParamType.U8Buffer ||
+        paramType === WrfParamType.F32Buffer
+      ) {
         const bufferPtr = this.parseU32();
         const bufferLen = this.parseU32();
         const bufferCap = this.parseU32();
-        params.push({ bufferPtr, bufferLen, bufferCap, arcPtr: null });
+        params.push({
+          paramType,
+          bufferPtr,
+          bufferLen,
+          bufferCap,
+          readonly: false,
+        });
       } else {
         throw new Error(`Unknown WrfParam type: ${paramType}`);
       }

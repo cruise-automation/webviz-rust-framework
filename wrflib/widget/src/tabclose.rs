@@ -16,33 +16,37 @@ struct TabCloseIns {
     down: f32,
 }
 
-static SHADER: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER, QuadIns::SHADER],
-    code_fragment!(
-        r#"
-        instance color: vec4;
-        instance hover: float;
-        instance down: float;
+static SHADER: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            instance color: vec4;
+            instance hover: float;
+            instance down: float;
 
-        fn pixel() -> vec4 {
-            let df = Df::viewport(pos * rect_size);
-            let hover_max: float = (hover * 0.4 + 0.3) * 0.5;
-            let hover_min: float = 1. - hover_max;
-            let c: vec2 = rect_size * 0.5;
-            df.circle(c.x, c.y, 9.6);
-            df.stroke_keep(#4000,1.);
-            df.fill(mix(#3332,#555f,hover));
-            df.rotate(down, c.x, c.y);
-            df.move_to(c.x * hover_min, c.y * hover_min);
-            df.line_to(c.x + c.x * hover_max, c.y + c.y * hover_max);
-            df.move_to(c.x + c.x * hover_max, c.y * hover_min);
-            df.line_to(c.x * hover_min, c.y + c.y * hover_max);
-            return df.stroke(color, 1. + hover*0.2);
-            //return df_fill(color);
-        }"#
-    ),
-);
+            fn pixel() -> vec4 {
+                let df = Df::viewport(pos * rect_size);
+                let hover_max: float = (hover * 0.4 + 0.3) * 0.5;
+                let hover_min: float = 1. - hover_max;
+                let c: vec2 = rect_size * 0.5;
+                df.circle(c.x, c.y, 9.6);
+                df.stroke_keep(#4000,1.);
+                df.fill(mix(#3332,#555f,hover));
+                df.rotate(down, c.x, c.y);
+                df.move_to(c.x * hover_min, c.y * hover_min);
+                df.line_to(c.x + c.x * hover_max, c.y + c.y * hover_max);
+                df.move_to(c.x + c.x * hover_max, c.y * hover_min);
+                df.line_to(c.x * hover_min, c.y + c.y * hover_max);
+                return df.stroke(color, 1. + hover*0.2);
+                //return df_fill(color);
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
 
 #[derive(Default)]
 pub struct TabClose {

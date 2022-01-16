@@ -13,33 +13,37 @@ struct ScrollShadowIns {
     shadow_top: f32,
 }
 
-static SHADER: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER, QuadIns::SHADER],
-    code_fragment!(
-        r#"
-        instance shadow_top: float;
-        varying is_viz: float;
+static SHADER: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            instance shadow_top: float;
+            varying is_viz: float;
 
-        fn scroll() -> vec2 {
-            if shadow_top > 0.5 {
-                is_viz = clamp(draw_local_scroll.y * 0.1, 0., 1.);
+            fn scroll() -> vec2 {
+                if shadow_top > 0.5 {
+                    is_viz = clamp(draw_local_scroll.y * 0.1, 0., 1.);
+                }
+                else {
+                    is_viz = clamp(draw_local_scroll.x * 0.1, 0., 1.);
+                }
+                return draw_scroll;
             }
-            else {
-                is_viz = clamp(draw_local_scroll.x * 0.1, 0., 1.);
-            }
-            return draw_scroll;
-        }
 
-        // TODO make the corner overlap properly with a distance field eq.
-        fn pixel() -> vec4 {
-            if shadow_top > 0.5 {
-                return mix(vec4(0., 0., 0., is_viz), vec4(0., 0., 0., 0.), pow(geom.y, 0.5));
-            }
-            return mix(vec4(0., 0., 0., is_viz), vec4(0., 0., 0., 0.), pow(geom.x, 0.5));
-        }"#
-    ),
-);
+            // TODO make the corner overlap properly with a distance field eq.
+            fn pixel() -> vec4 {
+                if shadow_top > 0.5 {
+                    return mix(vec4(0., 0., 0., is_viz), vec4(0., 0., 0., 0.), pow(geom.y, 0.5));
+                }
+                return mix(vec4(0., 0., 0., is_viz), vec4(0., 0., 0., 0.), pow(geom.x, 0.5));
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
 
 pub struct ScrollShadow;
 

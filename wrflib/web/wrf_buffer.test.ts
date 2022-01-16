@@ -4,8 +4,9 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
+import { WrfParamType } from "./types";
 import { WrfBuffer, classesToExtend, containsWrfBuffer } from "./wrf_buffer";
-import { expect } from "./wrf_test";
+import { expect, expectThrow } from "./wrf_test";
 
 declare global {
   interface Window {
@@ -16,16 +17,6 @@ declare global {
 
 const { WrfUint8Array, WrfUint16Array } = window;
 
-function expectThrow(f) {
-  let threw = false;
-  try {
-    f();
-  } catch (e) {
-    threw = true;
-  }
-  expect(threw, true);
-}
-
 // Test that WrfArray is created like a DataView
 function testBuffer(): void {
   const wasmMemory = new SharedArrayBuffer(1024);
@@ -33,7 +24,8 @@ function testBuffer(): void {
     bufferPtr: 10,
     bufferLen: 4,
     bufferCap: 4,
-    arcPtr: -1,
+    paramType: WrfParamType.U8Buffer,
+    readonly: false,
   });
   const a = new WrfUint8Array(buffer, 10, 4);
   expect(a.byteOffset, 10);
@@ -47,7 +39,8 @@ function testShare(): void {
     bufferPtr: 0,
     bufferLen: 1024,
     bufferCap: 1024,
-    arcPtr: -1,
+    paramType: WrfParamType.U8Buffer,
+    readonly: false,
   });
   const a = new WrfUint8Array(buffer);
   const b = new WrfUint16Array(a.buffer);
@@ -62,12 +55,13 @@ function testOutOfBounds(): void {
     bufferPtr: 1,
     bufferLen: 16,
     bufferCap: 16,
-    arcPtr: -1,
+    paramType: WrfParamType.U8Buffer,
+    readonly: false,
   });
   // start is outside of the view - should throw
   expectThrow(() => {
     new WrfUint8Array(buffer, 0);
-  });
+  }, "Byte_offset 0 is out of bounds");
 
   // these doesn't throw but overwrites the end of the data
   const a = new WrfUint8Array(buffer, 1);
@@ -78,7 +72,7 @@ function testOutOfBounds(): void {
   // end is outside of the view - should throw
   expectThrow(() => {
     new WrfUint8Array(buffer, 15, 3);
-  });
+  }, "Byte_offset 15 + length 3 is out of bounds");
 }
 
 // Test that WrfBuffer and WrfArray could be created from ArrayBuffer
@@ -88,7 +82,8 @@ function testArrayBuffer(): void {
     bufferPtr: 0,
     bufferLen: array.byteLength,
     bufferCap: array.byteLength,
-    arcPtr: -1,
+    paramType: WrfParamType.U8Buffer,
+    readonly: false,
   });
   const a = new WrfUint8Array(buffer);
   expect(a.byteOffset, 0);
@@ -112,7 +107,8 @@ function testSubarray(): void {
     bufferPtr: 0,
     bufferLen: 5,
     bufferCap: 5,
-    arcPtr: -1,
+    paramType: WrfParamType.U8Buffer,
+    readonly: false,
   });
   const wrfArray = new WrfUint8Array(buffer);
 
@@ -142,7 +138,8 @@ function testContainsWrfBuffer(): void {
     bufferPtr: 0,
     bufferLen: 16,
     bufferCap: 16,
-    arcPtr: -1,
+    paramType: WrfParamType.U8Buffer,
+    readonly: false,
   });
   const a = new WrfUint8Array(buffer);
 

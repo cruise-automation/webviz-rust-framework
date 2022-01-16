@@ -77,10 +77,6 @@ impl DesktopWindow {
         Self { caption: caption.to_string(), ..self }
     }
 
-    pub fn with_inner_layout(self, inner_layout: Layout) -> Self {
-        Self { inner_layout, ..self }
-    }
-
     pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) -> DesktopWindowEvent {
         //self.main_view.handle_scroll_bars(cx, event);
         //self.inner_view.handle_scroll_bars(cx, event);
@@ -171,18 +167,14 @@ impl DesktopWindow {
 
             match cx.platform_type {
                 PlatformType::Windows | PlatformType::Unknown | PlatformType::Linux { .. } => {
-                    let caption_turtle = self.caption_bg.begin_turtle(
-                        cx,
-                        Layout { walk: Walk::wh(Width::Fill, Height::Compute), ..Default::default() },
-                        color,
-                    );
+                    self.caption_bg.begin_draw(cx, Width::Fill, Height::Compute, color);
 
                     // we need to draw the window menu here.
                     if let Some(_menu) = menu {
                         // lets draw the thing, check with the clone if it changed
                         // then draw it
                     }
-                    cx.begin_right_align();
+                    cx.begin_right_box();
                     self.min_btn.draw(cx, DesktopButtonType::WindowsMin);
                     if self.window.is_fullscreen(cx) {
                         self.max_btn.draw(cx, DesktopButtonType::WindowsMaxToggled);
@@ -190,7 +182,7 @@ impl DesktopWindow {
                         self.max_btn.draw(cx, DesktopButtonType::WindowsMax);
                     }
                     self.close_btn.draw(cx, DesktopButtonType::WindowsClose);
-                    cx.end_right_align();
+                    cx.end_right_box();
 
                     cx.begin_center_x_and_y_align();
                     self.caption_size = Vec2 { x: cx.get_width_left(), y: cx.get_height_left() };
@@ -198,7 +190,7 @@ impl DesktopWindow {
                     cx.end_center_x_and_y_align();
 
                     // we need to store our caption rect somewhere.
-                    self.caption_bg.end_turtle(cx, caption_turtle);
+                    self.caption_bg.end_draw(cx);
                     cx.turtle_new_line();
                 }
 
@@ -209,16 +201,12 @@ impl DesktopWindow {
                     } else {
                         cx.update_menu(&self.default_menu);
                     }
-                    let caption_turtle = self.caption_bg.begin_turtle(
-                        cx,
-                        Layout { walk: Walk::wh(Width::Fill, Height::Fix(22.)), ..Default::default() },
-                        color,
-                    );
+                    self.caption_bg.begin_draw(cx, Width::Fill, Height::Fix(22.), color);
                     cx.begin_center_x_and_y_align();
                     self.caption_size = Vec2 { x: cx.get_width_left(), y: cx.get_height_left() };
                     TextIns::draw_walk(cx, &self.caption, &TextInsProps::DEFAULT);
                     cx.end_center_x_and_y_align();
-                    self.caption_bg.end_turtle(cx, caption_turtle);
+                    self.caption_bg.end_draw(cx);
                     cx.turtle_new_line();
                 }
                 PlatformType::Web { .. } => {

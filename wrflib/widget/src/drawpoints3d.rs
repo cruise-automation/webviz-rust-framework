@@ -6,63 +6,66 @@
 
 use wrflib::*;
 
-static SHADER: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER],
-    code_fragment!(
-        r#"
-        uniform rect_size: vec2;
-        uniform use_screen_space: float;
-        uniform point_style: float;
-        uniform vertex_transform: mat4;
+static SHADER: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        code_fragment!(
+            r#"
+            uniform rect_size: vec2;
+            uniform use_screen_space: float;
+            uniform point_style: float;
+            uniform vertex_transform: mat4;
 
-        geometry geom: vec2;
+            geometry geom: vec2;
 
-        instance in_pos: vec3;
-        instance in_color: vec3;
-        instance in_size: float;
-        instance in_user_info: vec2;
+            instance in_pos: vec3;
+            instance in_color: vec3;
+            instance in_size: float;
+            instance in_user_info: vec2;
 
-        // Transforms a vertex to clip space, accounting for aspect ratio
-        fn to_clip_space(v: vec4) -> vec4 {
-            let w = draw_clip.z - draw_clip.x;
-            let h = draw_clip.w - draw_clip.y;
-            let aspect = w / h;
-            return v / v.w * aspect;
-        }
-
-        fn vertex() -> vec4 {
-            if use_screen_space == 1. {
-                let projected_pos = camera_projection * camera_view * vertex_transform * vec4(in_pos, 1.0);
-                let point_size = in_size * dpi_factor;
-                let offset = point_size * vec4((geom - vec2(0.5, 0.5))/rect_size, 0, 0);
-
-                // When rendering screen space points, we convert the projected point to clip space
-                // and then apply the offset.
-                return to_clip_space(projected_pos) + offset;
-            } else {
-                let view_pos = camera_view * vertex_transform * vec4(in_pos, 1.0);
-                let point_size = in_size;
-                let offset = point_size * vec4(geom - vec2(0.5, 0.5), 0, 0);
-
-                // For world space points, we apply the offset in view space so they always
-                // face to the camera.
-                return camera_projection * (view_pos + offset);
+            // Transforms a vertex to clip space, accounting for aspect ratio
+            fn to_clip_space(v: vec4) -> vec4 {
+                let w = draw_clip.z - draw_clip.x;
+                let h = draw_clip.w - draw_clip.y;
+                let aspect = w / h;
+                return v / v.w * aspect;
             }
-        }
 
-        fn pixel() -> vec4 {
-            if point_style == 1. {
-                let df = Df::viewport(geom);
-                df.circle(0.5, 0.5, 0.5);
-                df.fill(vec4(in_color, 1.));
-                return df.result;
-            } else {
-                return vec4(in_color, 1.);
+            fn vertex() -> vec4 {
+                if use_screen_space == 1. {
+                    let projected_pos = camera_projection * camera_view * vertex_transform * vec4(in_pos, 1.0);
+                    let point_size = in_size * dpi_factor;
+                    let offset = point_size * vec4((geom - vec2(0.5, 0.5))/rect_size, 0, 0);
+
+                    // When rendering screen space points, we convert the projected point to clip space
+                    // and then apply the offset.
+                    return to_clip_space(projected_pos) + offset;
+                } else {
+                    let view_pos = camera_view * vertex_transform * vec4(in_pos, 1.0);
+                    let point_size = in_size;
+                    let offset = point_size * vec4(geom - vec2(0.5, 0.5), 0, 0);
+
+                    // For world space points, we apply the offset in view space so they always
+                    // face to the camera.
+                    return camera_projection * (view_pos + offset);
+                }
             }
-        }"#
-    ),
-);
+
+            fn pixel() -> vec4 {
+                if point_style == 1. {
+                    let df = Df::viewport(geom);
+                    df.circle(0.5, 0.5, 0.5);
+                    df.fill(vec4(in_color, 1.));
+                    return df.result;
+                } else {
+                    return vec4(in_color, 1.);
+                }
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
 
 #[repr(C)]
 #[derive(Debug, Clone)]

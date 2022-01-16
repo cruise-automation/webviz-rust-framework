@@ -93,14 +93,12 @@ impl TextInput {
                 }
             }
         }
-        cx.begin_padding_box(Padding::top(4.0));
-        let turtle = cx.begin_turtle(Layout {
-            walk: Walk { width: Width::Compute, height: Height::Compute },
-            padding: Padding::all(7.),
-            ..Layout::default()
-        });
-        if self.text_editor.begin_text_editor(cx, text_buffer).is_err() {
-            cx.end_turtle(turtle);
+        cx.begin_padding_box(Padding { t: 11., b: 7., r: 7., l: 7. }); // all (7.0) + top (4.0)
+
+        // Overriding view layout for text inputs to prevent it from consuming all available space.
+        // TODO(Dmitry): get rid of this special handling
+        if self.text_editor.begin_text_editor(cx, text_buffer, Some(Walk::wh(Width::Compute, Height::Compute))).is_err() {
+            cx.end_padding_box();
             return;
         }
         if text_buffer.is_empty() {
@@ -121,7 +119,6 @@ impl TextInput {
         }
 
         self.text_editor.end_text_editor(cx, text_buffer);
-        cx.end_turtle(turtle);
         cx.end_padding_box();
     }
 }

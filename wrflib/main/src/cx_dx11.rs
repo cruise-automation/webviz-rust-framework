@@ -8,8 +8,8 @@
 
 #![allow(dead_code)]
 
-use crate::cx::*;
 use crate::cx_win32::*;
+use crate::*;
 use std::ffi;
 use std::mem;
 use std::ptr;
@@ -56,6 +56,8 @@ impl Cx {
                     zbias_step,
                 );
             } else {
+                let gpu_geometry_id = GpuGeometry::get_id(self, view_id, draw_call_id);
+
                 let cxview = &mut self.views[view_id];
 
                 let draw_call = &mut cxview.draw_calls[draw_call_id];
@@ -92,19 +94,11 @@ impl Cx {
                     continue;
                 }
 
-                let geometry_id = if let Some(geometry) = draw_call.props.geometry {
-                    geometry.geometry_id
-                } else if let Some(geometry) = sh.default_geometry {
-                    geometry.geometry_id
-                } else {
-                    continue;
-                };
-
-                let geometry = &mut self.geometries[geometry_id];
+                let geometry = &mut self.gpu_geometries[gpu_geometry_id];
 
                 if geometry.dirty {
-                    geometry.platform.geom_ibuf.update_with_u32_index_data(d3d11_cx, &geometry.indices);
-                    geometry.platform.geom_vbuf.update_with_f32_vertex_data(d3d11_cx, &geometry.vertices);
+                    geometry.platform.geom_vbuf.update_with_f32_vertex_data(d3d11_cx, geometry.geometry.vertices_f32_slice());
+                    geometry.platform.geom_ibuf.update_with_u32_index_data(d3d11_cx, geometry.geometry.indices_u32_slice());
                     geometry.dirty = false;
                 }
 
@@ -149,11 +143,8 @@ impl Cx {
                         _ => (),
                     }
                 }
-                //if self.passes[pass_id].debug{
-                //    println!("DRAWING PASS {} {}", geometry.indices.len(), instances);
-                //}
 
-                d3d11_cx.draw_indexed_instanced(geometry.indices.len(), instances);
+                d3d11_cx.draw_indexed_instanced(geometry.geometry.indices_u32_slice().len(), instances);
             }
         }
         self.debug_draw_tree(view_id);
@@ -1250,7 +1241,7 @@ pub(crate) struct CxPlatformPass {
 }
 
 #[derive(Default, Clone)]
-pub(crate) struct CxPlatformGeometry {
+pub(crate) struct CxPlatformGpuGeometry {
     pub(crate) geom_vbuf: D3d11Buffer,
     pub(crate) geom_ibuf: D3d11Buffer,
 }

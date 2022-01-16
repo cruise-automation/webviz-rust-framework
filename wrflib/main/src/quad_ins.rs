@@ -6,7 +6,7 @@
 
 //! Drawing rectangles; by far the most commonly used `Draw*` struct.
 
-use crate::cx::*;
+use crate::*;
 
 /// [`QuadIns`] is the basis for most draw structs.This renders a rectangle.
 /// There are some default shaders available at [`QuadIns::SHADER`].
@@ -44,6 +44,8 @@ pub struct QuadIns {
 
 impl QuadIns {
     pub fn from_rect(rect: Rect) -> Self {
+        debug_assert!(!rect.size.x.is_nan());
+        debug_assert!(!rect.size.y.is_nan());
         Self { rect_pos: rect.pos, rect_size: rect.size, ..Default::default() }
     }
 
@@ -54,6 +56,12 @@ impl QuadIns {
 
     pub fn rect(&self) -> Rect {
         Rect { pos: self.rect_pos, size: self.rect_size }
+    }
+
+    pub fn build_geom() -> Geometry {
+        let vertex_attributes = vec![vec2(0., 0.), vec2(1., 0.), vec2(1., 1.), vec2(0., 1.)];
+        let indices = vec![[0, 1, 2], [2, 3, 0]];
+        Geometry::new(vertex_attributes, indices)
     }
 
     /// Common [`Shader`] code for using [`QuadIns`].

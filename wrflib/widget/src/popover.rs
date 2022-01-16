@@ -29,7 +29,6 @@ use wrflib::*;
 pub struct Popover {
     component_base: ComponentBase,
     background: Background,
-    turtle_outer: Option<Turtle>,
 }
 
 impl Popover {
@@ -61,27 +60,24 @@ impl Popover {
         event.hits(cx, &self.component_base, HitOpt::default());
     }
 
-    /// Draw the popover. Returns a [`Turtle`] inside the popover.
-    pub fn begin_turtle(&mut self, cx: &mut Cx, color: Vec4, layout: Layout) -> Turtle {
+    /// Draw the popover.
+    pub fn begin_draw(&mut self, cx: &mut Cx, width: Width, height: Height, color: Vec4) {
         // TODO(JP): This feels like a bit of a hack; using [`Layout::align`] like this. It might be
         // nicer to have an API that is like "move everything over by this dx/dy".
         let popover_y_bottom = cx.get_turtle_pos().y;
-        self.turtle_outer = Some(cx.begin_turtle(Layout {
-            direction: Direction::Down,
-            absolute: true,
-            walk: Walk { width: Width::Fill, height: Height::Fix(popover_y_bottom) },
-            ..Layout::default()
-        }));
-        cx.begin_bottom_align();
-        self.background.begin_turtle(cx, layout, color)
+        cx.begin_absolute_box();
+        cx.begin_column(Width::Fill, Height::Fix(popover_y_bottom));
+        cx.begin_bottom_box();
+        self.background.begin_draw(cx, width, height, color);
     }
 
-    /// End the [`Turtle`] from [`Popover::begin_turtle`], using its final [`Rect`] to
+    /// End the [`Turtle`] from [`Popover::begin_draw`], using its final [`Rect`] to
     /// draw and position the [`Popover::background`].
-    pub fn end_turtle(&mut self, cx: &mut Cx, turtle: Turtle) {
-        self.background.end_turtle(cx, turtle);
-        cx.end_bottom_align();
-        cx.end_turtle(self.turtle_outer.take().unwrap());
+    pub fn end_draw(&mut self, cx: &mut Cx) {
+        self.background.end_draw(cx);
+        cx.end_bottom_box();
+        cx.end_column();
+        cx.end_absolute_box();
         self.component_base.register_component_area(cx, self.background.area());
     }
 }

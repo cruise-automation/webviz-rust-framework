@@ -58,7 +58,7 @@ impl ShaderAstGenerator {
     }
 
     /// Generate a complete [`ShaderAst`] from some code fragments.
-    pub fn generate_shader_ast(&self, shader_name: &str, code_fragments: Vec<&CodeFragment>) -> ShaderAst {
+    pub fn generate_shader_ast(&self, shader_name: &str, code_fragments: &[CodeFragment]) -> ShaderAst {
         let handle_parse_error = |parse_error: ParseError| {
             let code_fragment = &code_fragments[parse_error.span.code_fragment_id.0];
             let pos = parse_error.span.start;

@@ -12,8 +12,8 @@ use std::collections::HashMap;
 #[cfg(feature = "cef-server")]
 use wrflib_objc_sys::msg_send;
 
-use crate::cx::*;
 use crate::cx_cocoa::*;
+use crate::*;
 
 impl Cx {
     pub fn event_loop<F>(&mut self, mut event_handler: F)
@@ -53,6 +53,17 @@ impl Cx {
                 self.process_pre_event(&mut event);
 
                 match &event {
+                    Event::WindowResizeLoop(wr) => {
+                        for metal_window in &mut metal_windows {
+                            if metal_window.window_id == wr.window_id {
+                                if wr.was_started {
+                                    metal_window.start_resize();
+                                } else {
+                                    metal_window.stop_resize();
+                                }
+                            }
+                        }
+                    }
                     Event::WindowGeomChange(re) => {
                         // do this here because mac
                         for metal_window in &mut metal_windows {
@@ -93,7 +104,7 @@ impl Cx {
                     Event::SystemEvent(e) => {
                         match e {
                             SystemEvent::Paint => {
-                                let vsync = self.process_desktop_paint_callbacks();
+                                let _vsync = self.process_desktop_paint_callbacks();
 
                                 // construct or destruct windows
                                 for (index, window) in self.windows.iter_mut().enumerate() {
@@ -258,11 +269,6 @@ impl Cx {
                                                 windows_need_repaint -= 1;
                                                 for metal_window in &mut metal_windows {
                                                     if metal_window.window_id == window_id {
-                                                        metal_window.set_vsync_enable(windows_need_repaint == 0 && vsync);
-                                                        metal_window.set_buffer_count(
-                                                            if metal_window.window_geom.is_fullscreen { 3 } else { 2 },
-                                                        );
-
                                                         let dpi_factor = metal_window.window_geom.dpi_factor;
 
                                                         metal_window.resize_core_animation_layer(&metal_cx);
@@ -272,6 +278,7 @@ impl Cx {
                                                             dpi_factor,
                                                             metal_window.ca_layer,
                                                             &mut metal_cx,
+                                                            metal_window.is_resizing,
                                                         );
                                                         // call redraw if we guessed the dpi wrong on startup
                                                         if metal_window.first_draw {

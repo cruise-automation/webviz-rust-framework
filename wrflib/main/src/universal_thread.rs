@@ -17,7 +17,7 @@ struct UniversalThread();
 trait Thread {
     /// Run function in a non-blocking thread.
     ///
-    /// Check out the `multithread_example` for sample usage.
+    /// Check out the `test_multithread` for sample usage.
     ///
     /// TODO(Paras): Implement join handles. When we do, we can use the same
     /// function signature here as [`std::thread::spawn`].
@@ -81,6 +81,10 @@ pub fn spawn(f: impl FnOnce() + Send + 'static) {
     UniversalThread::spawn(f);
 }
 
+/// Universal version of [`std::thread::sleep`].
+///
+/// Note that this doesn't work properly in Safari: <https://bugs.webkit.org/show_bug.cgi?id=234833>
+/// TODO(JP): If they don't fix this, we should make our own version using `Atomics.wait` in JS instead.
 pub fn sleep(dur: Duration) {
     UniversalThread::sleep(dur);
 }

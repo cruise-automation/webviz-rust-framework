@@ -6,7 +6,7 @@
 
 use std::{
     collections::HashMap,
-    f32::{INFINITY, NEG_INFINITY},
+    f32::{EPSILON, INFINITY, NEG_INFINITY},
     sync::{Arc, RwLock},
 };
 
@@ -74,7 +74,7 @@ impl ChartTooltip {
         self.background.draw(cx, Rect { pos, size }, background_color);
 
         if let Some(renderer) = &config.tooltip.renderer {
-            renderer.read().unwrap().draw_tooltip(cx, &config, pos);
+            renderer.read().unwrap().draw_tooltip(cx, config, pos);
         } else {
             let text_props = TextInsProps { text_style: TEXT_STYLE_MONO, color: text_color, ..TextInsProps::DEFAULT };
 
@@ -270,6 +270,8 @@ pub struct ChartConfig<'a> {
     pub scales: HashMap<String, ChartScale>,
     pub style: ChartStyle,
     pub tooltip: ChartTooltipConfig,
+    pub zoom_enabled: bool,
+    pub pan_enabled: bool,
 }
 
 impl<'a> Default for ChartConfig<'a> {
@@ -281,6 +283,8 @@ impl<'a> Default for ChartConfig<'a> {
             scales: HashMap::new(),
             style: CHART_STYLE_DARK,
             tooltip: ChartTooltipConfig::default(),
+            pan_enabled: false,
+            zoom_enabled: false,
         }
     }
 }
@@ -328,13 +332,76 @@ pub struct Chart {
     // Keep an Arc<RwLock> to plugins since most of them are maybe owned
     // by other components. But we also need to call them here.
     pub plugins: Vec<Arc<RwLock<dyn ChartPlugin>>>,
+    last_finger_pos: Vec2,
+    zoom_enabled: bool,
+    pan_enabled: bool,
+    panning: bool,
+
+    /// Set to `None` when we're viewing the whole chart (e.g. initial state,
+    /// and when clicking the "reset view" button) which means that the axes
+    /// can automatically get resized as new data comes in; and set to `Some`
+    /// the moment you drag or scroll.
+    ///
+    /// `pos` and `size` are in units of the horizontal and vertical axes, with
+    // `pos` representing the top-right point in the chart (initially often 0,0).
+    zoom_pan: Option<Rect>,
 }
 
 impl Chart {
     pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) -> ChartEvent {
         match event.hits(cx, &self.component_base, HitOpt::default()) {
+            Event::FingerDown(fd) => {
+                if self.pan_enabled {
+                    self.last_finger_pos = fd.rel;
+                    self.panning = true;
+                }
+            }
+            Event::FingerMove(fm) => {
+                if self.pan_enabled {
+                    let delta_pan = fm.rel - self.last_finger_pos;
+                    self.last_finger_pos = fm.rel;
+
+                    if self.zoom_pan.is_none() {
+                        self.zoom_pan = Some(self.bounds);
+                    }
+
+                    if let Some(zoom_pan) = &mut self.zoom_pan {
+                        zoom_pan.pos += delta_pan;
+                    }
+
+                    cx.request_draw();
+                }
+            }
+            Event::FingerUp(_) => {
+                if self.pan_enabled {
+                    self.panning = false;
+                }
+            }
+            Event::FingerScroll(fs) => {
+                if self.zoom_enabled {
+                    if self.zoom_pan.is_none() {
+                        self.zoom_pan = Some(self.bounds);
+                    }
+
+                    if let Some(zoom_pan) = &mut self.zoom_pan {
+                        let old_size = zoom_pan.size;
+                        let new_size = old_size - vec2(fs.scroll.y, fs.scroll.y);
+                        let zoom_factor = (new_size / old_size).y;
+
+                        // Compute new offset
+                        // See: https://stackoverflow.com/a/38302057
+                        let old_pos = zoom_pan.pos;
+                        let new_pos = fs.rel - zoom_factor * (fs.rel - old_pos);
+
+                        zoom_pan.size = new_size;
+                        zoom_pan.pos = new_pos;
+                    }
+
+                    cx.request_draw();
+                }
+            }
             Event::FingerHover(fe) => {
-                if fe.hover_state == HoverState::Out {
+                if self.panning || fe.hover_state == HoverState::Out {
                     self.tooltip_visible = false;
                     return ChartEvent::FingerOut;
                 }
@@ -344,11 +411,13 @@ impl Chart {
                 let cursor_value = self.denormalize_data_point(cursor);
                 let current_element = self.get_element_at(cx, cursor_value);
                 if let Some(current_element) = &current_element {
-                    self.tooltip.update(&current_element);
+                    self.tooltip.update(current_element);
                     self.tooltip_visible = true;
                 } else {
                     self.tooltip_visible = false;
                 }
+
+                cx.request_draw();
 
                 return ChartEvent::FingerHover { cursor, cursor_value, current_element };
             }
@@ -427,46 +496,37 @@ impl Chart {
     }
 
     fn draw_grid(&mut self, cx: &mut Cx, config: &ChartConfig) {
-        let scale = 1.;
-
         let min_x = self.bounds.pos.x;
         let max_x = min_x + self.bounds.size.x;
         let min_y = self.bounds.pos.y;
         let max_y = min_y + self.bounds.size.y;
 
+        // Minimum size of a cell, in pixels.
+        let min_cell_size = 50.;
+
+        let data_min = self.min;
+        let data_max = self.denormalize_data_point(vec2(max_x, max_y));
+
+        let first = self.normalize_data_point(data_min);
+        let last = self.normalize_data_point(data_max);
+
+        let max_lines = (data_max.x - data_min.x).abs();
+        let step_size = (last.x - first.x).abs() / max_lines;
+
         let mut lines = vec![];
 
-        let columns = {
-            let mut count = 5;
-            if let Some(data_len) = config.datasets.iter().map(|ds| ds.data.len()).max() {
-                if data_len > 0 {
-                    count = data_len.min(10).max(count);
-                }
-            }
-            count
-        };
-
-        let rows = 10.;
-
-        // TODO(hernan): Grids should be dynamic, adding or removing vertical/horizontal
-        // divisions as needed depending on zoom and pan options. For now, just use arbitrary divisions for both.
-        for i in 0..columns {
-            let x = Self::remap(i as f32, 0., (columns - 1) as f32, min_x, max_x);
-
+        let mut draw_vertical_line = |x, round_op: &dyn Fn(f32) -> f32| {
             lines.push(DrawLines3dInstance::from_segment(
                 vec3(x, min_y, 0.),
                 vec3(x, max_y + 10., 0.),
                 config.style.grid_color,
-                scale,
+                1.,
             ));
 
+            // TODO(hernan): Render text labels if provided in config
             let label = {
-                if i < config.labels.len() {
-                    config.labels[i].clone()
-                } else {
-                    let col_value = Self::remap(x, min_x, max_x, self.min.x, self.max.x);
-                    format!("{:.0}", col_value)
-                }
+                let col_value = round_op(self.denormalize_data_point(vec2(x, min_y)).x);
+                format!("{:.0}", col_value)
             };
 
             TextIns::draw_str(
@@ -479,20 +539,45 @@ impl Chart {
                     ..TextInsProps::DEFAULT
                 },
             );
+        };
+
+        // Lines are rendered in reversed order first
+        // This prevents jumping when panning and zooming
+        let mut x = first.x;
+        let mut last_x = x + min_cell_size;
+        while x > min_x {
+            // Skip some lines in order to ensure there is enough
+            // space between them
+            if x < max_x && (last_x - x >= min_cell_size) {
+                draw_vertical_line(x, &|x| x);
+                last_x = x;
+            }
+            x -= step_size;
         }
 
-        let step = (max_y - min_y) / rows;
-        let mut y = min_y;
-        while y <= max_y {
+        let mut x = first.x;
+        let mut last_x = x - min_cell_size;
+        while x < max_x {
+            if min_x < x && (x - last_x >= min_cell_size) {
+                draw_vertical_line(x, &|x| x);
+                last_x = x;
+            }
+            x += step_size;
+        }
+
+        draw_vertical_line(min_x, &|x| x.floor());
+        draw_vertical_line(max_x, &|x| x.ceil());
+
+        let mut draw_horizontal_line = |y, round_op: &dyn Fn(f32) -> f32| {
             lines.push(DrawLines3dInstance::from_segment(
                 vec3(min_x - 10., y, 0.),
                 vec3(max_x, y, 0.),
                 config.style.grid_color,
-                scale,
+                1.,
             ));
 
             // Flip min_y/max_y since y coordinate is inverted
-            let row_value = Self::remap(y, max_y, min_y, self.min.y, self.max.y);
+            let row_value = round_op(self.denormalize_data_point(vec2(min_x, y)).y);
 
             TextIns::draw_str(
                 cx,
@@ -504,28 +589,101 @@ impl Chart {
                     ..TextInsProps::DEFAULT
                 },
             );
+        };
 
-            y += step;
+        // See comments above for rendering vertical lines
+        let mut y = first.y;
+        let mut last_y = y + min_cell_size;
+        while y > min_y {
+            if y < max_y && (last_y - y >= min_cell_size) {
+                draw_horizontal_line(y, &|y| y);
+                last_y = y;
+            }
+            y -= step_size;
         }
+
+        let mut y = first.y;
+        let mut last_y = y - min_cell_size;
+        while y < max_y {
+            if min_y < y && (y - last_y >= min_cell_size) {
+                draw_horizontal_line(y, &|y| y);
+                last_y = y;
+            }
+            y += step_size;
+        }
+
+        draw_horizontal_line(min_y, &|y| y.floor());
+        draw_horizontal_line(max_y, &|y| y.ceil());
 
         // Draw axes a bit brighter than columns/rows
         let axis_color = vec4(0.5, 0.5, 0.5, 1.);
-        lines.push(DrawLines3dInstance::from_segment(vec3(min_x, max_y, 0.), vec3(max_x, max_y, 0.), axis_color, scale));
-        lines.push(DrawLines3dInstance::from_segment(vec3(min_x, min_y, 0.), vec3(min_x, max_y, 0.), axis_color, scale));
+        lines.push(DrawLines3dInstance::from_segment(vec3(min_x, max_y, 0.), vec3(max_x, max_y, 0.), axis_color, 1.));
+        lines.push(DrawLines3dInstance::from_segment(vec3(min_x, min_y, 0.), vec3(min_x, max_y, 0.), axis_color, 1.));
 
-        DrawLines3d::draw(cx, &lines);
+        DrawLines3d::draw(cx, &lines, Default::default());
     }
 
+    /// Use Liang-Barsky algorithm to clip line its points are both inside
+    /// the chart boundaries (see: <https://en.wikipedia.org/wiki/Liang%E2%80%93Barsky_algorithm>)
     fn draw_lines(&mut self, cx: &mut Cx, data: &[Vec2], color: Vec4, scale: f32) {
+        let min_x = self.bounds.pos.x;
+        let max_x = min_x + self.bounds.size.x;
+        let min_y = self.bounds.pos.y;
+        let max_y = min_y + self.bounds.size.y;
+
+        let clip_line = |a: Vec2, b: Vec2| {
+            let dx = b.x - a.x;
+            let dy = b.y - a.y;
+
+            let mut u1: f32 = 0.;
+            let mut u2: f32 = 1.;
+
+            let pk = [-dx, dx, -dy, dy];
+            let qk = [a.x - min_x, max_x - a.x, a.y - min_y, max_y - a.y];
+
+            for i in 0..4 {
+                if pk[i].abs() < EPSILON {
+                    if qk[i] < 0. {
+                        return None;
+                    }
+                } else {
+                    // Calculate the intersection point for the line and the window edge
+                    let r = qk[i] / pk[i];
+                    if pk[i] < 0. {
+                        // Lines going outside to inside
+                        u1 = u1.max(r);
+                    } else if pk[i] > 0. {
+                        // Lines going inside to outside
+                        u2 = u2.min(r);
+                    }
+                }
+            }
+
+            if u1 > u2 {
+                // The line is completely outside of the clipping window
+                return None;
+            }
+
+            if u1 < 0. && 1. < u2 {
+                // The line is completely inside of the clipping window
+                return Some((a, b));
+            }
+
+            let a2 = vec2(a.x + u1 * dx, a.y + u1 * dy);
+            let b2 = vec2(a.x + u2 * dx, a.y + u2 * dy);
+            Some((a2, b2))
+        };
+
         let mut lines = vec![];
         for i in 0..(data.len() - 1) {
-            let p0 = data[i].to_vec3();
-            let p1 = data[i + 1].to_vec3();
-
-            lines.push(DrawLines3dInstance::from_segment(p0, p1, color, scale));
+            let a = data[i];
+            let b = data[i + 1];
+            if let Some((a, b)) = clip_line(a, b) {
+                lines.push(DrawLines3dInstance::from_segment(a.to_vec3(), b.to_vec3(), color, scale));
+            }
         }
 
-        DrawLines3d::draw(cx, &lines);
+        DrawLines3d::draw(cx, &lines, Default::default());
     }
 
     fn draw_points(
@@ -537,16 +695,21 @@ impl Chart {
         scale: f32,
         point_style: DrawPoints3dStyle,
     ) -> Area {
+        let min_x = self.bounds.pos.x;
+        let max_x = min_x + self.bounds.size.x;
+        let min_y = self.bounds.pos.y;
+        let max_y = min_y + self.bounds.size.y;
+
         let color = color.to_vec3();
         let size = scale;
         let mut points = Vec::<DrawPoints3dInstance>::with_capacity(normalized_data.len());
         for i in 0..normalized_data.len() {
-            points.push(DrawPoints3dInstance {
-                position: normalized_data[i].to_vec3(),
-                color,
-                size,
-                user_info: original_data[i],
-            });
+            let p = normalized_data[i];
+
+            // Check if point is inside the chart boundaries before drawing
+            if min_x <= p.x && p.x <= max_x && min_y <= p.y && p.y <= max_y {
+                points.push(DrawPoints3dInstance { position: p.to_vec3(), color, size, user_info: original_data[i] });
+            }
         }
 
         DrawPoints3d::draw(
@@ -556,21 +719,37 @@ impl Chart {
         )
     }
 
+    /// Compute offset and scaling based on zoom/pan values
+    fn get_offset_scale(&self) -> (Vec2, Vec2) {
+        if let Some(zoom_pan) = self.zoom_pan {
+            let offset = zoom_pan.pos - self.bounds.pos;
+            let scale = (zoom_pan.size / self.bounds.size).max(&vec2(0.1, 0.1));
+            (offset, scale)
+        } else {
+            (vec2(0., 0.), vec2(1., 1.))
+        }
+    }
+
     /// Transform a data point from data coordinates to normalized screen coordinates
     fn normalize_data_point(&self, data_point: Vec2) -> Vec2 {
-        vec2(
-            // For x axis, we want values to be in the range [bounds.pos.x, bounds.pos.x + bounds.size.x],
-            // using (p.x - min.x) / (max.x - min.x) for interpolation.
-            self.bounds.pos.x + (data_point.x - self.min.x) / (self.max.x - self.min.x) * self.bounds.size.x,
-            // For y axis, it's a similar process except that we want charts to start at the bottom instead.
-            // Then, we add bounds.size.y and subtract the interpolated value.
-            (self.bounds.pos.y + self.bounds.size.y)
-                - (data_point.y - self.min.y) / (self.max.y - self.min.y) * self.bounds.size.y,
-        )
+        let (offset, scale) = self.get_offset_scale();
+        offset
+            + scale
+                * vec2(
+                    // For x axis, we want values to be in the range [bounds.pos.x, bounds.pos.x + bounds.size.x],
+                    // using (p.x - min.x) / (max.x - min.x) for interpolation.
+                    self.bounds.pos.x + (data_point.x - self.min.x) / (self.max.x - self.min.x) * self.bounds.size.x,
+                    // For y axis, it's a similar process except that we want charts to start at the bottom instead.
+                    // Then, we add bounds.size.y and subtract the interpolated value.
+                    (self.bounds.pos.y + self.bounds.size.y)
+                        - (data_point.y - self.min.y) / (self.max.y - self.min.y) * self.bounds.size.y,
+                )
     }
 
     /// Transform a normalized data point from screen coordinates to data coordinates
     fn denormalize_data_point(&self, normalized_data_point: Vec2) -> Vec2 {
+        let (offset, scale) = self.get_offset_scale();
+        let normalized_data_point = (normalized_data_point - offset) / scale;
         vec2(
             Self::remap(
                 normalized_data_point.x,
@@ -638,7 +817,11 @@ impl Chart {
         (Self::round_down(min), Self::round_up(max))
     }
 
-    pub fn draw_chart(&mut self, cx: &mut Cx, config: &ChartConfig) {
+    pub fn reset_zoom_pan(&mut self) {
+        self.zoom_pan = None;
+    }
+
+    fn draw_chart(&mut self, cx: &mut Cx, config: &ChartConfig) {
         self.chart_view.begin_view(cx, Layout::default());
 
         let rect = cx.get_turtle_rect();
@@ -647,19 +830,25 @@ impl Chart {
 
         self.background.draw(cx, rect, config.style.background_color);
 
+        self.zoom_enabled = config.zoom_enabled;
+        self.pan_enabled = config.pan_enabled;
+
         // Compute the rect where the chart will be rendered. The offsets below
         // add some marging so we can also render labels for each axis.
         // TODO(Hernan): should this be customizable?
         self.bounds = Rect { pos: rect.pos + vec2(60., 5.), size: rect.size - vec2(80., 40.) };
 
-        // Compute min/max for all datasets before rendering
-        let (min, max) = Self::get_min_max(config);
-        self.min = min;
-        self.max = max;
-
-        self.draw_grid(cx, &config);
+        if self.zoom_pan.is_none() {
+            // Compute min/max for all datasets before rendering
+            // Only update min/max values if we're not panning/zooming
+            let (data_min, data_max) = Self::get_min_max(config);
+            self.min = data_min;
+            self.max = data_max;
+        }
 
         self.areas = vec![];
+
+        self.draw_grid(cx, config);
 
         for dataset in &config.datasets {
             let points = dataset.data.points();
@@ -691,7 +880,7 @@ impl Chart {
 
     fn draw_view(&mut self, cx: &mut Cx) {
         self.view.begin_view(cx, Layout::default());
-        let rect = cx.get_turtle_rect();
+        let rect = cx.get_box_rect();
         let color_texture_handle = self.color_texture.get_color(cx);
         let area = ImageIns::draw(cx, rect, color_texture_handle);
         self.component_base.register_component_area(cx, area);
@@ -702,7 +891,7 @@ impl Chart {
         self.draw_view(cx);
 
         self.pass.begin_pass_without_textures(cx);
-        let rect = cx.get_turtle_rect();
+        let rect = cx.get_box_rect();
         let color_texture_handle = self.color_texture.get_color(cx);
         self.pass.set_size(cx, rect.size);
         self.pass.add_color_texture(cx, color_texture_handle, ClearColor::default());

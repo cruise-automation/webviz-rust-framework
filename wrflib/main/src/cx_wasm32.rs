@@ -6,10 +6,10 @@
 
 //! WebAssembly platform-specific entry point.
 
-use crate::cx::*;
 use crate::cx_web::*;
 use crate::universal_file::UniversalFile;
 use crate::zerde::*;
+use crate::*;
 use std::alloc;
 use std::collections::{BTreeSet, HashMap};
 use std::mem;
@@ -173,6 +173,7 @@ impl Cx {
                 6 => {
                     // finger_down
                     let abs = Vec2 { x: zerde_parser.parse_f32(), y: zerde_parser.parse_f32() };
+                    let button = zerde_parser.parse_u32() as usize;
                     let digit = zerde_parser.parse_u32() as usize;
                     self.platform.fingers_down[digit] = true;
                     let is_touch = zerde_parser.parse_u32() > 0;
@@ -185,7 +186,7 @@ impl Cx {
                         rect: Rect::default(),
                         handled: false,
                         digit,
-                        button: get_mouse_button_from_digit(digit),
+                        button: get_mouse_button(button),
                         input_type: if is_touch { FingerInputType::Touch } else { FingerInputType::Mouse },
                         modifiers,
                         time,
@@ -195,6 +196,7 @@ impl Cx {
                 7 => {
                     // finger_up
                     let abs = Vec2 { x: zerde_parser.parse_f32(), y: zerde_parser.parse_f32() };
+                    let button = zerde_parser.parse_u32() as usize;
                     let digit = zerde_parser.parse_u32() as usize;
                     self.platform.fingers_down[digit] = false;
                     let is_touch = zerde_parser.parse_u32() > 0;
@@ -208,7 +210,7 @@ impl Cx {
                         abs_start: Vec2::default(),
                         rel_start: Vec2::default(),
                         digit,
-                        button: get_mouse_button_from_digit(digit),
+                        button: get_mouse_button(button),
                         is_over: false,
                         input_type: if is_touch { FingerInputType::Touch } else { FingerInputType::Mouse },
                         modifiers,
@@ -504,7 +506,8 @@ impl Cx {
         self.compute_passes_to_repaint(&mut passes_todo, &mut windows_need_repaint);
 
         if is_animation_frame && passes_todo.len() > 0 {
-            self.webgl_compile_shaders();
+            let mut zerde_webgl = ZerdeWebGLMessages::new();
+            self.webgl_compile_shaders(&mut zerde_webgl);
             for pass_id in &passes_todo {
                 match self.passes[*pass_id].dep_of.clone() {
                     CxPassDepOf::Window(_) => {
@@ -512,17 +515,19 @@ impl Cx {
                         // its a render window
                         windows_need_repaint -= 1;
                         let dpi_factor = self.platform.window_geom.dpi_factor;
-                        self.draw_pass_to_canvas(*pass_id, dpi_factor);
+                        self.draw_pass_to_canvas(*pass_id, dpi_factor, &mut zerde_webgl);
                     }
                     CxPassDepOf::Pass(parent_pass_id) => {
                         let dpi_factor = self.get_delegated_dpi_factor(parent_pass_id);
-                        self.draw_pass_to_texture(*pass_id, dpi_factor);
+                        self.draw_pass_to_texture(*pass_id, dpi_factor, &mut zerde_webgl);
                     }
                     CxPassDepOf::None => {
-                        self.draw_pass_to_texture(*pass_id, 1.0);
+                        self.draw_pass_to_texture(*pass_id, 1.0, &mut zerde_webgl);
                     }
                 }
             }
+            zerde_webgl.end();
+            self.platform.zerde_eventloop_msgs.run_webgl(zerde_webgl.take_ptr());
         }
 
         // request animation frame if still need to redraw, or repaint
@@ -597,7 +602,7 @@ impl CxDesktopVsWasmCommon for Cx {
 
     /// See [`CxDesktopVsWasmCommon::return_to_js`] for documentation.
     fn return_to_js(&mut self, callback_id: u32, mut params: Vec<WrfParam>) {
-        params.insert(0, WrfParam::String(format!("{}", callback_id)));
+        params.insert(0, format!("{}", callback_id).into_param());
         self.call_js("_wrflibReturnParams", params);
     }
 
@@ -661,11 +666,9 @@ impl CxPlatformCommon for Cx {
     }
 }
 
-/// Digits translate to MouseButton in WASM slightly differently
-/// 0 is left, and 2 is right. 1,3,4 are Other.
-/// Refer: https://developer.mozilla.org/en-US/docs/Web/API/MouseEvent/button#return_value
-fn get_mouse_button_from_digit(digit: usize) -> MouseButton {
-    return match digit {
+/// See https://developer.mozilla.org/en-US/docs/Web/API/MouseEvent/button#return_value
+fn get_mouse_button(button: usize) -> MouseButton {
+    return match button {
         0 => MouseButton::Left,
         2 => MouseButton::Right,
         _ => MouseButton::Other,
@@ -718,195 +721,75 @@ impl ZerdeEventloopMsgs {
         self.builder.take_ptr()
     }
 
-    // end the block
     pub(crate) fn end(&mut self) {
         self.builder.send_u32(0);
     }
 
-    fn send_propdefvec(&mut self, prop_defs: &Vec<PropDef>) {
-        self.builder.send_u32(prop_defs.len() as u32);
-        for prop_def in prop_defs {
-            self.builder.send_string(match prop_def.ty {
-                Ty::Vec4 => "vec4",
-                Ty::Vec3 => "vec3",
-                Ty::Vec2 => "vec2",
-                Ty::Float => "float",
-                Ty::Mat4 => "mat4",
-                Ty::Texture2D => "sampler2D",
-                _ => panic!("unexpected type in send_propdefvec"),
-            });
-            self.builder.send_string(&prop_def.name);
-        }
+    pub(crate) fn run_webgl(&mut self, zerde_webgl_ptr: u64) {
+        self.builder.send_u32(1);
+        self.builder.send_u64(zerde_webgl_ptr);
     }
 
-    // log a string
     pub(crate) fn log(&mut self, msg: &str) {
-        self.builder.send_u32(1);
+        self.builder.send_u32(2);
         self.builder.send_string(msg);
     }
 
-    pub(crate) fn compile_webgl_shader(&mut self, shader_id: usize, vertex: &str, fragment: &str, mapping: &CxShaderMapping) {
-        self.builder.send_u32(2);
-        self.builder.send_u32(shader_id as u32);
-        self.builder.send_string(fragment);
-        self.builder.send_string(vertex);
-        self.builder.send_u32(mapping.geometry_props.total_slots as u32);
-        self.builder.send_u32(mapping.instance_props.total_slots as u32);
-        self.send_propdefvec(&mapping.pass_uniforms);
-        self.send_propdefvec(&mapping.view_uniforms);
-        self.send_propdefvec(&mapping.draw_uniforms);
-        self.send_propdefvec(&mapping.user_uniforms);
-        self.send_propdefvec(&mapping.textures);
-    }
-
-    pub(crate) fn alloc_array_buffer(&mut self, buffer_id: usize, len: usize, data: *const f32) {
-        self.builder.send_u32(3);
-        self.builder.send_u32(buffer_id as u32);
-        self.builder.send_u32(len as u32);
-        self.builder.send_u32(data as u32);
-    }
-
-    pub(crate) fn alloc_index_buffer(&mut self, buffer_id: usize, len: usize, data: *const u32) {
-        self.builder.send_u32(4);
-        self.builder.send_u32(buffer_id as u32);
-        self.builder.send_u32(len as u32);
-        self.builder.send_u32(data as u32);
-    }
-
-    pub(crate) fn alloc_vao(&mut self, vao_id: usize, shader_id: usize, geom_ib_id: usize, geom_vb_id: usize, inst_vb_id: usize) {
-        self.builder.send_u32(5);
-        self.builder.send_u32(vao_id as u32);
-        self.builder.send_u32(shader_id as u32);
-        self.builder.send_u32(geom_ib_id as u32);
-        self.builder.send_u32(geom_vb_id as u32);
-        self.builder.send_u32(inst_vb_id as u32);
-    }
-
-    pub(crate) fn draw_call(
-        &mut self,
-        shader_id: usize,
-        vao_id: usize,
-        uniforms_pass: &[f32],
-        uniforms_view: &[f32],
-        uniforms_draw: &[f32],
-        uniforms_user: &[f32],
-        textures: &Vec<u32>,
-    ) {
-        self.builder.send_u32(6);
-        self.builder.send_u32(shader_id as u32);
-        self.builder.send_u32(vao_id as u32);
-        self.builder.send_u32(uniforms_pass.as_ptr() as u32);
-        self.builder.send_u32(uniforms_view.as_ptr() as u32);
-        self.builder.send_u32(uniforms_draw.as_ptr() as u32);
-        self.builder.send_u32(uniforms_user.as_ptr() as u32);
-        self.builder.send_u32(textures.as_ptr() as u32);
-    }
-
     pub(crate) fn load_deps(&mut self, deps: Vec<String>) {
-        self.builder.send_u32(8);
+        self.builder.send_u32(3);
         self.builder.send_u32(deps.len() as u32);
         for dep in deps {
             self.builder.send_string(&dep);
         }
     }
 
-    pub(crate) fn update_texture_image2d(&mut self, texture_id: usize, texture: &mut CxTexture) {
-        //usize, width: usize, height: usize, data: &Vec<u32>
-        self.builder.send_u32(9);
-        self.builder.send_u32(texture_id as u32);
-        self.builder.send_u32(texture.desc.width.unwrap() as u32);
-        self.builder.send_u32(texture.desc.height.unwrap() as u32);
-        self.builder.send_u32(texture.image_u32.as_ptr() as u32)
-    }
-
     pub(crate) fn request_animation_frame(&mut self) {
-        self.builder.send_u32(10);
+        self.builder.send_u32(4);
     }
 
     pub(crate) fn set_document_title(&mut self, title: &str) {
-        self.builder.send_u32(11);
+        self.builder.send_u32(5);
         self.builder.send_string(title);
     }
 
     pub(crate) fn set_mouse_cursor(&mut self, mouse_cursor: MouseCursor) {
-        self.builder.send_u32(12);
+        self.builder.send_u32(6);
         self.builder.send_u32(mouse_cursor as u32);
     }
 
     pub(crate) fn show_text_ime(&mut self, x: f32, y: f32) {
-        self.builder.send_u32(14);
+        self.builder.send_u32(7);
         self.builder.send_f32(x);
         self.builder.send_f32(y);
     }
 
     pub(crate) fn hide_text_ime(&mut self) {
-        self.builder.send_u32(15);
+        self.builder.send_u32(8);
     }
 
     pub(crate) fn text_copy_response(&mut self, response: &str) {
-        self.builder.send_u32(16);
+        self.builder.send_u32(9);
         self.builder.send_string(response);
     }
 
     pub(crate) fn start_timer(&mut self, id: u64, interval: f64, repeats: bool) {
-        self.builder.send_u32(17);
+        self.builder.send_u32(10);
         self.builder.send_u32(if repeats { 1 } else { 0 });
         self.builder.send_f64(id as f64);
         self.builder.send_f64(interval);
     }
 
     pub(crate) fn stop_timer(&mut self, id: u64) {
-        self.builder.send_u32(18);
+        self.builder.send_u32(11);
         self.builder.send_f64(id as f64);
     }
 
     pub(crate) fn xr_start_presenting(&mut self) {
-        self.builder.send_u32(19);
+        self.builder.send_u32(12);
     }
 
     pub(crate) fn xr_stop_presenting(&mut self) {
-        self.builder.send_u32(20);
-    }
-
-    pub(crate) fn begin_render_targets(&mut self, pass_id: usize, width: usize, height: usize) {
-        self.builder.send_u32(21);
-        self.builder.send_u32(pass_id as u32);
-        self.builder.send_u32(width as u32);
-        self.builder.send_u32(height as u32);
-    }
-
-    pub(crate) fn add_color_target(&mut self, texture_id: usize, init_only: bool, color: Vec4) {
-        self.builder.send_u32(22);
-        self.builder.send_u32(texture_id as u32);
-        self.builder.send_u32(if init_only { 1 } else { 0 });
-        self.builder.send_f32(color.x);
-        self.builder.send_f32(color.y);
-        self.builder.send_f32(color.z);
-        self.builder.send_f32(color.w);
-    }
-
-    pub(crate) fn set_depth_target(&mut self, texture_id: usize, init_only: bool, depth: f32) {
-        self.builder.send_u32(23);
-        self.builder.send_u32(texture_id as u32);
-        self.builder.send_u32(if init_only { 1 } else { 0 });
-        self.builder.send_f32(depth);
-    }
-
-    pub(crate) fn end_render_targets(&mut self) {
-        self.builder.send_u32(24);
-    }
-
-    pub(crate) fn set_default_depth_and_blend_mode(&mut self) {
-        self.builder.send_u32(25);
-    }
-
-    pub(crate) fn begin_main_canvas(&mut self, color: Vec4, depth: f32) {
-        self.builder.send_u32(26);
-        self.builder.send_f32(color.x);
-        self.builder.send_f32(color.y);
-        self.builder.send_f32(color.z);
-        self.builder.send_f32(color.w);
-        self.builder.send_f32(depth);
+        self.builder.send_u32(13);
     }
 
     pub(crate) fn http_send(
@@ -920,7 +803,7 @@ impl ZerdeEventloopMsgs {
         body: &[u8],
         signal: Signal,
     ) {
-        self.builder.send_u32(27);
+        self.builder.send_u32(14);
         self.builder.send_u32(port as u32);
         self.builder.send_u32(signal.signal_id as u32);
         self.builder.send_string(verb);
@@ -932,25 +815,25 @@ impl ZerdeEventloopMsgs {
     }
 
     pub(crate) fn fullscreen(&mut self) {
-        self.builder.send_u32(28);
+        self.builder.send_u32(15);
     }
 
     pub(crate) fn normalscreen(&mut self) {
-        self.builder.send_u32(29);
+        self.builder.send_u32(16);
     }
 
     pub(crate) fn websocket_send(&mut self, url: &str, data: &[u8]) {
-        self.builder.send_u32(30);
+        self.builder.send_u32(17);
         self.builder.send_string(url);
         self.builder.send_u8slice(data);
     }
 
     pub(crate) fn enable_global_file_drop_target(&mut self) {
-        self.builder.send_u32(31);
+        self.builder.send_u32(18);
     }
 
     pub(crate) fn call_js(&mut self, name: &str, params: Vec<WrfParam>) {
-        self.builder.send_u32(32);
+        self.builder.send_u32(19);
         self.builder.send_string(name);
 
         self.builder.build_wrf_params(params);
@@ -995,11 +878,19 @@ pub unsafe extern "C" fn dealloc_wasm_message(in_buf: u64) {
     std::alloc::dealloc(buf as *mut u8, std::alloc::Layout::from_size_align(bytes as usize, mem::align_of::<u64>()).unwrap());
 }
 
-#[export_name = "createArcVec"]
-pub unsafe extern "C" fn create_arc_vec(vec_ptr: u64, vec_len: u64) -> u64 {
-    let vec: Vec<u8> = Vec::from_raw_parts(vec_ptr as *mut u8, vec_len as usize, vec_len as usize);
+fn create_arc_vec_inner<T>(vec_ptr: u64, vec_len: u64) -> u64 {
+    let vec: Vec<T> = unsafe { Vec::from_raw_parts(vec_ptr as *mut T, vec_len as usize, vec_len as usize) };
     let arc = Arc::new(vec);
     Arc::into_raw(arc) as u64
+}
+
+#[export_name = "createArcVec"]
+pub unsafe extern "C" fn create_arc_vec(vec_ptr: u64, vec_len: u64, param_type: u64) -> u64 {
+    match param_type as u32 {
+        WRF_PARAM_READ_ONLY_UINT8_BUFFER => create_arc_vec_inner::<u8>(vec_ptr, vec_len),
+        WRF_PARAM_READ_ONLY_FLOAT32_BUFFER => create_arc_vec_inner::<f32>(vec_ptr, vec_len),
+        v => panic!("create_arc_vec: Invalid param type: {}", v),
+    }
 }
 
 #[export_name = "incrementArc"]

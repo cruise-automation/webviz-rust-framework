@@ -12,6 +12,7 @@
 
 use crate::cx_apple::*;
 use crate::universal_file::UniversalFile;
+use crate::*;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::os::raw::c_void;
@@ -27,8 +28,6 @@ static mut GLOBAL_COCOA_APP: *mut CocoaApp = 0 as *mut _;
 //extern {
 //    pub(crate) fn mach_absolute_time() -> u64;
 //}
-
-use crate::cx::*;
 
 #[derive(Clone)]
 pub(crate) struct CocoaWindow {
@@ -735,6 +734,17 @@ impl CocoaWindow {
                 nil,
             );
         }
+        let mut events = vec![Event::WindowResizeLoop(WindowResizeLoopEvent { window_id: self.window_id, was_started: true })];
+        self.do_callback(&mut events);
+    }
+
+    pub(crate) fn end_live_resize(&mut self) {
+        unsafe {
+            let () = msg_send![self.live_resize_timer, invalidate];
+            self.live_resize_timer = nil;
+        }
+        let mut events = vec![Event::WindowResizeLoop(WindowResizeLoopEvent { window_id: self.window_id, was_started: false })];
+        self.do_callback(&mut events);
     }
 
     pub(crate) fn close_window(&mut self) {
@@ -763,13 +773,6 @@ impl CocoaWindow {
     }
 
     pub(crate) fn set_topmost(&mut self, _topmost: bool) {}
-
-    pub(crate) fn end_live_resize(&mut self) {
-        unsafe {
-            let () = msg_send![self.live_resize_timer, invalidate];
-            self.live_resize_timer = nil;
-        }
-    }
 
     pub(crate) fn time_now(&self) -> f64 {
         let time_now = Instant::now(); //unsafe {mach_absolute_time()};
@@ -1303,7 +1306,9 @@ pub(crate) fn define_cocoa_timer_delegate() -> *const Class {
         CocoaApp::unblock_event_loop_and_paint();
     }
 
-    extern "C" fn received_paint(_this: &Object, _: Sel, _nstimer: id) {
+    extern "C" fn received_paint(this: &Object, _: Sel, _nstimer: id) {
+        let ca = get_cocoa_app(this);
+        ca.do_callback(&mut vec![Event::SystemEvent(SystemEvent::Paint)]);
         CocoaApp::unblock_event_loop_and_paint();
     }
 
@@ -1487,13 +1492,13 @@ pub(crate) fn define_cocoa_window_delegate() -> *const Class {
         cw.send_change_event();
     }
 
-    extern "C" fn window_did_change_screen(this: &Object, _: Sel, _: id) {
+    extern "C" fn window_changed_screen(this: &Object, _: Sel, _: id) {
         let cw = get_cocoa_window(this);
         cw.send_change_event();
     }
 
-    /// This will always be called before [`window_did_change_screen`].
-    extern "C" fn window_did_change_backing_properties(this: &Object, _: Sel, _: id) {
+    /// This will always be called before [`window_changed_screen`].
+    extern "C" fn window_changed_backing_properties(this: &Object, _: Sel, _: id) {
         let cw = get_cocoa_window(this);
         cw.send_change_event();
     }
@@ -1596,10 +1601,10 @@ pub(crate) fn define_cocoa_window_delegate() -> *const Class {
         decl.add_method(sel!(windowDidEndLiveResize:), window_did_end_live_resize as extern "C" fn(&Object, Sel, id));
 
         decl.add_method(sel!(windowDidMove:), window_did_move as extern "C" fn(&Object, Sel, id));
-        decl.add_method(sel!(windowDidChangeScreen:), window_did_change_screen as extern "C" fn(&Object, Sel, id));
+        decl.add_method(sel!(windowChangedScreen:), window_changed_screen as extern "C" fn(&Object, Sel, id));
         decl.add_method(
-            sel!(windowDidChangeBackingProperties:),
-            window_did_change_backing_properties as extern "C" fn(&Object, Sel, id),
+            sel!(windowChangedBackingProperties:),
+            window_changed_backing_properties as extern "C" fn(&Object, Sel, id),
         );
         decl.add_method(sel!(windowDidBecomeKey:), window_did_become_key as extern "C" fn(&Object, Sel, id));
         decl.add_method(sel!(windowDidResignKey:), window_did_resign_key as extern "C" fn(&Object, Sel, id));

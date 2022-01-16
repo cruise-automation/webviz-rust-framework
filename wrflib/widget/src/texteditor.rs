@@ -6,133 +6,157 @@ use crate::textcursor::*;
 use crate::tokentype::*;
 use wrflib::*;
 
-static SHADER_INDENT_LINES: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER, QuadIns::SHADER],
-    code_fragment!(
-        r#"
-        uniform indent_sel: float;
-        instance color: vec4;
-        instance indent_id: float;
-        fn pixel() -> vec4 {
-            let col = color;
-            let thickness = 0.8 + dpi_dilate * 0.5;
-            if indent_id == indent_sel {
-                col *= vec4(1., 1., 1., 1.);
-                thickness *= 1.3;
-            }
-            else {
-                col *= vec4(0.75, 0.75, 0.75, 0.75);
-            }
-            let df = Df::viewport(pos * rect_size);
-            df.move_to(1., -1.);
-            df.line_to(1., rect_size.y + 1.);
-            return df.stroke(col, thickness);
-        }"#
-    ),
-);
-static SHADER_CURSOR: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER, QuadIns::SHADER],
-    code_fragment!(
-        r#"
-        uniform blink: float;
-        instance color: vec4;
-        fn pixel() -> vec4 {
-            if blink<0.5 {
-                return vec4(color.rgb * color.a, color.a);
-            }
-            else {
-                return vec4(0., 0., 0., 0.);
-            }
-        }"#
-    ),
-);
-static SHADER_SELECTION: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER, QuadIns::SHADER],
-    code_fragment!(
-        r#"
-        instance color: vec4;
-        instance prev_x: float;
-        instance prev_w: float;
-        instance next_x: float;
-        instance next_w: float;
+static SHADER_INDENT_LINES: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            uniform indent_sel: float;
+            instance color: vec4;
+            instance indent_id: float;
+            fn pixel() -> vec4 {
+                let col = color;
+                let thickness = 0.8 + dpi_dilate * 0.5;
+                if indent_id == indent_sel {
+                    col *= vec4(1., 1., 1., 1.);
+                    thickness *= 1.3;
+                }
+                else {
+                    col *= vec4(0.75, 0.75, 0.75, 0.75);
+                }
+                let df = Df::viewport(pos * rect_size);
+                df.move_to(1., -1.);
+                df.line_to(1., rect_size.y + 1.);
+                return df.stroke(col, thickness);
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
+static SHADER_CURSOR: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            uniform blink: float;
+            instance color: vec4;
+            fn pixel() -> vec4 {
+                if blink<0.5 {
+                    return vec4(color.rgb * color.a, color.a);
+                }
+                else {
+                    return vec4(0., 0., 0., 0.);
+                }
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
+static SHADER_SELECTION: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            instance color: vec4;
+            instance prev_x: float;
+            instance prev_w: float;
+            instance next_x: float;
+            instance next_w: float;
 
-        const gloopiness: float = 8.;
-        const border_radius: float = 2.;
+            const gloopiness: float = 8.;
+            const border_radius: float = 2.;
 
-        fn vertex() -> vec4 { // custom vertex shader because we widen the draweable area a bit for the gloopiness
-            let shift: vec2 = -draw_scroll;
-            let clipped: vec2 = clamp(
-                geom * vec2(rect_size.x + 16., rect_size.y) + rect_pos + shift - vec2(8., 0.),
-                draw_clip.xy,
-                draw_clip.zw
-            );
-            pos = (clipped - shift - rect_pos) / rect_size;
-            return camera_projection * (camera_view *
-                vec4(clipped.x, clipped.y, draw_depth + draw_zbias, 1.));
-        }
+            fn vertex() -> vec4 { // custom vertex shader because we widen the draweable area a bit for the gloopiness
+                let shift: vec2 = -draw_scroll;
+                let clipped: vec2 = clamp(
+                    geom * vec2(rect_size.x + 16., rect_size.y) + rect_pos + shift - vec2(8., 0.),
+                    draw_clip.xy,
+                    draw_clip.zw
+                );
+                pos = (clipped - shift - rect_pos) / rect_size;
+                return camera_projection * (camera_view *
+                    vec4(clipped.x, clipped.y, draw_depth + draw_zbias, 1.));
+            }
 
-        fn pixel() -> vec4 {
-            let df = Df::viewport(pos * rect_size);
-            df.box(0., 0., rect_size.x, rect_size.y, border_radius);
-            if prev_w > 0. {
-                df.box(prev_x, -rect_size.y, prev_w, rect_size.y, border_radius);
-                df.gloop(gloopiness);
-            }
-            if next_w > 0. {
-                df.box(next_x, rect_size.y, next_w, rect_size.y, border_radius);
-                df.gloop(gloopiness);
-            }
-            //df_shape *= cos(pos.x*8.)+cos(pos.y*16.);
-            return df.fill(color);
-        }"#
-    ),
-);
-static SHADER_PAREN_PAIR: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER, QuadIns::SHADER],
-    code_fragment!(
-        r#"
-        instance color: vec4;
-        fn pixel() -> vec4 {
-            let df = Df::viewport(pos * rect_size);
-            df.rect(0., rect_size.y - 1.5 - dpi_dilate, rect_size.x, 1.5 + dpi_dilate);
-            return df.fill(color);
-        }"#
-    ),
-);
-static SHADER_SEARCH_MARKER: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER, QuadIns::SHADER],
-    code_fragment!(
-        r#"
-        instance color: vec4;
-        fn pixel() -> vec4 {
-            let pos2 = vec2(pos.x, pos.y + 0.03 * sin(pos.x * rect_size.x));
-            let df = Df::viewport(pos2 * rect_size);
-            df.move_to(0., rect_size.y - 1.);
-            df.line_to(rect_size.x, rect_size.y - 1.);
-            return df.stroke(vec4(171.0/255.0,99.0/255.0,99.0/255.0,1.0), 0.8);
-        }"#
-    ),
-);
-static SHADER_MESSAGE_MARKER: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER, QuadIns::SHADER],
-    code_fragment!(
-        r#"
-        instance color: vec4;
-        fn pixel() -> vec4 {
-            let pos2 = vec2(pos.x, pos.y + 0.03 * sin(pos.x * rect_size.x));
-            let df = Df::viewport(pos2 * rect_size);
-            df.move_to(0., rect_size.y - 1.);
-            df.line_to(rect_size.x, rect_size.y - 1.);
-            return df.stroke(color, 0.8);
-        }"#
-    ),
-);
+            fn pixel() -> vec4 {
+                let df = Df::viewport(pos * rect_size);
+                df.box(0., 0., rect_size.x, rect_size.y, border_radius);
+                if prev_w > 0. {
+                    df.box(prev_x, -rect_size.y, prev_w, rect_size.y, border_radius);
+                    df.gloop(gloopiness);
+                }
+                if next_w > 0. {
+                    df.box(next_x, rect_size.y, next_w, rect_size.y, border_radius);
+                    df.gloop(gloopiness);
+                }
+                //df_shape *= cos(pos.x*8.)+cos(pos.y*16.);
+                return df.fill(color);
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
+static SHADER_PAREN_PAIR: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            instance color: vec4;
+            fn pixel() -> vec4 {
+                let df = Df::viewport(pos * rect_size);
+                df.rect(0., rect_size.y - 1.5 - dpi_dilate, rect_size.x, 1.5 + dpi_dilate);
+                return df.fill(color);
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
+static SHADER_SEARCH_MARKER: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            instance color: vec4;
+            fn pixel() -> vec4 {
+                let pos2 = vec2(pos.x, pos.y + 0.03 * sin(pos.x * rect_size.x));
+                let df = Df::viewport(pos2 * rect_size);
+                df.move_to(0., rect_size.y - 1.);
+                df.line_to(rect_size.x, rect_size.y - 1.);
+                return df.stroke(vec4(171.0/255.0,99.0/255.0,99.0/255.0,1.0), 0.8);
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
+static SHADER_MESSAGE_MARKER: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            instance color: vec4;
+            fn pixel() -> vec4 {
+                let pos2 = vec2(pos.x, pos.y + 0.03 * sin(pos.x * rect_size.x));
+                let df = Df::viewport(pos2 * rect_size);
+                df.move_to(0., rect_size.y - 1.);
+                df.line_to(rect_size.x, rect_size.y - 1.);
+                return df.stroke(color, 0.8);
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
 
 /// Convenient type of [`QuadIns`] which has a single `color` field, which is
 /// drawn as the background by default. You pass in your own [`Shader`].
@@ -1151,10 +1175,21 @@ impl TextEditor {
         cx.move_turtle(self.line_number_width, self.top_padding);
     }
 
-    pub fn begin_text_editor(&mut self, cx: &mut Cx, text_buffer: &TextBuffer) -> Result<(), ()> {
+    pub fn begin_text_editor(
+        &mut self,
+        cx: &mut Cx,
+        text_buffer: &TextBuffer,
+        override_view_walk: Option<Walk>,
+    ) -> Result<(), ()> {
         // adjust dilation based on DPI factor
-        self.view.begin_view(cx, Layout::default());
 
+        let view_layout = if let Some(view_walk) = override_view_walk {
+            Layout { walk: view_walk, ..Layout::default() }
+        } else {
+            Layout::default()
+        };
+
+        self.view.begin_view(cx, view_layout);
         self.apply_style();
 
         //println!("{:?}", self.cursors.set[0]);

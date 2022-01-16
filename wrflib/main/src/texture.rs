@@ -6,7 +6,7 @@
 
 //! Managing GPU textures.
 
-use crate::cx::*;
+use crate::*;
 
 /// A persistent reference to a GPU texture.
 ///
@@ -93,7 +93,7 @@ impl TextureHandle {
 
 // TODO(Paras): Standardize and test all platforms on RGBA.
 // TODO(Paras): Make image_u32 updating work on Linux.
-#[derive(Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub(crate) enum TextureFormat {
     ImageRGBA,
     Depth32Stencil8,

@@ -22,7 +22,7 @@
 //!
 //! Note that one level higher, we have a hierarchy of [`Pass`]es.
 
-use crate::cx::*;
+use crate::*;
 
 use crate::Debugger;
 
@@ -354,12 +354,6 @@ impl Cx {
         let total_instance_slots = self.shaders[shader_id].mapping.instance_props.total_slots;
         assert_eq!(total_instance_slots * std::mem::size_of::<f32>(), std::mem::size_of::<T>());
         let dc = self.create_draw_call(shader_id, props);
-        let data_f32 = unsafe {
-            std::slice::from_raw_parts(
-                data as *const [_] as *const f32,
-                data.len() * (std::mem::size_of::<T>() / std::mem::size_of::<f32>()),
-            )
-        };
         let ia = InstanceRangeArea {
             view_id: dc.view_id,
             draw_call_id: dc.draw_call_id,
@@ -367,7 +361,7 @@ impl Cx {
             instance_offset: dc.instances.len(),
             redraw_id: dc.redraw_id,
         };
-        dc.instances.extend_from_slice(data_f32);
+        dc.instances.extend_from_slice(data.as_f32_slice());
         let area = Area::InstanceRange(ia);
         self.add_to_turtle_align_list(area);
         area
@@ -387,10 +381,10 @@ impl Cx {
     }
 
     /// Add a slice of instances while specifying a custom Geometry
-    pub fn add_mesh_instances<T: Sized>(&mut self, shader: &'static Shader, data: &[T], geometry: Geometry) -> Area {
+    pub fn add_mesh_instances<T: Sized>(&mut self, shader: &'static Shader, data: &[T], gpu_geometry: GpuGeometry) -> Area {
         assert!(self.shader_group_instance_offsets.is_empty(), "Can't add mesh instances when in a shader group");
 
-        self.add_instances_internal(shader, data, DrawCallProps { geometry: Some(geometry), ..Default::default() })
+        self.add_instances_internal(shader, data, DrawCallProps { gpu_geometry: Some(gpu_geometry), ..Default::default() })
     }
 
     /// By default, [`DrawCall`] gets horizontal and vertical scrolling applied to
@@ -550,12 +544,12 @@ impl DrawUniforms {
 }
 
 /// Some user-defined props to initialize a [`DrawCall`] with.
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub(crate) struct DrawCallProps {
     /// The base [`Geometry`] object that will be used for generating the initial
     /// vertex locations for every instance, such as a rectangle or cube.
     /// This is currently only used when specifying custom meshes.
-    pub(crate) geometry: Option<Geometry>,
+    pub(crate) gpu_geometry: Option<GpuGeometry>,
     /// See [`Cx::add_instances_with_scroll_sticky`].
     scroll_sticky_vertical: bool,
     /// See [`Cx::add_instances_with_scroll_sticky`].
@@ -564,7 +558,7 @@ pub(crate) struct DrawCallProps {
 impl DrawCallProps {
     /// Whether the draw call can be batched, or if a new one should be created.
     fn is_batchable(&self) -> bool {
-        self.geometry.is_none() && !self.scroll_sticky_horizontal && !self.scroll_sticky_vertical
+        self.gpu_geometry.is_none() && !self.scroll_sticky_horizontal && !self.scroll_sticky_vertical
     }
 }
 
@@ -584,7 +578,7 @@ impl DrawCallProps {
 /// It is always kept in [`CxView::draw_calls`], and as said, is part of a tree
 /// structure, called the "draw tree". To print a textual representation of the
 /// draw tree, use [`Cx::debug_flags_mut`].
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub struct DrawCall {
     /// The index of this [`DrawCall`] within its parent [`CxView::draw_calls`].
     pub(crate) draw_call_id: usize,

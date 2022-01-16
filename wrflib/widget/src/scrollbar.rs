@@ -17,29 +17,33 @@ struct ScrollBarIns {
     norm_scroll: f32,
 }
 
-static SHADER: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER, QuadIns::SHADER],
-    code_fragment!(
-        r#"
-        instance color: vec4;
-        instance is_vertical: float;
-        instance norm_handle: float;
-        instance norm_scroll: float;
-        const border_radius: float = 1.5;
+static SHADER: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            instance color: vec4;
+            instance is_vertical: float;
+            instance norm_handle: float;
+            instance norm_scroll: float;
+            const border_radius: float = 1.5;
 
-        fn pixel() -> vec4 {
-            let df = Df::viewport(pos * rect_size);
-            if is_vertical > 0.5 {
-                df.box(1., rect_size.y * norm_scroll, rect_size.x * 0.5, rect_size.y * norm_handle, border_radius);
-            }
-            else {
-                df.box(rect_size.x * norm_scroll, 1., rect_size.x * norm_handle, rect_size.y * 0.5, border_radius);
-            }
-            return df.fill_keep(color);
-        }"#
-    ),
-);
+            fn pixel() -> vec4 {
+                let df = Df::viewport(pos * rect_size);
+                if is_vertical > 0.5 {
+                    df.box(1., rect_size.y * norm_scroll, rect_size.x * 0.5, rect_size.y * norm_handle, border_radius);
+                }
+                else {
+                    df.box(rect_size.x * norm_scroll, 1., rect_size.x * norm_handle, rect_size.y * 0.5, border_radius);
+                }
+                return df.fill_keep(color);
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
 
 #[derive(Debug)]
 pub struct ScrollBar {

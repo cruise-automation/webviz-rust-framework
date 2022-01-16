@@ -6,7 +6,7 @@
 
 //! "Pointer" into the draw tree.
 
-use crate::cx::*;
+use crate::*;
 
 /// An [`Area`] can be thought of as a "pointer" into the draw tree. You typically
 /// get one as the result of a draw command, like [`Cx::add_instances`],
@@ -213,6 +213,7 @@ impl Area {
                 let total_instance_slots = sh.mapping.instance_props.total_slots;
                 assert_eq!(total_instance_slots * std::mem::size_of::<f32>(), std::mem::size_of::<T>());
 
+                // TODO(JP): Move to cast.rs?
                 unsafe {
                     std::slice::from_raw_parts(
                         draw_call.instances.as_ptr().add(inst.instance_offset) as *const T,
@@ -269,6 +270,7 @@ impl Area {
                 cx.passes[cxview.pass_id].paint_dirty = true;
                 draw_call.instance_dirty = true;
 
+                // TODO(JP): Move to cast.rs?
                 unsafe {
                     std::slice::from_raw_parts_mut(
                         draw_call.instances.as_mut_ptr().add(inst.instance_offset) as *mut T,

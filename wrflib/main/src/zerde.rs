@@ -50,18 +50,13 @@ use std::mem;
 use std::ptr;
 use std::sync::Arc;
 
-use crate::WrfParam;
-
-// WrfParam types that can come back from JavaScript
-// TODO(Paras): This could be cleaner as an enum, but casting between u32s and enums is a bit annoying.
-const WRF_PARAM_STRING: u32 = 0;
-const WRF_PARAM_READ_ONLY_BUFFER: u32 = 1;
-const WRF_PARAM_BUFFER: u32 = 2;
+use crate::*;
 
 /// Serializing data into a Zerde buffer.
 pub(crate) struct ZerdeBuilder {
     mu32: *mut u32,
     mf32: *mut f32,
+    mu64: *mut u64,
     mf64: *mut f64,
     slots: usize,
     used_slots: isize,
@@ -75,7 +70,14 @@ impl ZerdeBuilder {
                 alloc::alloc(alloc::Layout::from_size_align(4 * slots as usize, mem::align_of::<u32>()).unwrap()) as *mut u32;
             (buf as *mut u64).write(4 * slots as u64);
 
-            Self { mu32: buf as *mut u32, mf32: buf as *mut f32, mf64: buf as *mut f64, slots, used_slots: 2 }
+            Self {
+                mu32: buf as *mut u32,
+                mf32: buf as *mut f32,
+                mu64: buf as *mut u64,
+                mf64: buf as *mut f64,
+                slots,
+                used_slots: 2,
+            }
         }
     }
 
@@ -103,6 +105,7 @@ impl ZerdeBuilder {
             self.slots = new_slots;
             self.mu32 = new_buf;
             self.mf32 = new_buf as *mut f32;
+            self.mu64 = new_buf as *mut u64;
             self.mf64 = new_buf as *mut f64;
         }
         let pos = self.used_slots;
@@ -138,6 +141,18 @@ impl ZerdeBuilder {
         }
     }
 
+    pub(crate) fn send_u64(&mut self, v: u64) {
+        if self.used_slots & 1 != 0 {
+            // 64-bit alignment.
+            self.fit(1);
+        }
+        // NOTE(JP): Cannot inline `pos` here!
+        let pos = self.fit(2);
+        unsafe {
+            self.mu64.offset(pos >> 1).write(v);
+        }
+    }
+
     pub(crate) fn send_string(&mut self, msg: &str) {
         let len = msg.chars().count();
         self.send_u32(len as u32);
@@ -169,6 +184,26 @@ impl ZerdeBuilder {
         }
     }
 
+    fn build_mutable_buffer<T>(&mut self, buffer_type: u32, mut buffer: Vec<T>) {
+        self.send_u32(buffer_type);
+
+        self.send_u32(buffer.as_mut_ptr() as u32);
+        self.send_u32((buffer.len() * std::mem::size_of::<T>()) as u32);
+        self.send_u32((buffer.capacity() * std::mem::size_of::<T>()) as u32);
+
+        mem::forget(buffer);
+    }
+
+    fn build_read_only_buffer<T>(&mut self, buffer_type: u32, buffer: Arc<Vec<T>>) {
+        self.send_u32(buffer_type);
+
+        self.send_u32(buffer.as_ptr() as u32);
+        self.send_u32((buffer.len() * std::mem::size_of::<T>()) as u32);
+        // releasing buffer from Arc memory management
+        let arc_ptr = Arc::into_raw(Arc::clone(&buffer)) as u32;
+        self.send_u32(arc_ptr);
+    }
+
     pub(crate) fn build_wrf_params(&mut self, params: Vec<WrfParam>) {
         self.send_u32(params.len() as u32);
 
@@ -179,23 +214,17 @@ impl ZerdeBuilder {
 
                     self.send_string(&str);
                 }
-                WrfParam::ReadOnlyBuffer(buffer) => {
-                    self.send_u32(WRF_PARAM_READ_ONLY_BUFFER);
-
-                    self.send_u32(buffer.as_ptr() as u32);
-                    self.send_u32(buffer.len() as u32);
-                    // releasing buffer from Arc memory management
-                    let arc_ptr = Arc::into_raw(Arc::clone(&buffer)) as u32;
-                    self.send_u32(arc_ptr);
+                WrfParam::ReadOnlyU8Buffer(buffer) => {
+                    self.build_read_only_buffer(WRF_PARAM_READ_ONLY_UINT8_BUFFER, buffer);
                 }
-                WrfParam::Buffer(mut buffer) => {
-                    self.send_u32(WRF_PARAM_BUFFER);
-
-                    self.send_u32(buffer.as_mut_ptr() as u32);
-                    self.send_u32(buffer.len() as u32);
-                    self.send_u32(buffer.capacity() as u32);
-
-                    mem::forget(buffer);
+                WrfParam::U8Buffer(buffer) => {
+                    self.build_mutable_buffer(WRF_PARAM_UINT8_BUFFER, buffer);
+                }
+                WrfParam::ReadOnlyF32Buffer(buffer) => {
+                    self.build_read_only_buffer(WRF_PARAM_READ_ONLY_FLOAT32_BUFFER, buffer);
+                }
+                WrfParam::F32Buffer(buffer) => {
+                    self.build_mutable_buffer(WRF_PARAM_FLOAT32_BUFFER, buffer);
                 }
             }
         }
@@ -299,9 +328,16 @@ impl ZerdeParser {
         unsafe { Vec::<u8>::from_raw_parts(vec_ptr, vec_len, vec_len) }
     }
 
-    pub(crate) fn parse_arc_vec(&mut self) -> Arc<Vec<u8>> {
-        let arc_ptr = self.parse_u32() as *const Vec<u8>;
+    pub(crate) fn parse_arc_vec<T>(&mut self) -> Arc<Vec<T>> {
+        let arc_ptr = self.parse_u32() as *const Vec<T>;
         unsafe { Arc::from_raw(arc_ptr) }
+    }
+
+    fn parse_buffer<T>(&mut self) -> Vec<T> {
+        let vec_ptr = self.parse_u32();
+        let vec_len = self.parse_u32() as usize / std::mem::size_of::<T>();
+        let vec_cap = self.parse_u32() as usize / std::mem::size_of::<T>();
+        unsafe { Vec::from_raw_parts(vec_ptr as *mut T, vec_len, vec_cap) }
     }
 
     pub(crate) fn parse_wrf_params(&mut self) -> Vec<WrfParam> {
@@ -310,15 +346,11 @@ impl ZerdeParser {
             .map(|_| {
                 let param_type = self.parse_u32();
                 match param_type {
-                    WRF_PARAM_STRING => WrfParam::String(self.parse_string()),
-                    WRF_PARAM_READ_ONLY_BUFFER => WrfParam::ReadOnlyBuffer(self.parse_arc_vec()),
-                    WRF_PARAM_BUFFER => {
-                        let vec_ptr = self.parse_u32();
-                        let vec_len = self.parse_u32();
-                        let vec_cap = self.parse_u32();
-                        let vec = unsafe { Vec::from_raw_parts(vec_ptr as *mut u8, vec_len as usize, vec_cap as usize) };
-                        WrfParam::Buffer(vec)
-                    }
+                    WRF_PARAM_STRING => self.parse_string().into_param(),
+                    WRF_PARAM_READ_ONLY_UINT8_BUFFER => self.parse_arc_vec::<u8>().into_param(),
+                    WRF_PARAM_READ_ONLY_FLOAT32_BUFFER => self.parse_arc_vec::<f32>().into_param(),
+                    WRF_PARAM_UINT8_BUFFER => self.parse_buffer::<u8>().into_param(),
+                    WRF_PARAM_FLOAT32_BUFFER => self.parse_buffer::<f32>().into_param(),
                     value => panic!("Unexpected param type: {}", value),
                 }
             })

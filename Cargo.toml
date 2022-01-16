@@ -6,14 +6,26 @@
 
 [workspace]
 resolver = "2"
-
 members = [
-    "wrflib/examples/bigedit",
-    "wrflib/examples/bare_example",
-    "wrflib/examples/layout_example",
-    "wrflib/examples/multithread_example",
-    "wrflib/examples/popover_example",
-    "wrflib/examples/shader_editor",
-    "wrflib/examples/widget_example",
+    "wrflib/examples/example_bigedit",
+    "wrflib/examples/example_bigedit/http",
+    "wrflib/examples/example_bigedit/hub",
+    "wrflib/examples/example_bigedit/macrolib",
+    "wrflib/examples/example_bigedit/microserde",
+    "wrflib/examples/example_bigedit/microserde/derive",
+    "wrflib/examples/example_charts",
+    "wrflib/examples/example_lots_of_buttons",
+    "wrflib/examples/example_shader",
+    "wrflib/examples/example_single_button",
+    "wrflib/examples/example_text",
+    "wrflib/examples/test_bottom_bar",
+    "wrflib/examples/test_geometry",
+    "wrflib/examples/test_layout",
+    "wrflib/examples/test_many_quads",
+    "wrflib/examples/test_multithread",
+    "wrflib/examples/test_padding",
+    "wrflib/examples/test_popover",
+    "wrflib/examples/test_shader_2d_primitives",
+    "wrflib/examples/tutorial_js_rust_bridge",
     "wrflib/test_suite",
 ]

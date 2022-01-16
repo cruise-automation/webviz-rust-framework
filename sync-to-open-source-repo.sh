@@ -37,8 +37,8 @@ rm -rf $TEMP_REPO
 git clone git@github.com:cruise-automation/webviz-rust-framework.git $TEMP_REPO
 
 # Sync up files.
-rsync -av --delete --exclude .git --exclude target/ wrflib_open_source_root/ $TEMP_REPO/
-rsync -av --delete --exclude .git --exclude target/ wrflib/ $TEMP_REPO/wrflib/
+rsync -av --delete --exclude .git --exclude target/ --exclude 'cef_binary_*' --exclude node_modules/ wrflib_open_source_root/ $TEMP_REPO/
+rsync -av --delete --exclude .git --exclude target/ --exclude 'cef_binary_*' --exclude node_modules/ wrflib/ $TEMP_REPO/wrflib/
 rsync -av rustfmt.toml $TEMP_REPO/rustfmt.toml
 pushd $TEMP_REPO
   # Create a new branch (actually for now let's just commit directly to master)

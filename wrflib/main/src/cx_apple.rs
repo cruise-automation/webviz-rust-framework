@@ -12,6 +12,9 @@
 #![allow(non_camel_case_types)]
 #![allow(non_upper_case_globals)]
 
+use std::ffi::c_void;
+use std::ptr::NonNull;
+
 pub(crate) use wrflib_objc_sys::declare::ClassDecl;
 pub(crate) use wrflib_objc_sys::runtime::{Class, Object, Protocol, Sel, BOOL, NO, YES};
 pub(crate) use wrflib_objc_sys::{class, msg_send, sel, sel_impl};
@@ -20,6 +23,38 @@ pub(crate) use wrflib_objc_sys::{Encode, Encoding};
 
 pub(crate) type id = *mut wrflib_objc_sys::runtime::Object;
 pub(crate) const nil: id = 0 as id;
+
+pub struct RcObjcId(NonNull<Object>);
+
+impl RcObjcId {
+    pub fn from_owned(id: NonNull<Object>) -> Self {
+        Self(id)
+    }
+
+    pub fn from_unowned(id: NonNull<Object>) -> Self {
+        unsafe {
+            let _: () = msg_send![id.as_ptr(), retain];
+        }
+        Self::from_owned(id)
+    }
+
+    pub fn as_id(&self) -> id {
+        self.0.as_ptr()
+    }
+
+    pub fn forget(self) -> NonNull<Object> {
+        unsafe {
+            let _: () = msg_send![self.0.as_ptr(), retain];
+        }
+        self.0
+    }
+}
+
+#[link(name = "system")]
+extern "C" {
+    pub static _NSConcreteStackBlock: [*const c_void; 32];
+    pub static _NSConcreteBogusBlock: [*const c_void; 32];
+}
 
 #[link(name = "Foundation", kind = "framework")]
 extern "C" {

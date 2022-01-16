@@ -7,12 +7,10 @@
 import { cursorMap } from "./cursor_map";
 import {
   Rpc,
-  initTaskWorkerSab,
   getWasmEnv,
-  makeThreadLocalStorageAndStackDataOnMainWorker,
+  makeThreadLocalStorageAndStackDataOnExistingThread,
   initThreadLocalStorageMainWorker,
 } from "./common";
-import { RpcEvent } from "./make_rpc_event";
 import {
   TextareaEventKeyDown,
   TextareaEventKeyUp,
@@ -20,26 +18,27 @@ import {
 } from "./make_textarea";
 import {
   FileHandle,
-  ShaderAttributes,
-  Texture,
-  Uniform,
   WasmExports,
-  CallJSData,
-  BufferData,
-  UserWorkerInitReturnValue,
   PostMessageTypedArray,
-  WorkerEvent,
-  UserWorkerEvent,
-  AsyncWorkerEvent,
-  TaskWorkerEvent,
   SizingData,
-  AsyncWorkerRunValue,
+  WrfArray,
+  MutableBufferData,
+  RustWrfParam,
 } from "./types";
 import { ZerdeParser } from "./zerde";
 import { ZerdeEventloopEvents } from "./zerde_eventloop_events";
 import { packKeyModifier } from "./zerde_keyboard_handlers";
+import { WebGLRenderer } from "./webgl_renderer";
+import { RpcMouseEvent, RpcTouchEvent, RpcWheelEvent } from "./make_rpc_event";
+import {
+  Worker,
+  WasmWorkerRpc,
+  WebWorkerRpc,
+  WorkerEvent,
+  MainWorkerChannelEvent,
+} from "./rpc_types";
 
-const rpc = new Rpc(self);
+const rpc = new Rpc<Worker<WasmWorkerRpc>>(self);
 
 const isFirefox =
   self.navigator.userAgent.toLowerCase().indexOf("firefox") > -1;
@@ -55,6 +54,7 @@ type Resource = { name: string; buffer: ArrayBuffer };
 export type Finger = {
   x: number;
   y: number;
+  button: number;
   digit: number;
   time: number;
   modifiers: number;
@@ -67,119 +67,101 @@ export type FingerScroll = Finger & {
   isWheel: boolean;
 };
 
+// TODO(Paras): Stop patching sendStack onto websockets
+// and maintain our own structure instead.
+type WebSocketWithSendStack = WebSocket & {
+  sendStack?: Uint8Array[] | null;
+};
+
 export class WasmApp {
   memory: WebAssembly.Memory;
   exports: WasmExports;
-  canvas: OffscreenCanvas;
   module: WebAssembly.Module;
-  sizingData: SizingData;
-  baseUri: string;
-  shaders: {
-    geomAttribs: ReturnType<WasmApp["getAttribLocations"]>;
-    instAttribs: ReturnType<WasmApp["getAttribLocations"]>;
-    passUniforms: ReturnType<WasmApp["getUniformLocations"]>;
-    viewUniforms: ReturnType<WasmApp["getUniformLocations"]>;
-    drawUniforms: ReturnType<WasmApp["getUniformLocations"]>;
-    userUniforms: ReturnType<WasmApp["getUniformLocations"]>;
-    textureSlots: ReturnType<WasmApp["getUniformLocations"]>;
-    instanceSlots: number;
-    program: WebGLProgram;
-    ash: ShaderAttributes;
-  }[];
-  indexBuffers: { glBuf: WebGLBuffer; length: number }[];
-  arrayBuffers: { glBuf: WebGLBuffer; length: number }[];
-  timers: Timer[];
-  vaos: {
-    glVao: WebGLVertexArrayObjectOES;
-    geomIbId: number;
-    geomVbId: number;
-    instVbId: number;
-  }[];
-  textures: Texture[];
-  framebuffers: unknown[];
-  resources: Promise<Resource>[];
-  reqAnimFrameId: number;
-  websockets: unknown;
-  fileHandles: FileHandle[];
-  zerdeEventloopEvents: ZerdeEventloopEvents;
-  appPtr: BigInt;
-  doWasmBlock: boolean;
-  xrCanPresent: boolean;
-  xrIsPresenting: boolean;
-  zerdeParser: ZerdeParser;
-  basef32: Float32Array;
-  baseu32: Uint32Array;
-  basef64: Float64Array;
-  baseu64: BigUint64Array;
-  sendFnTable: ((self: this) => void | boolean)[];
-  gl: WebGLRenderingContext;
-  // eslint-disable-next-line camelcase
-  OESStandardDerivatives: OES_standard_derivatives;
-  // eslint-disable-next-line camelcase
-  OESVertexArrayObject: OES_vertex_array_object;
-  // eslint-disable-next-line camelcase
-  OESElementIndexUint: OES_element_index_uint;
-  // eslint-disable-next-line camelcase
-  ANGLEInstancedArrays: ANGLE_instanced_arrays;
-  inAnimationFrame: boolean;
-  isMainCanvas: boolean;
-  targetWidth: number;
-  targetHeight: number;
-  colorTargets: number;
-  clearFlags: number;
-  clearR: number;
-  clearG: number;
-  clearB: number;
-  clearA: number;
-  clearDepth: number;
-  uniformFnTable: Record<
-    string,
-    (self: this, loc: WebGLUniformLocation, off: number) => void
+  private sizingData: SizingData;
+  private baseUri: string;
+  private timers: Timer[];
+  private resources: Promise<Resource>[];
+  private hasRequestedAnimationFrame: boolean;
+  private websockets: Record<string, WebSocketWithSendStack | null>;
+  private fileHandles: FileHandle[];
+  private zerdeEventloopEvents: ZerdeEventloopEvents;
+  private appPtr: BigInt;
+  private doWasmBlock: boolean;
+  private xrCanPresent = false;
+  private xrIsPresenting = false;
+  private zerdeParser!: ZerdeParser;
+  private callRustNewCallbackId: number;
+  private callRustPendingCallbacks: Record<
+    number,
+    (arg0: RustWrfParam[]) => void
   >;
-  callRustNewCallbackId: number;
-  callRustPendingCallbacks: Record<number, (arg0: any) => void>;
+  // WebGLRenderer if we're using an OffscreenCanvas. If not, this is undefined.
+  private webglRenderer: WebGLRenderer | undefined;
+  // Promise which is set when we have an active RunWebGL call in the main browser thread.
+  private runWebGLPromise: Promise<void> | undefined;
 
   constructor({
     offscreenCanvas,
-    webasm,
+    wasmModule,
+    wasmExports,
     memory,
     sizingData,
     baseUri,
     fileHandles,
     taskWorkerSab,
   }: {
-    offscreenCanvas: OffscreenCanvas;
-    webasm: WebAssembly.WebAssemblyInstantiatedSource;
+    offscreenCanvas: OffscreenCanvas | undefined;
+    wasmModule: WebAssembly.Module;
+    wasmExports: WasmExports;
     memory: WebAssembly.Memory;
     sizingData: SizingData;
     baseUri: string;
     fileHandles: FileHandle[];
     taskWorkerSab: SharedArrayBuffer;
   }) {
-    this.canvas = offscreenCanvas;
-    this.module = webasm.module;
-    this.exports = webasm.instance.exports as WasmExports;
+    this.module = wasmModule;
+    this.exports = wasmExports;
     this.memory = memory;
-    this.sizingData = sizingData;
     this.baseUri = baseUri;
+    this.sizingData = sizingData;
 
-    // local webgl resources
-    this.shaders = [];
-    this.indexBuffers = [];
-    this.arrayBuffers = [];
     this.timers = [];
-    this.vaos = [];
-    this.textures = [];
-    this.framebuffers = [];
     this.resources = [];
-    this.reqAnimFrameId = 0;
+    this.hasRequestedAnimationFrame = false;
     this.websockets = {};
     this.fileHandles = fileHandles;
 
     this.callRustNewCallbackId = 0;
     this.callRustPendingCallbacks = {};
 
-    this.initWebglContext();
+    if (offscreenCanvas) {
+      this.webglRenderer = new WebGLRenderer(
+        offscreenCanvas,
+        this.memory,
+        this.sizingData,
+        () => {
+          rpc.send(WorkerEvent.ShowIncompatibleBrowserNotification);
+        }
+      );
+    }
+
+    rpc.receive(WorkerEvent.ScreenResize, (sizingData: SizingData) => {
+      this.sizingData = sizingData;
+      if (this.webglRenderer) {
+        this.webglRenderer.resize(this.sizingData);
+      }
+
+      this.zerdeEventloopEvents.resize({
+        width: this.sizingData.width,
+        height: this.sizingData.height,
+        dpiFactor: this.sizingData.dpiFactor,
+        xrIsPresenting: this.xrIsPresenting,
+        xrCanPresent: this.xrCanPresent,
+        isFullscreen: this.sizingData.isFullscreen,
+      });
+      this.requestAnimationFrame();
+    });
+
     // this.run_async_webxr_check();
     this.bindMouseAndTouch();
     this.bindKeyboard();
@@ -200,37 +182,29 @@ export class WasmApp {
       params,
     }: {
       name: string;
-      params: (string | PostMessageTypedArray | Uint8Array)[];
-    }): Promise<(string | BufferData)[]> => {
+      params: (string | PostMessageTypedArray | WrfArray)[];
+    }): Promise<RustWrfParam[]> => {
       const callbackId = this.callRustNewCallbackId++;
-      const promise = new Promise<(string | BufferData)[]>(
-        (resolve, _reject) => {
-          this.callRustPendingCallbacks[callbackId] = (data) => {
-            // TODO(Dmitry): implement retrun_error on rust side and use reject(...) to communicate the error
-            resolve(data);
-          };
-        }
-      );
+      const promise = new Promise<RustWrfParam[]>((resolve, _reject) => {
+        this.callRustPendingCallbacks[callbackId] = (data: RustWrfParam[]) => {
+          // TODO(Dmitry): implement retrun_error on rust side and use reject(...) to communicate the error
+          resolve(data);
+        };
+      });
 
       this.zerdeEventloopEvents.callRust(name, params, callbackId);
       this.doWasmIo();
       return promise;
     };
-    rpc.receive<
-      { name: string; params: (string | PostMessageTypedArray | Uint8Array)[] },
-      Promise<(string | BufferData)[]>
-    >(WorkerEvent.CallRust, callRust);
+    rpc.receive(WorkerEvent.CallRust, callRust);
 
-    rpc.receive(WorkerEvent.CreateBuffer, (data: Uint8Array) =>
+    rpc.receive(WorkerEvent.CreateBuffer, (data: WrfArray) =>
       this.zerdeEventloopEvents.createWasmBuffer(data)
     );
 
-    rpc.receive(WorkerEvent.CreateReadOnlyBuffer, (data: Uint8Array) => {
+    rpc.receive(WorkerEvent.CreateReadOnlyBuffer, (data: WrfArray) => {
       const bufferPtr = this.zerdeEventloopEvents.createWasmBuffer(data);
-      const arcPtr = this.zerdeEventloopEvents.createArcVec(
-        bufferPtr,
-        data.byteLength
-      );
+      const arcPtr = this.zerdeEventloopEvents.createArcVec(bufferPtr, data);
       return { bufferPtr, arcPtr };
     });
 
@@ -244,7 +218,7 @@ export class WasmApp {
 
     rpc.receive(
       WorkerEvent.DeallocVec,
-      ({ bufferPtr, bufferLen, bufferCap }: BufferData) => {
+      ({ bufferPtr, bufferLen, bufferCap }: MutableBufferData) => {
         this.exports.deallocVec(
           BigInt(bufferPtr),
           BigInt(bufferLen),
@@ -253,50 +227,37 @@ export class WasmApp {
       }
     );
 
-    const bindUserWorkerPortOnMainThread = (port: MessagePort) => {
-      const userWorkerRpc = new Rpc(port);
+    const bindMainWorkerPort = (port: MessagePort) => {
+      const userWorkerRpc = new Rpc<Worker<WebWorkerRpc>>(port);
+      userWorkerRpc.receive(MainWorkerChannelEvent.Init, () => ({
+        wasmModule: this.module,
+        memory: this.memory,
+        taskWorkerSab,
+        appPtr: this.appPtr,
+        baseUri,
+        tlsAndStackData: makeThreadLocalStorageAndStackDataOnExistingThread(
+          this.exports
+        ),
+      }));
       userWorkerRpc.receive(
-        UserWorkerEvent.Init,
-        (): UserWorkerInitReturnValue => {
-          return {
-            wasmModule: this.module,
-            memory: this.memory,
-            taskWorkerSab,
-            appPtr: this.appPtr,
-            baseUri,
-            tlsAndStackData: makeThreadLocalStorageAndStackDataOnMainWorker(
-              this.exports
-            ),
-          };
-        }
-      );
-      userWorkerRpc.receive(
-        UserWorkerEvent.BindUserWorkerPortOnMainThread,
-        ({ port }) => {
-          bindUserWorkerPortOnMainThread(port);
+        MainWorkerChannelEvent.BindMainWorkerPort,
+        (port: MessagePort) => {
+          bindMainWorkerPort(port);
         }
       );
 
-      userWorkerRpc.receive<
-        {
-          name: string;
-          params: (string | PostMessageTypedArray | Uint8Array)[];
-        },
-        Promise<(string | BufferData)[]>
-      >(UserWorkerEvent.CallRust, callRust);
+      userWorkerRpc.receive(MainWorkerChannelEvent.CallRust, callRust);
+
       userWorkerRpc.receive(
-        UserWorkerEvent.SendEventFromAnyThread,
-        (eventPtr: bigint) => {
+        MainWorkerChannelEvent.SendEventFromAnyThread,
+        (eventPtr: BigInt) => {
           this.sendEventFromAnyThread(eventPtr);
         }
       );
     };
-    rpc.receive(
-      WorkerEvent.BindUserWorkerPortOnMainThread,
-      (port: MessagePort) => {
-        bindUserWorkerPortOnMainThread(port);
-      }
-    );
+    rpc.receive(WorkerEvent.BindMainWorkerPort, (port) => {
+      bindMainWorkerPort(port);
+    });
 
     // create initial zerdeEventloopEvents
     this.zerdeEventloopEvents = new ZerdeEventloopEvents(this);
@@ -312,7 +273,7 @@ export class WasmApp {
     Promise.all(this.resources).then(this.doDepResults.bind(this));
   }
 
-  doDepResults(results: Resource[]): void {
+  private doDepResults(results: Resource[]): void {
     const deps: Dependency[] = [];
     // copy our reslts into wasm pointers
     for (let i = 0; i < results.length; i++) {
@@ -342,10 +303,10 @@ export class WasmApp {
     this.doWasmBlock = false;
     this.doWasmIo();
 
-    rpc.send(WorkerEvent.RemoveLoadingIndicators, {});
+    rpc.send(WorkerEvent.RemoveLoadingIndicators);
   }
 
-  doWasmIo(): void {
+  private doWasmIo(): void {
     if (this.doWasmBlock) {
       return;
     }
@@ -359,18 +320,10 @@ export class WasmApp {
     this.zerdeEventloopEvents = new ZerdeEventloopEvents(this);
     this.zerdeParser = new ZerdeParser(this.memory, zerdeParserPtr);
 
-    this.basef32 = new Float32Array(this.memory.buffer);
-    this.baseu32 = new Uint32Array(this.memory.buffer);
-    this.basef64 = new Float64Array(this.memory.buffer);
-    this.baseu64 = new BigUint64Array(this.memory.buffer);
-
-    // process all messages
-    const sendFnTable = this.sendFnTable;
-
     // eslint-disable-next-line no-constant-condition
-    while (1) {
+    while (true) {
       const msgType = this.zerdeParser.parseU32();
-      if (sendFnTable[msgType](this)) {
+      if (this.sendFnTable[msgType](this)) {
         break;
       }
     }
@@ -379,20 +332,20 @@ export class WasmApp {
   }
 
   // TODO(JP): Should use sychronous file loading for this.
-  loadDeps(deps: string[]): void {
+  private loadDeps(deps: string[]): void {
     for (let i = 0; i < deps.length; i++) {
       const filePath = deps[i];
       this.resources.push(this.fetchPath(filePath));
     }
   }
 
-  setDocumentTitle(title: string): void {
-    rpc.send(WorkerEvent.SetDocumentTitle, { title });
+  private setDocumentTitle(title: string): void {
+    rpc.send(WorkerEvent.SetDocumentTitle, title);
   }
 
-  bindMouseAndTouch(): void {
+  private bindMouseAndTouch(): void {
     let lastMouseFinger;
-    // TODO(JP): Some day bring back touch support..
+    // TODO(JP): Some day bring back touch scroll support..
     // let use_touch_scroll_overlay = window.ontouchstart === null;
     // if (use_touch_scroll_overlay) {
     //     var ts = this.touch_scroll_overlay = document.createElement('div')
@@ -454,11 +407,21 @@ export class WasmApp {
     //     })
     // }
 
-    const mouseFingers = [];
-    function mouseToFinger(e: RpcEvent): Finger {
+    const mouseFingers: {
+      x: number;
+      y: number;
+      button: number;
+      digit: number;
+      time: number;
+      modifiers: number;
+      touch: boolean;
+    }[] = [];
+    function mouseToFinger(e: RpcMouseEvent | RpcWheelEvent): Finger {
+      // @ts-ignore; TypeScript does not like the empty object declaration below, but we immediately fill every field
       const mf = mouseFingers[e.button] || (mouseFingers[e.button] = {});
       mf.x = e.pageX;
       mf.y = e.pageY;
+      mf.button = e.button;
       mf.digit = e.button;
       mf.time = performance.now() / 1000.0;
       mf.modifiers = packKeyModifier(e);
@@ -466,107 +429,18 @@ export class WasmApp {
       return mf;
     }
 
-    // var digit_map = {}
-    // var digit_alloc = 0;
-
-    // function touch_to_finger_alloc(e) {
-    //     var f = []
-    //     for (let i = 0; i < e.changedTouches.length; i ++) {
-    //         var t = e.changedTouches[i]
-    //         // find an unused digit
-    //         var digit = undefined;
-    //         for (digit in digit_map) {
-    //             if (!digit_map[digit]) break
-    //         }
-    //         // we need to alloc a new one
-    //         if (digit === undefined || digit_map[digit]) digit = digit_alloc ++;
-    //         // store it
-    //         digit_map[digit] = {identifier: t.identifier};
-    //         // return allocated digit
-    //         digit = parseInt(digit);
-
-    //         f.push({
-    //             x: t.pageX,
-    //             y: t.pageY,
-    //             digit: digit,
-    //             time: e.timeStamp / 1000.0,
-    //             modifiers: 0,
-    //             touch: true,
-    //         })
-    //     }
-    //     return f
-    // }
-
-    // function lookup_digit(identifier) {
-    //     for (let digit in digit_map) {
-    //         var digit_id = digit_map[digit]
-    //         if (!digit_id) continue
-    //         if (digit_id.identifier == identifier) {
-    //             return digit
-    //         }
-    //     }
-    // }
-
-    // function touch_to_finger_lookup(e) {
-    //     var f = []
-    //     for (let i = 0; i < e.changedTouches.length; i ++) {
-    //         var t = e.changedTouches[i]
-    //         f.push({
-    //             x: t.pageX,
-    //             y: t.pageY,
-    //             digit: lookup_digit(t.identifier),
-    //             time: e.timeStamp / 1000.0,
-    //             modifiers: {},
-    //             touch: true,
-    //         })
-    //     }
-    //     return f
-    // }
-
-    // function touch_to_finger_free(e) {
-    //     var f = []
-    //     for (let i = 0; i < e.changedTouches.length; i ++) {
-    //         var t = e.changedTouches[i]
-    //         var digit = lookup_digit(t.identifier)
-    //         if (!digit) {
-    //             console.log("Undefined state in free_digit");
-    //             digit = 0
-    //         }
-    //         else {
-    //             digit_map[digit] = undefined
-    //         }
-
-    //         f.push({
-    //             x: t.pageX,
-    //             y: t.pageY,
-    //             time: e.timeStamp / 1000.0,
-    //             digit: digit,
-    //             modifiers: 0,
-    //             touch: true,
-    //         })
-    //     }
-    //     return f
-    // }
-
-    // var easy_xr_presenting_toggle = window.localStorage.getItem("xr_presenting") == "true"
-
-    const mouseButtonsDown = [];
-    rpc.receive(
-      WorkerEvent.CanvasMouseDown,
-      ({ event }: { event: RpcEvent }) => {
-        mouseButtonsDown[event.button] = true;
-        this.zerdeEventloopEvents.fingerDown(mouseToFinger(event));
-        this.doWasmIo();
-      }
-    );
-
-    rpc.receive(WorkerEvent.WindowMouseUp, ({ event }) => {
+    const mouseButtonsDown: boolean[] = [];
+    rpc.receive(WorkerEvent.CanvasMouseDown, (event: RpcMouseEvent) => {
+      mouseButtonsDown[event.button] = true;
+      this.zerdeEventloopEvents.fingerDown(mouseToFinger(event));
+      this.doWasmIo();
+    });
+    rpc.receive(WorkerEvent.WindowMouseUp, (event: RpcMouseEvent) => {
       mouseButtonsDown[event.button] = false;
       this.zerdeEventloopEvents.fingerUp(mouseToFinger(event));
       this.doWasmIo();
     });
-
-    rpc.receive(WorkerEvent.WindowMouseMove, ({ event }) => {
+    rpc.receive(WorkerEvent.WindowMouseMove, (event: RpcMouseEvent) => {
       for (let i = 0; i < mouseButtonsDown.length; i++) {
         if (mouseButtonsDown[i]) {
           const mf = mouseToFinger(event);
@@ -577,55 +451,79 @@ export class WasmApp {
       lastMouseFinger = mouseToFinger(event);
       this.zerdeEventloopEvents.fingerHover(lastMouseFinger);
       this.doWasmIo();
-      //console.log("Redraw cycle "+(end-begin)+" ms");
     });
-
-    rpc.receive(WorkerEvent.WindowMouseOut, ({ event }) => {
-      this.zerdeEventloopEvents.fingerOut(mouseToFinger(event)); //e.pageX, e.pageY, pa;
+    rpc.receive(WorkerEvent.WindowMouseOut, (event: RpcMouseEvent) => {
+      this.zerdeEventloopEvents.fingerOut(mouseToFinger(event));
       this.doWasmIo();
     });
-    // canvas.addEventListener('touchstart', e => {
-    //     e.preventDefault()
 
-    //     let fingers = touch_to_finger_alloc(e);
-    //     for (let i = 0; i < fingers.length; i ++) {
-    //         this.zerdeEventloopEvents.finger_down(fingers[i])
-    //     }
-    //     this.do_wasm_io();
-    //     return false
-    // })
-    // canvas.addEventListener('touchmove', e => {
-    //     //e.preventDefault();
-    //     var fingers = touch_to_finger_lookup(e);
-    //     for (let i = 0; i < fingers.length; i ++) {
-    //         this.zerdeEventloopEvents.finger_move(fingers[i])
-    //     }
-    //     this.do_wasm_io();
-    //     return false
-    // }, {passive: false})
+    const touchIdsByDigit: (number | undefined)[] = [];
+    rpc.receive(WorkerEvent.WindowTouchStart, (event: RpcTouchEvent) => {
+      for (const touch of event.changedTouches) {
+        let digit = touchIdsByDigit.indexOf(undefined);
+        if (digit === -1) {
+          digit = touchIdsByDigit.length;
+        }
+        touchIdsByDigit[digit] = touch.identifier;
 
-    // var end_cancel_leave = e => {
-    //     //if (easy_xr_presenting_toggle) {
-    //     //    easy_xr_presenting_toggle = false;
-    //     //    this.xr_start_presenting();
-    //     //};
-
-    //     e.preventDefault();
-    //     var fingers = touch_to_finger_free(e);
-    //     for (let i = 0; i < fingers.length; i ++) {
-    //         this.zerdeEventloopEvents.finger_up(fingers[i])
-    //     }
-    //     this.do_wasm_io();
-    //     return false
-    // }
-
-    // canvas.addEventListener('touchend', end_cancel_leave);
-    // canvas.addEventListener('touchcancel', end_cancel_leave);
-    // canvas.addEventListener('touchleave', end_cancel_leave);
+        this.zerdeEventloopEvents.fingerDown({
+          x: touch.pageX,
+          y: touch.pageY,
+          button: 0,
+          digit,
+          time: performance.now() / 1000.0,
+          modifiers: packKeyModifier(event),
+          touch: true,
+        });
+      }
+      this.doWasmIo();
+    });
+    rpc.receive(WorkerEvent.WindowTouchMove, (event: RpcTouchEvent) => {
+      for (const touch of event.changedTouches) {
+        const digit = touchIdsByDigit.indexOf(touch.identifier);
+        if (digit == -1) {
+          console.error("Unrecognized digit in WorkerEvent.WindowTouchMove");
+          continue;
+        }
+        this.zerdeEventloopEvents.fingerMove({
+          x: touch.pageX,
+          y: touch.pageY,
+          button: 0,
+          digit,
+          time: performance.now() / 1000.0,
+          modifiers: packKeyModifier(event),
+          touch: true,
+        });
+      }
+      this.doWasmIo();
+    });
+    rpc.receive(
+      WorkerEvent.WindowTouchEndCancelLeave,
+      (event: RpcTouchEvent) => {
+        for (const touch of event.changedTouches) {
+          const digit = touchIdsByDigit.indexOf(touch.identifier);
+          if (digit == -1) {
+            console.error("Unrecognized digit in WorkerEvent.WindowTouchMove");
+            continue;
+          }
+          touchIdsByDigit[digit] = undefined;
+          this.zerdeEventloopEvents.fingerUp({
+            x: touch.pageX,
+            y: touch.pageY,
+            button: 0,
+            digit,
+            time: performance.now() / 1000.0,
+            modifiers: packKeyModifier(event),
+            touch: true,
+          });
+        }
+        this.doWasmIo();
+      }
+    );
 
     let lastWheelTime: number;
     let lastWasWheel: boolean;
-    rpc.receive(WorkerEvent.CanvasWheel, ({ event }: { event: RpcEvent }) => {
+    rpc.receive(WorkerEvent.CanvasWheel, (event: RpcWheelEvent) => {
       const finger = mouseToFinger(event);
       const delta = event.timeStamp - lastWheelTime;
       lastWheelTime = event.timeStamp;
@@ -635,6 +533,7 @@ export class WasmApp {
       } else {
         // detect it
         if (
+          // @ts-ignore: TODO(Paras): wheelDeltaY looks different between browsers. Figure out a more consistent interface.
           Math.abs(Math.abs(event.deltaY / event.wheelDeltaY) - 1 / 3) <
             0.00001 ||
           (!lastWasWheel && delta < 250)
@@ -669,7 +568,7 @@ export class WasmApp {
     //window.addEventListener('webkitmouseforcechanged', this.onCheckMacForce.bind(this), false)
   }
 
-  bindKeyboard(): void {
+  private bindKeyboard(): void {
     rpc.receive(WorkerEvent.TextInput, (data: TextareaEventTextInput) => {
       this.zerdeEventloopEvents.textInput(data);
       this.doWasmIo();
@@ -688,11 +587,11 @@ export class WasmApp {
     });
   }
 
-  setMouseCursor(id: number): void {
-    rpc.send(WorkerEvent.SetMouseCursor, { style: cursorMap[id] || "default" });
+  private setMouseCursor(id: number): void {
+    rpc.send(WorkerEvent.SetMouseCursor, cursorMap[id] || "default");
   }
 
-  startTimer(id: number, interval: number, repeats: number): void {
+  private startTimer(id: number, interval: number, repeats: number): void {
     for (let i = 0; i < this.timers.length; i++) {
       if (this.timers[i].id == id) {
         console.log("Timer ID collision!");
@@ -720,7 +619,7 @@ export class WasmApp {
     this.timers.push({ id, repeats, sysId });
   }
 
-  stopTimer(id: number): void {
+  private stopTimer(id: number): void {
     for (let i = 0; i < this.timers.length; i++) {
       const timer = this.timers[i];
       if (timer.id == id) {
@@ -736,7 +635,7 @@ export class WasmApp {
     //console.log("Timer ID not found!")
   }
 
-  httpSend(
+  private httpSend(
     verb: string,
     path: string,
     proto: string,
@@ -767,14 +666,13 @@ export class WasmApp {
     req.send(body.buffer);
   }
 
-  websocketSend(url: string, data: Uint8Array): void {
+  private websocketSend(url: string, data: Uint8Array): void {
     // TODO(Paras): Stop patching sendStack onto websockets
     // and maintain our own structure instead.
     const socket = this.websockets[url];
     if (!socket) {
-      const socket = new WebSocket(url);
+      const socket = new WebSocket(url) as WebSocketWithSendStack;
       this.websockets[url] = socket;
-      // @ts-ignore
       socket.sendStack = [data];
       socket.addEventListener("close", () => {
         this.websockets[url] = null;
@@ -785,15 +683,13 @@ export class WasmApp {
         this.doWasmIo();
       });
       socket.addEventListener("message", (event) => {
-        event.data.arrayBuffer().then((data) => {
+        event.data.arrayBuffer().then((data: ArrayBuffer) => {
           this.zerdeEventloopEvents.websocketMessage(url, data);
           this.doWasmIo();
         });
       });
       socket.addEventListener("open", () => {
-        // @ts-ignore
-        const sendStack = socket.sendStack;
-        // @ts-ignore
+        const sendStack = socket.sendStack as Uint8Array[];
         socket.sendStack = null;
         for (data of sendStack) {
           socket.send(data);
@@ -808,13 +704,13 @@ export class WasmApp {
     }
   }
 
-  enableGlobalFileDropTarget(): void {
-    rpc.send(WorkerEvent.EnableGlobalFileDropTarget, {});
+  private enableGlobalFileDropTarget(): void {
+    rpc.send(WorkerEvent.EnableGlobalFileDropTarget);
     rpc.receive(WorkerEvent.DragEnter, () => {
       this.zerdeEventloopEvents.dragenter();
       this.doWasmIo();
     });
-    rpc.receive(WorkerEvent.DragOver, ({ x, y }) => {
+    rpc.receive(WorkerEvent.DragOver, ({ x, y }: { x: number; y: number }) => {
       this.zerdeEventloopEvents.dragover(x, y);
       this.doWasmIo();
     });
@@ -822,102 +718,66 @@ export class WasmApp {
       this.zerdeEventloopEvents.dragleave();
       this.doWasmIo();
     });
-    rpc.receive(WorkerEvent.Drop, ({ files }) => {
-      const fileHandlesToSend = [];
-      for (const file of files) {
-        const fileHandle = {
-          id: this.fileHandles.length,
-          basename: file.name,
-          file,
-          lastReadStart: -1,
-          lastReadEnd: -1,
-        };
-        fileHandlesToSend.push(fileHandle);
-        this.fileHandles.push(fileHandle);
+    rpc.receive(
+      WorkerEvent.Drop,
+      ({
+        fileHandles,
+        fileHandlesToSend,
+      }: {
+        fileHandles: FileHandle[];
+        fileHandlesToSend: FileHandle[];
+      }) => {
+        // We can't set this.fileHandles to a new object, since other places hold
+        // references to it. Instead, clear it out and fill it up again.
+        this.fileHandles.splice(0, this.fileHandles.length);
+        this.fileHandles.push(...fileHandles);
+        this.zerdeEventloopEvents.appOpenFiles(fileHandlesToSend);
+        this.doWasmIo();
       }
-      this.zerdeEventloopEvents.appOpenFiles(fileHandlesToSend);
-      this.doWasmIo();
-    });
+    );
   }
 
-  initWebglContext(): void {
-    rpc.receive(WorkerEvent.ScreenResize, (sizingData: SizingData) => {
-      this.sizingData = sizingData;
-
-      this.canvas.width = sizingData.width * sizingData.dpiFactor;
-      this.canvas.height = sizingData.height * sizingData.dpiFactor;
-      this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-
-      this.zerdeEventloopEvents.resize({
-        width: this.sizingData.width,
-        height: this.sizingData.height,
-        dpiFactor: this.sizingData.dpiFactor,
-        xrIsPresenting: this.xrIsPresenting,
-        xrCanPresent: this.xrCanPresent,
-        isFullscreen: this.sizingData.isFullscreen,
-      });
-      this.requestAnimationFrame();
-    });
-
-    const options = {
-      preferLowPowerToHighPerformance: true,
-      // xrCompatible: true // TODO(JP): Bring back some day?
-    };
-    // @ts-ignore - TODO(Paras): Get proper support for OffscreenCanvas
-    const gl = (this.gl =
-      // @ts-ignore
-      this.canvas.getContext("webgl", options) ||
-      // @ts-ignore
-      this.canvas.getContext("webgl-experimental", options) ||
-      // @ts-ignore
-      this.canvas.getContext("experimental-webgl", options));
-
-    if (!gl) {
-      rpc.send(WorkerEvent.ShowIncompatibleBrowserNotification, {});
+  private async requestAnimationFrame(): Promise<void> {
+    if (this.xrIsPresenting || this.hasRequestedAnimationFrame) {
       return;
     }
-    this.OESStandardDerivatives = gl.getExtension("OES_standard_derivatives");
-    this.OESVertexArrayObject = gl.getExtension("OES_vertex_array_object");
-    this.OESElementIndexUint = gl.getExtension("OES_element_index_uint");
-    this.ANGLEInstancedArrays = gl.getExtension("ANGLE_instanced_arrays");
-  }
-
-  requestAnimationFrame(): void {
-    if (this.xrIsPresenting || this.reqAnimFrameId) {
-      return;
+    this.hasRequestedAnimationFrame = true;
+    if (this.runWebGLPromise) {
+      await this.runWebGLPromise;
     }
-    this.reqAnimFrameId = self.requestAnimationFrame(() => {
-      this.reqAnimFrameId = 0;
+    (self.requestAnimationFrame || self.setTimeout)(async () => {
+      if (this.runWebGLPromise) {
+        await this.runWebGLPromise;
+      }
+      this.hasRequestedAnimationFrame = false;
       if (this.xrIsPresenting) {
         return;
       }
       this.zerdeEventloopEvents.animationFrame();
-      this.inAnimationFrame = true;
       this.doWasmIo();
-      this.inAnimationFrame = false;
     });
   }
 
-  runAsyncWebXRCheck(): void {
-    this.xrCanPresent = false;
-    this.xrIsPresenting = false;
+  // private runAsyncWebXRCheck(): void {
+  //   this.xrCanPresent = false;
+  //   this.xrIsPresenting = false;
 
-    // ok this changes a bunch in how the renderflow works.
-    // first thing we are going to do is get the vr displays.
-    // @ts-ignore - Let's not worry about XR.
-    const xrSystem = self.navigator.xr;
-    if (xrSystem) {
-      xrSystem.isSessionSupported("immersive-vr").then((supported) => {
-        if (supported) {
-          this.xrCanPresent = true;
-        }
-      });
-    } else {
-      console.log("No webVR support found");
-    }
-  }
+  //   // ok this changes a bunch in how the renderflow works.
+  //   // first thing we are going to do is get the vr displays.
+  //   // @ts-ignore - Let's not worry about XR.
+  //   const xrSystem = self.navigator.xr;
+  //   if (xrSystem) {
+  //     xrSystem.isSessionSupported("immersive-vr").then((supported) => {
+  //       if (supported) {
+  //         this.xrCanPresent = true;
+  //       }
+  //     });
+  //   } else {
+  //     console.log("No webVR support found");
+  //   }
+  // }
 
-  xrStartPresenting(): void {
+  private xrStartPresenting(): void {
     // TODO(JP): Some day bring back XR support?
     // if (this.xr_can_present) {
     //     navigator.xr.requestSession('immersive-vr', {requiredFeatures: ['local-floor']}).then(xr_session => {
@@ -981,520 +841,12 @@ export class WasmApp {
     // }
   }
 
-  xrStopPresenting(): void {
+  private xrStopPresenting(): void {
     // ignore for now
   }
 
-  beginMainCanvas(
-    r: number,
-    g: number,
-    b: number,
-    a: number,
-    depth: number
-  ): void {
-    const gl = this.gl;
-    this.isMainCanvas = true;
-    if (this.xrIsPresenting) {
-      // let xr_webgllayer = this.xr_session.renderState.baseLayer;
-      // this.gl.bindFramebuffer(gl.FRAMEBUFFER, xr_webgllayer.framebuffer);
-      // gl.viewport(0, 0, xr_webgllayer.framebufferWidth, xr_webgllayer.framebufferHeight);
-      // // quest 1 is 3648
-      // // quest 2 is 4096
-      // let left_view = this.xr_pose.views[0];
-      // let right_view = this.xr_pose.views[1];
-      // this.xr_left_viewport = xr_webgllayer.getViewport(left_view);
-      // this.xr_right_viewport = xr_webgllayer.getViewport(right_view);
-      // this.xr_left_projection_matrix = left_view.projectionMatrix;
-      // this.xr_left_transform_matrix = left_view.transform.inverse.matrix;
-      // this.xr_left_invtransform_matrix = left_view.transform.matrix;
-      // this.xr_right_projection_matrix = right_view.projectionMatrix;
-      // this.xr_right_transform_matrix = right_view.transform.inverse.matrix;
-      // this.xr_right_camera_pos = right_view.transform.inverse.position;
-      // this.xr_right_invtransform_matrix = right_view.transform.matrix;
-    } else {
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    }
-
-    gl.clearColor(r, g, b, a);
-    gl.clearDepth(depth);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  }
-
-  beginRenderTargets(passId: number, width: number, height: number): void {
-    const gl = this.gl;
-    this.targetWidth = width;
-    this.targetHeight = height;
-    this.colorTargets = 0;
-    this.clearFlags = 0;
-    this.isMainCanvas = false;
-    const glFramebuffer =
-      this.framebuffers[passId] ||
-      (this.framebuffers[passId] = gl.createFramebuffer());
-    gl.bindFramebuffer(gl.FRAMEBUFFER, glFramebuffer);
-  }
-
-  addColorTarget(
-    textureId: number,
-    initOnly: number,
-    r: number,
-    g: number,
-    b: number,
-    a: number
-  ): void {
-    // if use_default
-    this.clearR = r;
-    this.clearG = g;
-    this.clearB = b;
-    this.clearA = a;
-    const gl = this.gl;
-
-    const glTex =
-      this.textures[textureId] ||
-      (this.textures[textureId] = gl.createTexture() as Texture);
-
-    // resize or create texture
-    if (
-      glTex.mpWidth != this.targetWidth ||
-      glTex.mpHeight != this.targetHeight
-    ) {
-      gl.bindTexture(gl.TEXTURE_2D, glTex);
-      this.clearFlags |= gl.COLOR_BUFFER_BIT;
-
-      glTex.mpWidth = this.targetWidth;
-      glTex.mpHeight = this.targetHeight;
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-      gl.texImage2D(
-        gl.TEXTURE_2D,
-        0,
-        gl.RGBA,
-        glTex.mpWidth,
-        glTex.mpHeight,
-        0,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        null
-      );
-    } else if (!initOnly) {
-      this.clearFlags |= gl.COLOR_BUFFER_BIT;
-    }
-
-    gl.framebufferTexture2D(
-      gl.FRAMEBUFFER,
-      gl.COLOR_ATTACHMENT0,
-      gl.TEXTURE_2D,
-      glTex,
-      0
-    );
-    // TODO(Shobhit) - color_targets never gets used, maybe we should remove it in future
-    this.colorTargets += 1;
-  }
-
-  setDepthTarget(textureId: number, initOnly: number, depth: number): void {
-    const gl = this.gl;
-    this.clearDepth = depth;
-
-    const glRenderBuffer =
-      this.textures[textureId] ||
-      (this.textures[textureId] = gl.createRenderbuffer() as Texture);
-
-    if (
-      glRenderBuffer.mpWidth != this.targetWidth ||
-      glRenderBuffer.mpHeight != this.targetHeight
-    ) {
-      // Borrowed concept from https://webglfundamentals.org/webgl/lessons/webgl-render-to-texture.html
-      gl.bindRenderbuffer(gl.RENDERBUFFER, glRenderBuffer);
-      this.clearFlags |= gl.DEPTH_BUFFER_BIT;
-      glRenderBuffer.mpWidth = this.targetWidth;
-      glRenderBuffer.mpHeight = this.targetHeight;
-      gl.renderbufferStorage(
-        gl.RENDERBUFFER,
-        gl.DEPTH_COMPONENT16,
-        this.targetWidth,
-        this.targetHeight
-      );
-    } else if (!initOnly) {
-      this.clearFlags |= gl.DEPTH_BUFFER_BIT;
-    }
-    gl.framebufferRenderbuffer(
-      gl.FRAMEBUFFER,
-      gl.DEPTH_ATTACHMENT,
-      gl.RENDERBUFFER,
-      glRenderBuffer
-    );
-  }
-
-  endRenderTargets(): void {
-    const gl = this.gl;
-
-    // process the actual 'clear'
-    gl.viewport(0, 0, this.targetWidth, this.targetHeight);
-
-    // check if we need to clear color, and depth
-    // clear it
-    if (this.clearFlags) {
-      gl.clearColor(this.clearR, this.clearG, this.clearB, this.clearA);
-      gl.clearDepth(this.clearDepth);
-      gl.clear(this.clearFlags);
-    }
-  }
-
-  setDefaultDepthAndBlendMode(): void {
-    const gl = this.gl;
-    gl.enable(gl.DEPTH_TEST);
-    gl.depthFunc(gl.LEQUAL);
-    gl.blendEquationSeparate(gl.FUNC_ADD, gl.FUNC_ADD);
-    gl.blendFuncSeparate(
-      gl.ONE,
-      gl.ONE_MINUS_SRC_ALPHA,
-      gl.ONE,
-      gl.ONE_MINUS_SRC_ALPHA
-    );
-    gl.enable(gl.BLEND);
-  }
-
-  // new shader helpers
-  getAttribLocations(
-    program: WebGLProgram,
-    base: string,
-    slots: number
-  ): {
-    loc: number;
-    offset: number;
-    size: number;
-    stride: number;
-  }[] {
-    const gl = this.gl;
-    const attribLocs = [];
-    let attribs = slots >> 2;
-    if ((slots & 3) != 0) attribs++;
-    for (let i = 0; i < attribs; i++) {
-      let size = slots - i * 4;
-      if (size > 4) size = 4;
-      attribLocs.push({
-        loc: gl.getAttribLocation(program, base + i),
-        offset: i * 16,
-        size: size,
-        stride: slots * 4,
-      });
-    }
-    return attribLocs;
-  }
-
-  getUniformLocations(
-    program: WebGLProgram,
-    uniforms: Uniform[]
-  ): {
-    name: string;
-    offset: number;
-    ty: string;
-    loc: WebGLUniformLocation;
-    fn: WasmApp["uniformFnTable"][number];
-  }[] {
-    const gl = this.gl;
-    const uniformLocs: {
-      name: string;
-      offset: number;
-      ty: string;
-      loc: WebGLUniformLocation;
-      fn: WasmApp["uniformFnTable"][number];
-    }[] = [];
-    let offset = 0;
-    for (let i = 0; i < uniforms.length; i++) {
-      const uniform = uniforms[i];
-      // lets align the uniform
-      const slots = uniformSizeTable[uniform.ty];
-
-      if ((offset & 3) != 0 && (offset & 3) + slots > 4) {
-        // goes over the boundary
-        offset += 4 - (offset & 3); // make jump to new slot
-      }
-      uniformLocs.push({
-        name: uniform.name,
-        offset: offset << 2,
-        ty: uniform.ty,
-        loc: gl.getUniformLocation(program, uniform.name),
-        fn: this.uniformFnTable[uniform.ty],
-      });
-      offset += slots;
-    }
-    return uniformLocs;
-  }
-
-  compileWebGLShader(ash: ShaderAttributes): void {
-    const gl = this.gl;
-    const vsh = gl.createShader(gl.VERTEX_SHADER);
-
-    gl.shaderSource(vsh, ash.vertex);
-    gl.compileShader(vsh);
-    if (!gl.getShaderParameter(vsh, gl.COMPILE_STATUS)) {
-      console.log(gl.getShaderInfoLog(vsh), addLineNumbersToString(ash.vertex));
-    }
-
-    // compile pixelshader
-    const fsh = gl.createShader(gl.FRAGMENT_SHADER);
-    gl.shaderSource(fsh, ash.fragment);
-    gl.compileShader(fsh);
-    if (!gl.getShaderParameter(fsh, gl.COMPILE_STATUS)) {
-      console.log(
-        gl.getShaderInfoLog(fsh),
-        addLineNumbersToString(ash.fragment)
-      );
-    }
-
-    const program = gl.createProgram();
-    gl.attachShader(program, vsh);
-    gl.attachShader(program, fsh);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.log(
-        gl.getProgramInfoLog(program),
-        addLineNumbersToString(ash.vertex),
-        addLineNumbersToString(ash.fragment)
-      );
-    }
-    // fetch all attribs and uniforms
-    this.shaders[ash.shaderId] = {
-      geomAttribs: this.getAttribLocations(
-        program,
-        "mpsc_packed_geometry_",
-        ash.geometrySlots
-      ),
-      instAttribs: this.getAttribLocations(
-        program,
-        "mpsc_packed_instance_",
-        ash.instanceSlots
-      ),
-      passUniforms: this.getUniformLocations(program, ash.passUniforms),
-      viewUniforms: this.getUniformLocations(program, ash.viewUniforms),
-      drawUniforms: this.getUniformLocations(program, ash.drawUniforms),
-      userUniforms: this.getUniformLocations(program, ash.userUniforms),
-      textureSlots: this.getUniformLocations(program, ash.textureSlots),
-      instanceSlots: ash.instanceSlots,
-      program: program,
-      ash: ash,
-    };
-  }
-
-  allocArrayBuffer(arrayBufferId: number, array: Float32Array): void {
-    const gl = this.gl;
-    let buf = this.arrayBuffers[arrayBufferId];
-    if (buf === undefined) {
-      buf = this.arrayBuffers[arrayBufferId] = {
-        glBuf: gl.createBuffer(),
-        length: array.length,
-      };
-    } else {
-      buf.length = array.length;
-    }
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf.glBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, array, gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ARRAY_BUFFER, null);
-  }
-
-  allocIndexBuffer(indexBufferId: number, array: Uint32Array): void {
-    const gl = this.gl;
-
-    let buf = this.indexBuffers[indexBufferId];
-    if (buf === undefined) {
-      buf = this.indexBuffers[indexBufferId] = {
-        glBuf: gl.createBuffer(),
-        length: array.length,
-      };
-    } else {
-      buf.length = array.length;
-    }
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buf.glBuf);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, array, gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
-  }
-
-  allocTexture(
-    textureId: number,
-    width: number,
-    height: number,
-    dataPtr: number
-  ): void {
-    const gl = this.gl;
-    const glTex = this.textures[textureId] || gl.createTexture();
-
-    gl.bindTexture(gl.TEXTURE_2D, glTex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-    const data = new Uint8Array(
-      this.memory.buffer,
-      dataPtr,
-      width * height * 4
-    );
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA,
-      width,
-      height,
-      0,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      data
-    );
-    this.textures[textureId] = glTex as Texture;
-  }
-
-  allocVao(
-    vaoId: number,
-    shaderId: number,
-    geomIbId: number,
-    geomVbId: number,
-    instVbId: number
-  ): void {
-    const gl = this.gl;
-    const oldVao = this.vaos[vaoId];
-    if (oldVao) {
-      this.OESVertexArrayObject.deleteVertexArrayOES(oldVao.glVao);
-    }
-    const glVao = this.OESVertexArrayObject.createVertexArrayOES();
-    const vao = (this.vaos[vaoId] = { glVao, geomIbId, geomVbId, instVbId });
-
-    this.OESVertexArrayObject.bindVertexArrayOES(vao.glVao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.arrayBuffers[geomVbId].glBuf);
-
-    const shader = this.shaders[shaderId];
-
-    for (let i = 0; i < shader.geomAttribs.length; i++) {
-      const attr = shader.geomAttribs[i];
-      if (attr.loc < 0) {
-        continue;
-      }
-      gl.vertexAttribPointer(
-        attr.loc,
-        attr.size,
-        gl.FLOAT,
-        false,
-        attr.stride,
-        attr.offset
-      );
-      gl.enableVertexAttribArray(attr.loc);
-      this.ANGLEInstancedArrays.vertexAttribDivisorANGLE(attr.loc, 0);
-    }
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.arrayBuffers[instVbId].glBuf);
-    for (let i = 0; i < shader.instAttribs.length; i++) {
-      const attr = shader.instAttribs[i];
-      if (attr.loc < 0) {
-        continue;
-      }
-      gl.vertexAttribPointer(
-        attr.loc,
-        attr.size,
-        gl.FLOAT,
-        false,
-        attr.stride,
-        attr.offset
-      );
-      gl.enableVertexAttribArray(attr.loc);
-      this.ANGLEInstancedArrays.vertexAttribDivisorANGLE(attr.loc, 1);
-    }
-
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffers[geomIbId].glBuf);
-    this.OESVertexArrayObject.bindVertexArrayOES(null);
-  }
-
-  drawCall(
-    shaderId: number,
-    vaoId: number,
-    passUniformsPtr: number,
-    viewUniformsPtr: number,
-    drawUniformsPtr: number,
-    userUniformsPtr: number,
-    texturesPtr: number
-  ): void {
-    const gl = this.gl;
-
-    const shader = this.shaders[shaderId];
-    gl.useProgram(shader.program);
-
-    const vao = this.vaos[vaoId];
-
-    this.OESVertexArrayObject.bindVertexArrayOES(vao.glVao);
-
-    const indexBuffer = this.indexBuffers[vao.geomIbId];
-    const instanceBuffer = this.arrayBuffers[vao.instVbId];
-    // set up uniforms TODO do this a bit more incremental based on uniform layer
-    // also possibly use webGL2 uniform buffers. For now this will suffice for webGL 1 compat
-    const passUniforms = shader.passUniforms;
-    // if vr_presenting
-
-    const viewUniforms = shader.viewUniforms;
-    for (let i = 0; i < viewUniforms.length; i++) {
-      const uni = viewUniforms[i];
-      uni.fn(this, uni.loc, uni.offset + viewUniformsPtr);
-    }
-    const drawUniforms = shader.drawUniforms;
-    for (let i = 0; i < drawUniforms.length; i++) {
-      const uni = drawUniforms[i];
-      uni.fn(this, uni.loc, uni.offset + drawUniformsPtr);
-    }
-    const userUniforms = shader.userUniforms;
-    for (let i = 0; i < userUniforms.length; i++) {
-      const uni = userUniforms[i];
-      uni.fn(this, uni.loc, uni.offset + userUniformsPtr);
-    }
-    const textureSlots = shader.textureSlots;
-    for (let i = 0; i < textureSlots.length; i++) {
-      const texSlot = textureSlots[i];
-      const texId = this.baseu32[(texturesPtr >> 2) + i];
-      const texObj = this.textures[texId];
-      gl.activeTexture(gl.TEXTURE0 + i);
-      gl.bindTexture(gl.TEXTURE_2D, texObj);
-      gl.uniform1i(texSlot.loc, i);
-    }
-    const indices = indexBuffer.length;
-    const instances = instanceBuffer.length / shader.instanceSlots;
-    // lets do a drawcall!
-
-    if (this.isMainCanvas && this.xrIsPresenting) {
-      // for (let i = 3; i < pass_uniforms.length; i ++) {
-      //     let uni = pass_uniforms[i];
-      //     uni.fn(this, uni.loc, uni.offset + pass_uniforms_ptr);
-      // }
-      // // the first 2 matrices are project and view
-      // let left_viewport = this.xr_left_viewport;
-      // gl.viewport(left_viewport.x, left_viewport.y, left_viewport.width, left_viewport.height);
-      // gl.uniformMatrix4fv(pass_uniforms[0].loc, false, this.xr_left_projection_matrix);
-      // gl.uniformMatrix4fv(pass_uniforms[1].loc, false, this.xr_left_transform_matrix);
-      // gl.uniformMatrix4fv(pass_uniforms[2].loc, false, this.xr_left_invtransform_matrix);
-      // this.ANGLE_instanced_arrays.drawElementsInstancedANGLE(gl.TRIANGLES, indices, gl.UNSIGNED_INT, 0, instances);
-      // let right_viewport = this.xr_right_viewport;
-      // gl.viewport(right_viewport.x, right_viewport.y, right_viewport.width, right_viewport.height);
-      // gl.uniformMatrix4fv(pass_uniforms[0].loc, false, this.xr_right_projection_matrix);
-      // gl.uniformMatrix4fv(pass_uniforms[1].loc, false, this.xr_right_transform_matrix);
-      // gl.uniformMatrix4fv(pass_uniforms[2].loc, false, this.xr_right_invtransform_matrix);
-      // this.ANGLE_instanced_arrays.drawElementsInstancedANGLE(gl.TRIANGLES, indices, gl.UNSIGNED_INT, 0, instances);
-    } else {
-      for (let i = 0; i < passUniforms.length; i++) {
-        const uni = passUniforms[i];
-        uni.fn(this, uni.loc, uni.offset + passUniformsPtr);
-      }
-      this.ANGLEInstancedArrays.drawElementsInstancedANGLE(
-        gl.TRIANGLES,
-        indices,
-        gl.UNSIGNED_INT,
-        0,
-        instances
-      );
-    }
-    this.OESVertexArrayObject.bindVertexArrayOES(null);
-  }
-
   // TODO(JP): Should use sychronous file loading for this.
-  fetchPath(filePath: string): Promise<Resource> {
+  private fetchPath(filePath: string): Promise<Resource> {
     return new Promise((resolve, reject) => {
       const req = new XMLHttpRequest();
       req.addEventListener("error", function () {
@@ -1515,350 +867,177 @@ export class WasmApp {
     });
   }
 
-  sendEventFromAnyThread(eventPtr: bigint): void {
+  sendEventFromAnyThread(eventPtr: BigInt): void {
     // Prevent an infinite loop when calling this from an event handler.
     setTimeout(() => {
       this.zerdeEventloopEvents.sendEventFromAnyThread(eventPtr);
       this.doWasmIo();
     });
   }
-}
 
-// array of function id's wasm can call on us, self is pointer to WasmApp
-WasmApp.prototype.sendFnTable = [
-  function end0(_self) {
-    return true;
-  },
-  function log1(self) {
-    console.log(self.zerdeParser.parseString());
-  },
-  function compileWebGLShader2(self) {
-    function parseShvarvec(): Uniform[] {
-      const len = self.zerdeParser.parseU32();
-      const vars: Uniform[] = [];
-      for (let i = 0; i < len; i++) {
-        vars.push({
-          ty: self.zerdeParser.parseString(),
-          name: self.zerdeParser.parseString(),
-        });
+  // Array of function id's wasm can call on us; `self` is pointer to WasmApp.
+  // Function names are suffixed with the index in the array, and annotated with
+  // their name in cx_wasm32.rs, for easier matching.
+  private sendFnTable: ((self: this) => void | boolean)[] = [
+    // end
+    function end0(_self) {
+      return true;
+    },
+    // run_webgl
+    function runWebGL1(self) {
+      const zerdeParserPtr = self.zerdeParser.parseU64();
+      if (self.webglRenderer) {
+        self.webglRenderer.processMessages(Number(zerdeParserPtr));
+        self.exports.deallocWasmMessage(zerdeParserPtr);
+      } else {
+        self.runWebGLPromise = rpc
+          .send(WorkerEvent.RunWebGL, Number(zerdeParserPtr))
+          .then(() => {
+            self.exports.deallocWasmMessage(zerdeParserPtr);
+            self.runWebGLPromise = undefined;
+          });
       }
-      return vars;
-    }
-
-    const ash = {
-      shaderId: self.zerdeParser.parseU32(),
-      fragment: self.zerdeParser.parseString(),
-      vertex: self.zerdeParser.parseString(),
-      geometrySlots: self.zerdeParser.parseU32(),
-      instanceSlots: self.zerdeParser.parseU32(),
-      passUniforms: parseShvarvec(),
-      viewUniforms: parseShvarvec(),
-      drawUniforms: parseShvarvec(),
-      userUniforms: parseShvarvec(),
-      textureSlots: parseShvarvec(),
-    };
-    self.compileWebGLShader(ash);
-  },
-  function allocArrayBuffer3(self) {
-    const arrayBufferId = self.zerdeParser.parseU32();
-    const len = self.zerdeParser.parseU32();
-    const pointer = self.zerdeParser.parseU32();
-    const array = new Float32Array(self.memory.buffer, pointer, len);
-    self.allocArrayBuffer(arrayBufferId, array);
-  },
-  function allocIndexBuffer4(self) {
-    const indexBufferId = self.zerdeParser.parseU32();
-    const len = self.zerdeParser.parseU32();
-    const pointer = self.zerdeParser.parseU32();
-    const array = new Uint32Array(self.memory.buffer, pointer, len);
-    self.allocIndexBuffer(indexBufferId, array);
-  },
-  function allocVao5(self) {
-    const vaoId = self.zerdeParser.parseU32();
-    const shaderId = self.zerdeParser.parseU32();
-    const geomIbId = self.zerdeParser.parseU32();
-    const geomVbId = self.zerdeParser.parseU32();
-    const instVbId = self.zerdeParser.parseU32();
-    self.allocVao(vaoId, shaderId, geomIbId, geomVbId, instVbId);
-  },
-  function drawCall6(self) {
-    const shaderId = self.zerdeParser.parseU32();
-    const vaoId = self.zerdeParser.parseU32();
-    const uniformsPassPtr = self.zerdeParser.parseU32();
-    const uniformsViewPtr = self.zerdeParser.parseU32();
-    const uniformsDrawPtr = self.zerdeParser.parseU32();
-    const uniformsUserPtr = self.zerdeParser.parseU32();
-    const textures = self.zerdeParser.parseU32();
-    self.drawCall(
-      shaderId,
-      vaoId,
-      uniformsPassPtr,
-      uniformsViewPtr,
-      uniformsDrawPtr,
-      uniformsUserPtr,
-      textures
-    );
-  },
-  function unused7(_self) {
-    // unused
-  },
-  function loadDeps8(self) {
-    const deps: string[] = [];
-    const numDeps = self.zerdeParser.parseU32();
-    for (let i = 0; i < numDeps; i++) {
-      deps.push(self.zerdeParser.parseString());
-    }
-    self.loadDeps(deps);
-  },
-  function allocTexture9(self) {
-    const textureId = self.zerdeParser.parseU32();
-    const width = self.zerdeParser.parseU32();
-    const height = self.zerdeParser.parseU32();
-    const dataPtr = self.zerdeParser.parseU32();
-    self.allocTexture(textureId, width, height, dataPtr);
-  },
-  function requestAnimationFrame10(self) {
-    self.requestAnimationFrame();
-  },
-  function setDocumentTitle11(self) {
-    self.setDocumentTitle(self.zerdeParser.parseString());
-  },
-  function setMouseCursor12(self) {
-    self.setMouseCursor(self.zerdeParser.parseU32());
-  },
-  function unused13(_self) {
-    // unused
-  },
-  function showTextIme14(self) {
-    const x = self.zerdeParser.parseF32();
-    const y = self.zerdeParser.parseF32();
-    rpc.send(WorkerEvent.ShowTextIME, { x, y });
-  },
-  function hideTextIme15(_self) {
-    // TODO(JP): doesn't seem to do anything, is that intentional?
-  },
-  function textCopyResponse16(self) {
-    const textCopyResponse = self.zerdeParser.parseString();
-    rpc.send(WorkerEvent.TextCopyResponse, { textCopyResponse });
-  },
-  function startTimer17(self) {
-    const repeats = self.zerdeParser.parseU32();
-    const id = self.zerdeParser.parseF64();
-    const interval = self.zerdeParser.parseF64();
-    self.startTimer(id, interval, repeats);
-  },
-  function stopTimer18(self) {
-    const id = self.zerdeParser.parseF64();
-    self.stopTimer(id);
-  },
-  function xrStartPresenting19(self) {
-    self.xrStartPresenting();
-  },
-  function xrStopPresenting20(self) {
-    self.xrStopPresenting();
-  },
-  function beginRenderTargets21(self) {
-    const passId = self.zerdeParser.parseU32();
-    const width = self.zerdeParser.parseU32();
-    const height = self.zerdeParser.parseU32();
-    self.beginRenderTargets(passId, width, height);
-  },
-  function addColorTarget22(self) {
-    const textureId = self.zerdeParser.parseU32();
-    const initOnly = self.zerdeParser.parseU32();
-    const r = self.zerdeParser.parseF32();
-    const g = self.zerdeParser.parseF32();
-    const b = self.zerdeParser.parseF32();
-    const a = self.zerdeParser.parseF32();
-    self.addColorTarget(textureId, initOnly, r, g, b, a);
-  },
-  function setDepthTarget23(self) {
-    const textureId = self.zerdeParser.parseU32();
-    const initOnly = self.zerdeParser.parseU32();
-    const depth = self.zerdeParser.parseF32();
-    self.setDepthTarget(textureId, initOnly, depth);
-  },
-  function endRenderTargets24(self) {
-    self.endRenderTargets();
-  },
-  function setDefaultDepthAndBlendMode25(self) {
-    self.setDefaultDepthAndBlendMode();
-  },
-  function beginMainCanvas26(self) {
-    const r = self.zerdeParser.parseF32();
-    const g = self.zerdeParser.parseF32();
-    const b = self.zerdeParser.parseF32();
-    const a = self.zerdeParser.parseF32();
-    const depth = self.zerdeParser.parseF32();
-    self.beginMainCanvas(r, g, b, a, depth);
-  },
-  function httpSend27(self) {
-    const port = self.zerdeParser.parseU32();
-    const signalId = self.zerdeParser.parseU32();
-    const verb = self.zerdeParser.parseString();
-    const path = self.zerdeParser.parseString();
-    const proto = self.zerdeParser.parseString();
-    const domain = self.zerdeParser.parseString();
-    const contentType = self.zerdeParser.parseString();
-    const body = self.zerdeParser.parseU8Slice();
-    // do XHR.
-    self.httpSend(verb, path, proto, domain, port, contentType, body, signalId);
-  },
-  function fullscreen28(_self) {
-    rpc.send(WorkerEvent.Fullscreen);
-  },
-  function normalscreen29(_self) {
-    rpc.send(WorkerEvent.Normalscreen);
-  },
-  function websocketSend30(self) {
-    const url = self.zerdeParser.parseString();
-    const data = self.zerdeParser.parseU8Slice();
-    self.websocketSend(url, data);
-  },
-  function enableGlobalFileDropTarget31(self) {
-    self.enableGlobalFileDropTarget();
-  },
-  function callJs32(self) {
-    const fnName = self.zerdeParser.parseString();
-    const params = self.zerdeParser.parseWrfParams();
-    if (fnName === "_wrflibReturnParams") {
-      const callbackId = JSON.parse(params[0] as string);
-      self.callRustPendingCallbacks[callbackId](params.slice(1));
-      delete self.callRustPendingCallbacks[callbackId];
-    } else {
-      const data: CallJSData = { fnName: fnName, params };
-      rpc.send(WorkerEvent.CallJs, data);
-    }
-  },
-];
-
-WasmApp.prototype.uniformFnTable = {
-  float: function setFloat(self, loc, off) {
-    const slot = off >> 2;
-    self.gl.uniform1f(loc, self.basef32[slot]);
-  },
-  vec2: function setVec2(self, loc, off) {
-    const slot = off >> 2;
-    const basef32 = self.basef32;
-    self.gl.uniform2f(loc, basef32[slot], basef32[slot + 1]);
-  },
-  vec3: function setVec3(self, loc, off) {
-    const slot = off >> 2;
-    const basef32 = self.basef32;
-    self.gl.uniform3f(loc, basef32[slot], basef32[slot + 1], basef32[slot + 2]);
-  },
-  vec4: function setVec4(self, loc, off) {
-    const slot = off >> 2;
-    const basef32 = self.basef32;
-    self.gl.uniform4f(
-      loc,
-      basef32[slot],
-      basef32[slot + 1],
-      basef32[slot + 2],
-      basef32[slot + 3]
-    );
-  },
-  mat2: function setMat2(self, loc, off) {
-    self.gl.uniformMatrix2fv(
-      loc,
-      false,
-      new Float32Array(self.memory.buffer, off, 4)
-    );
-  },
-  mat3: function setMat3(self, loc, off) {
-    self.gl.uniformMatrix3fv(
-      loc,
-      false,
-      new Float32Array(self.memory.buffer, off, 9)
-    );
-  },
-  mat4: function setMat4(self, loc, off) {
-    const mat4 = new Float32Array(self.memory.buffer, off, 16);
-    self.gl.uniformMatrix4fv(loc, false, mat4);
-  },
-};
-
-const uniformSizeTable = {
-  float: 1,
-  vec2: 2,
-  vec3: 3,
-  vec4: 4,
-  mat2: 4,
-  mat3: 9,
-  mat4: 16,
-};
-
-function addLineNumbersToString(code) {
-  const lines = code.split("\n");
-  let out = "";
-  for (let i = 0; i < lines.length; i++) {
-    out += i + 1 + ": " + lines[i] + "\n";
-  }
-  return out;
+    },
+    // log
+    function log2(self) {
+      console.log(self.zerdeParser.parseString());
+    },
+    // load_deps
+    function loadDeps3(self) {
+      const deps: string[] = [];
+      const numDeps = self.zerdeParser.parseU32();
+      for (let i = 0; i < numDeps; i++) {
+        deps.push(self.zerdeParser.parseString());
+      }
+      self.loadDeps(deps);
+    },
+    // request_animation_frame
+    function requestAnimationFrame4(self) {
+      self.requestAnimationFrame();
+    },
+    // set_document_title
+    function setDocumentTitle5(self) {
+      self.setDocumentTitle(self.zerdeParser.parseString());
+    },
+    // set_mouse_cursor
+    function setMouseCursor6(self) {
+      self.setMouseCursor(self.zerdeParser.parseU32());
+    },
+    // show_text_ime
+    function showTextIme7(self) {
+      const x = self.zerdeParser.parseF32();
+      const y = self.zerdeParser.parseF32();
+      rpc.send(WorkerEvent.ShowTextIME, { x, y });
+    },
+    // hide_text_ime
+    function hideTextIme8(_self) {
+      // TODO(JP): doesn't seem to do anything, is that intentional?
+    },
+    // text_copy_response
+    function textCopyResponse9(self) {
+      const textCopyResponse = self.zerdeParser.parseString();
+      rpc.send(WorkerEvent.TextCopyResponse, textCopyResponse);
+    },
+    // start_timer
+    function startTimer10(self) {
+      const repeats = self.zerdeParser.parseU32();
+      const id = self.zerdeParser.parseF64();
+      const interval = self.zerdeParser.parseF64();
+      self.startTimer(id, interval, repeats);
+    },
+    // stop_timer
+    function stopTimer11(self) {
+      const id = self.zerdeParser.parseF64();
+      self.stopTimer(id);
+    },
+    // xr_start_presenting
+    function xrStartPresenting12(self) {
+      self.xrStartPresenting();
+    },
+    // xr_stop_presenting
+    function xrStopPresenting13(self) {
+      self.xrStopPresenting();
+    },
+    // http_send
+    function httpSend14(self) {
+      const port = self.zerdeParser.parseU32();
+      const signalId = self.zerdeParser.parseU32();
+      const verb = self.zerdeParser.parseString();
+      const path = self.zerdeParser.parseString();
+      const proto = self.zerdeParser.parseString();
+      const domain = self.zerdeParser.parseString();
+      const contentType = self.zerdeParser.parseString();
+      const body = self.zerdeParser.parseU8Slice();
+      self.httpSend(
+        verb,
+        path,
+        proto,
+        domain,
+        port,
+        contentType,
+        body,
+        signalId
+      );
+    },
+    // fullscreen
+    function fullscreen15(_self) {
+      rpc.send(WorkerEvent.Fullscreen);
+    },
+    // normalscreen
+    function normalscreen16(_self) {
+      rpc.send(WorkerEvent.Normalscreen);
+    },
+    // websocket_send
+    function websocketSend17(self) {
+      const url = self.zerdeParser.parseString();
+      const data = self.zerdeParser.parseU8Slice();
+      self.websocketSend(url, data);
+    },
+    // enable_global_file_drop_target
+    function enableGlobalFileDropTarget18(self) {
+      self.enableGlobalFileDropTarget();
+    },
+    // call_js
+    function callJs19(self) {
+      const fnName = self.zerdeParser.parseString();
+      const params = self.zerdeParser.parseWrfParams();
+      if (fnName === "_wrflibReturnParams") {
+        const callbackId = JSON.parse(params[0] as string);
+        self.callRustPendingCallbacks[callbackId](params.slice(1));
+        delete self.callRustPendingCallbacks[callbackId];
+      } else {
+        rpc.send(WorkerEvent.CallJs, { fnName, params });
+      }
+    },
+  ];
 }
 
 rpc.receive(
   WorkerEvent.Init,
-  ({ offscreenCanvas, wasmFilename, sizingData, baseUri, memory }) => {
-    const wasmPath = new URL(wasmFilename, baseUri).href;
-
-    let wasmapp;
+  ({
+    wasmModule,
+    offscreenCanvas,
+    sizingData,
+    baseUri,
+    memory,
+    taskWorkerSab,
+  }) => {
+    let wasmapp: WasmApp;
     return new Promise<void>((resolve, reject) => {
-      // TODO(JP): These file handles are only sent to a worker when it starts running;
-      // it currently can't receive any file handles added after that.
-      const fileHandles = [];
-
-      const taskWorkerSab = initTaskWorkerSab();
-      const taskWorker = new Worker(
-        new URL("./task_worker.ts", import.meta.url)
-      );
-      const taskWorkerRpc = new Rpc(taskWorker);
-      taskWorkerRpc.send(TaskWorkerEvent.Init, { taskWorkerSab, memory });
-
       const threadSpawn = (ctxPtr: BigInt) => {
-        const worker = new Worker(
-          new URL("./async_worker.ts", import.meta.url)
-        );
-        const workerRpc = new Rpc(worker);
-
-        workerRpc.receive(
-          AsyncWorkerEvent.SendEventFromAnyThread,
-          ({ eventPtr }: { eventPtr: BigInt }) => {
-            wasmapp.sendEventFromAnyThread(eventPtr);
-          }
-        );
-
-        workerRpc.receive(
-          AsyncWorkerEvent.ThreadSpawn,
-          (data: { ctxPtr: BigInt }) => {
-            threadSpawn(data.ctxPtr);
-          }
-        );
-
-        const asyncWorkerRunValue: AsyncWorkerRunValue = {
-          wasmModule: wasmapp.module,
-          memory,
-          taskWorkerSab,
+        rpc.send(WorkerEvent.ThreadSpawn, {
           ctxPtr,
-          fileHandles,
-          baseUri,
-          tlsAndStackData: makeThreadLocalStorageAndStackDataOnMainWorker(
+          tlsAndStackData: makeThreadLocalStorageAndStackDataOnExistingThread(
             wasmapp.exports
           ),
-        };
-        workerRpc
-          .send(AsyncWorkerEvent.Run, asyncWorkerRunValue)
-          .catch((e) => {
-            console.error("async worker failed", e);
-          })
-          .finally(() => {
-            worker.terminate();
-          });
+        });
       };
 
       const getExports = () => {
         return wasmapp.exports;
       };
+
+      const fileHandles: FileHandle[] = [];
 
       const env = getWasmEnv({
         getExports,
@@ -1872,24 +1051,21 @@ rpc.receive(
         baseUri,
       });
 
-      WebAssembly.instantiateStreaming(fetch(wasmPath), { env }).then(
-        (webasm) => {
-          initThreadLocalStorageMainWorker(
-            webasm.instance.exports as WasmExports
-          );
-          wasmapp = new WasmApp({
-            offscreenCanvas,
-            webasm,
-            memory,
-            sizingData,
-            baseUri,
-            fileHandles,
-            taskWorkerSab,
-          });
-          resolve();
-        },
-        reject
-      );
+      WebAssembly.instantiate(wasmModule, { env }).then((instance: any) => {
+        const wasmExports = instance.exports as WasmExports;
+        initThreadLocalStorageMainWorker(wasmExports);
+        wasmapp = new WasmApp({
+          offscreenCanvas,
+          wasmModule,
+          wasmExports,
+          memory,
+          sizingData,
+          baseUri,
+          fileHandles,
+          taskWorkerSab,
+        });
+        resolve();
+      }, reject);
     });
   }
 );

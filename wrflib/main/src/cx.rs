@@ -6,70 +6,19 @@
 
 //! The main module of this crate. Contains [`Cx`], which you will see
 //! used all over the place.
-//!
-//! This re-exports a lot of stuff, and so internally you
-//! will often see us write `use crate::cx::*` (external users should
-//! instead write `use wrflib::*`, which will include all of
-//! the exports in here as well).
+
+use crate::*;
 
 #[cfg(feature = "cef")]
-use crate::cef_browser::MaybeCefBrowser;
-use crate::debug_log::DebugLog;
-use std::any::{Any, TypeId};
-use std::collections::{BTreeSet, HashMap};
-use std::fmt::Write;
-use std::sync::{Arc, RwLock};
+use cef_browser::MaybeCefBrowser;
+use debug_log::DebugLog;
+use std::{
+    any::{Any, TypeId},
+    collections::{BTreeSet, HashMap},
+    fmt::Write,
+    sync::{Arc, RwLock},
+};
 use wrflib_shader_compiler::generate_shader_ast::*;
-
-pub use wrflib_shader_compiler::generate_shader_ast::CodeFragment;
-pub use wrflib_shader_compiler::math::*;
-pub use wrflib_shader_compiler::ty::Ty;
-
-pub use crate::animator::*;
-pub use crate::area::*;
-pub use crate::colors::*;
-pub use crate::component_base::*;
-pub use crate::cursor::*;
-pub use crate::draw_tree::*;
-pub use crate::events::*;
-pub use crate::fonts::*;
-pub use crate::geometry::*;
-pub use crate::hash::*;
-pub use crate::layout::*;
-pub use crate::macros::*;
-pub use crate::menu::*;
-pub use crate::pass::*;
-pub use crate::read_seek::*;
-pub use crate::shader::*;
-pub use crate::texture::*;
-pub use crate::turtle::*;
-pub use crate::universal_instant::*;
-pub use crate::universal_thread::*;
-pub use crate::window::*;
-
-#[cfg(target_os = "linux")]
-pub(crate) use crate::cx_linux::*;
-#[cfg(target_os = "linux")]
-pub(crate) use crate::cx_opengl::*;
-
-#[cfg(target_os = "macos")]
-pub(crate) use crate::cx_macos::*;
-#[cfg(target_os = "macos")]
-pub(crate) use crate::cx_metal::*;
-
-#[cfg(target_os = "windows")]
-pub(crate) use crate::cx_dx11::*;
-#[cfg(target_os = "windows")]
-pub(crate) use crate::cx_windows::*;
-
-#[cfg(target_arch = "wasm32")]
-pub(crate) use crate::cx_webgl::*;
-
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
-pub(crate) use crate::cx_desktop::*;
-
-#[cfg(target_arch = "wasm32")]
-pub use crate::cx_wasm32::*;
 
 /// Contains information about the platform (operating system) that we're running on.
 #[derive(Clone)]
@@ -128,8 +77,8 @@ pub struct Cx {
     pub(crate) shader_recompile_ids: Vec<usize>,
     /// List of actual [`CxTexture`] objects. [`TextureHandle::texture_id`] represents an index in this list.
     pub(crate) textures: Vec<CxTexture>,
-    /// List of actual [`CxGeometry`] objects. [`Geometry::geometry_id`] represents an index in this list.
-    pub(crate) geometries: Vec<CxGeometry>,
+    /// List of actual [`CxGpuGeometry`] objects. [`GpuGeometry::gpu_geometry_id`] represents an index in this list.
+    pub(crate) gpu_geometries: Vec<CxGpuGeometry>,
 
     /// Whether we are currently (re)drawing, ie. we called the app's `draw` function.
     pub(crate) in_redraw_cycle: bool,
@@ -291,6 +240,7 @@ pub struct Cx {
 pub struct CxDebugFlags {
     /// See [`CxDebugDrawTree`].
     pub draw_tree: CxDebugDrawTree,
+
     /// Makes it so every call to `Cx::add_instances` gets a fresh [`DrawCall`]. This is useful for debugging,
     /// since the batching of draw calls can be confusing sometimes (and you should never rely on it happening).
     pub disable_draw_call_batching: bool,
@@ -308,6 +258,8 @@ pub enum CxDebugDrawTree {
     DrawTree,
     /// Print the draw tree and also information on the individual instances.
     Instances,
+    /// Print geometries.
+    Geometries,
 }
 impl Default for CxDebugDrawTree {
     fn default() -> Self {
@@ -363,7 +315,7 @@ impl Cx {
             textures,
             shaders: Vec::with_capacity(50),
             shader_recompile_ids: Vec::with_capacity(50),
-            geometries: Vec::new(),
+            gpu_geometries: Vec::new(),
 
             default_dpi_factor: 1.0,
             current_dpi_factor: 1.0,
@@ -459,7 +411,8 @@ impl Cx {
                             match self.debug_flags.draw_tree {
                                 CxDebugDrawTree::None => self.debug_flags.draw_tree = CxDebugDrawTree::DrawTree,
                                 CxDebugDrawTree::DrawTree => self.debug_flags.draw_tree = CxDebugDrawTree::Instances,
-                                CxDebugDrawTree::Instances => self.debug_flags.draw_tree = CxDebugDrawTree::None,
+                                CxDebugDrawTree::Instances => self.debug_flags.draw_tree = CxDebugDrawTree::Geometries,
+                                CxDebugDrawTree::Geometries => self.debug_flags.draw_tree = CxDebugDrawTree::None,
                             }
                             log!("Set draw_tree to {:?}", self.debug_flags.draw_tree);
                             self.request_draw();
@@ -820,11 +773,25 @@ impl Cx {
     }
 
     pub(crate) fn debug_draw_tree(&mut self, view_id: usize) {
-        if self.debug_flags.draw_tree != CxDebugDrawTree::None {
+        if self.debug_flags.draw_tree == CxDebugDrawTree::DrawTree || self.debug_flags.draw_tree == CxDebugDrawTree::Instances {
             let mut s = String::new();
             let dump_instances = self.debug_flags.draw_tree == CxDebugDrawTree::Instances;
             self.debug_draw_tree_recur(dump_instances, &mut s, view_id, 0);
             crate::log!("{}", &s);
+        }
+        if self.debug_flags.draw_tree == CxDebugDrawTree::Geometries {
+            crate::log!("--------------- Geometries for redraw_id: {} ---------------", self.redraw_id);
+            for (index, gpu_geometry) in self.gpu_geometries.iter().enumerate() {
+                crate::log!(
+                    "{}: vertex data: {} bytes, index data: {} bytes / {} triangles, dirty: {}, usage_count: {}",
+                    index,
+                    gpu_geometry.geometry.vertices_f32_slice().len() * std::mem::size_of::<f32>(),
+                    gpu_geometry.geometry.indices_u32_slice().len() * std::mem::size_of::<f32>(),
+                    gpu_geometry.geometry.indices_u32_slice().len() / 3,
+                    gpu_geometry.dirty,
+                    gpu_geometry.usage_count()
+                );
+            }
         }
     }
 

@@ -16,27 +16,31 @@ struct TabIns {
     border_color: Vec4,
 }
 
-static SHADER: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER, QuadIns::SHADER],
-    code_fragment!(
-        r#"
-        instance color: vec4;
-        instance border_color: vec4;
-        const border_width: float = 1.0;
+static SHADER: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            instance color: vec4;
+            instance border_color: vec4;
+            const border_width: float = 1.0;
 
-        fn pixel() -> vec4 {
-            let df = Df::viewport(pos * rect_size);
-            df.rect(-1., -1., rect_size.x + 2., rect_size.y + 2.);
-            df.fill(color);
-            df.move_to(rect_size.x, 0.);
-            df.line_to(rect_size.x, rect_size.y);
-            df.move_to(0., 0.);
-            df.line_to(0., rect_size.y);
-            return df.stroke(border_color, 1.);
-        }"#
-    ),
-);
+            fn pixel() -> vec4 {
+                let df = Df::viewport(pos * rect_size);
+                df.rect(-1., -1., rect_size.x + 2., rect_size.y + 2.);
+                df.fill(color);
+                df.move_to(rect_size.x, 0.);
+                df.line_to(rect_size.x, rect_size.y);
+                df.move_to(0., 0.);
+                df.line_to(0., rect_size.y);
+                return df.stroke(border_color, 1.);
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
 
 #[derive(Default)]
 pub struct Tab {
@@ -53,7 +57,6 @@ pub struct Tab {
     is_focussed: bool,
     is_down: bool,
     is_drag: bool,
-    turtle: Option<Turtle>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -65,6 +68,8 @@ pub enum TabEvent {
     Close,
     Select,
 }
+
+const TAB_HEIGHT: f32 = 40.;
 
 const COLOR_BG_SELECTED: Vec4 = vec4(0.16, 0.16, 0.16, 1.0);
 const COLOR_BG_NORMAL: Vec4 = vec4(0.2, 0.2, 0.2, 1.0);
@@ -229,51 +234,43 @@ impl Tab {
     }
 
     pub fn begin_tab(&mut self, cx: &mut Cx) -> Result<(), ()> {
-        let tab_height = 40.;
-        let base_layout = Layout {
-            walk: Walk::wh(Width::Compute, Height::Fix(tab_height)),
-            padding: Padding { l: 16.0, t: 1.0, r: 16.0, b: 0.0 },
-            ..Layout::default()
-        };
-
         if let Some(abs_origin) = self.abs_origin {
             // Set tab position by absolute coordinates
-            cx.begin_turtle(Layout { absolute: true, ..Layout::default() });
+            cx.begin_absolute_box();
             cx.begin_padding_box(Padding { l: abs_origin.x, t: abs_origin.y, r: 0., b: 0. });
         };
 
         self.bg_area = cx.add_instances(&SHADER, &[TabIns::default()]);
 
-        self.turtle = Some(cx.begin_turtle(base_layout));
+        cx.begin_row(Width::Compute, Height::Fix(TAB_HEIGHT)); // tab
+        cx.begin_padding_box(Padding { l: 16.0, t: 1.0, r: 16.0, b: 0.0 }); // tab content
 
-        let text_turtle =
-            cx.begin_turtle(Layout { walk: Walk::wh(Width::Compute, Height::Fix(tab_height)), ..Layout::default() });
+        cx.begin_row(Width::Compute, Height::Fix(TAB_HEIGHT));
         cx.begin_center_y_align();
         let draw_str_props = TextInsProps { draw_depth: self.draw_depth, ..TextInsProps::DEFAULT };
         self.text_area = TextIns::draw_walk(cx, &self.label, &draw_str_props);
         cx.end_center_y_align();
-        cx.end_turtle(text_turtle);
+        cx.end_row();
 
         if self.is_closeable {
-            let turtle = cx.begin_turtle(Layout {
-                walk: Walk { width: Width::Fix(10.), height: Height::Fix(tab_height), ..Walk::default() },
-                ..Layout::default()
-            });
+            cx.begin_row(Width::Fix(10.), Height::Fix(TAB_HEIGHT));
             cx.begin_center_y_align();
             self.tab_close.draw(cx);
             cx.end_center_y_align();
-            cx.end_turtle(turtle);
+            cx.end_row();
         }
 
         Ok(())
     }
 
     pub fn end_tab(&mut self, cx: &mut Cx) {
-        let rect = cx.end_turtle(self.turtle.take().unwrap());
+        cx.end_padding_box(); // tab content
+        let rect = cx.end_row(); // tab
+
         // We need to close corresponding turtles which we opened in absolute mode
         if self.abs_origin.is_some() {
-            cx.end_padding_box(); // close padding_box
-            cx.end_last_turtle_unchecked(); // close absolute:true
+            cx.end_padding_box(); // close padding_box for absolute box
+            cx.end_absolute_box();
         }
 
         let bg = self.bg_area.get_first_mut::<TabIns>(cx);

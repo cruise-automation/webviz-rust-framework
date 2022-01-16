@@ -6,7 +6,7 @@
 
 //! Common code between all native desktop platforms. The counterpart is `cx_wasm32`.
 
-use crate::cx::*;
+use crate::*;
 use std::fs::File;
 use std::io::prelude::*;
 use std::net::TcpStream;

@@ -14,23 +14,27 @@ struct BorderIns {
 }
 
 /// Draws small border around the provided rect with transparent background
-static BORDER_SHADER: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER, QuadIns::SHADER],
-    code_fragment!(
-        r#"
-        fn pixel() -> vec4 {
-            let transparent = vec4(0.0, 0.0, 0.0, 0.0);
-            let m = 1.0;
-            let abs_pos = pos * rect_size;
-            if abs_pos.x < m || abs_pos.y < m || abs_pos.x > rect_size.x - m || abs_pos.y > rect_size.y - m {
-                return vec4(1., 1., 0.5, 1.0);
-            } else {
-                return transparent;
-            }
-        }"#
-    ),
-);
+static BORDER_SHADER: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            fn pixel() -> vec4 {
+                let transparent = vec4(0.0, 0.0, 0.0, 0.0);
+                let m = 1.0;
+                let abs_pos = pos * rect_size;
+                if abs_pos.x < m || abs_pos.y < m || abs_pos.x > rect_size.x - m || abs_pos.y > rect_size.y - m {
+                    return vec4(1., 1., 0.5, 1.0);
+                } else {
+                    return transparent;
+                }
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
 
 #[derive(Default, Clone)]
 pub struct Debugger {

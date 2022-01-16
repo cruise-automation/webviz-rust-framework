@@ -1,25 +1,61 @@
 import {
-  getCachedUint8Buffer,
   getWrfBufferWasm,
   isWrfBuffer,
   overwriteTypedArraysWithWrfArrays,
   unregisterMutableBuffer,
   WrfBuffer,
-  wrfArrayCoversWrfBuffer,
+  checkValidWrfArray,
 } from "./wrf_buffer";
-import { Rpc } from "./common";
-import { makeRpcEvent } from "./make_rpc_event";
+import {
+  assertNotNull,
+  getWrfParamType,
+  initTaskWorkerSab,
+  Rpc,
+  transformParamsFromRustImpl,
+} from "./common";
 import { makeTextarea, TextareaEvent } from "./make_textarea";
 import {
-  BufferData,
-  CallJSData,
   CallRust,
   CallJsCallback,
   PostMessageTypedArray,
   CallRustInSameThreadSync,
-  WorkerEvent,
   SizingData,
+  TlsAndStackData,
+  WrfArray,
+  CreateBuffer,
+  FileHandle,
+  MutableBufferData,
+  RustWrfParam,
 } from "./types";
+import { WebGLRenderer } from "./webgl_renderer";
+import {
+  makeRpcMouseEvent,
+  makeRpcTouchEvent,
+  makeRpcWheelEvent,
+} from "./make_rpc_event";
+import {
+  AsyncWorkerRpc,
+  WasmWorkerRpc,
+  WorkerEvent,
+  TaskWorkerEvent,
+  AsyncWorkerEvent,
+} from "./rpc_types";
+
+declare global {
+  interface Document {
+    ExitFullscreen?: () => Promise<void>;
+    webkitExitFullscreen?: () => Promise<void>;
+    mozExitFullscreen?: () => Promise<void>;
+    webkitFullscreenEnabled?: () => Promise<void>;
+    mozFullscreenEnabled?: () => Promise<void>;
+    webkitFullscreenElement?: () => Promise<void>;
+    mozFullscreenElement?: () => Promise<void>;
+  }
+  interface HTMLElement {
+    mozRequestFullscreen?: () => Promise<void>;
+    webkitRequestFullscreen?: () => Promise<void>;
+  }
+}
 
 const jsFunctions: Record<string, CallJsCallback> = {};
 
@@ -52,13 +88,11 @@ export const unregisterCallJsCallbacks = (fnNames: string[]): void => {
   }
 };
 
-let rpc: Rpc;
+let rpc: Rpc<WasmWorkerRpc>;
 
 export const wrfNewWorkerPort = (): MessagePort => {
   const channel = new MessageChannel();
-  rpc.send(WorkerEvent.BindUserWorkerPortOnMainThread, channel.port1, [
-    channel.port1,
-  ]);
+  rpc.send(WorkerEvent.BindMainWorkerPort, channel.port1, [channel.port1]);
   return channel.port2;
 };
 
@@ -68,41 +102,29 @@ const destructor = (arcPtr: number) => {
   rpc.send(WorkerEvent.DecrementArc, arcPtr);
 };
 
-const mutableDestructor = (bufferData: BufferData) => {
+const mutableDestructor = (bufferData: MutableBufferData) => {
   rpc.send(WorkerEvent.DeallocVec, bufferData);
 };
 
-function transformParamsFromRust(params: (string | BufferData)[]) {
-  return params.map((param) => {
-    if (typeof param === "string") {
-      return param;
-    } else {
-      const wrfBuffer = getWrfBufferWasm(
-        wasmMemory,
-        param,
-        destructor,
-        mutableDestructor
-      );
-      return getCachedUint8Buffer(
-        wrfBuffer,
-        // This actually creates a WrfUint8Array as this was overwritten above in overwriteTypedArraysWithWrfArrays()
-        new Uint8Array(wrfBuffer, param.bufferPtr, param.bufferLen)
-      );
-    }
-  });
-}
+const transformParamsFromRust = (params: RustWrfParam[]) =>
+  transformParamsFromRustImpl(
+    wasmMemory,
+    destructor,
+    mutableDestructor,
+    params
+  );
 
 // TODO(JP): Somewhat duplicated with the other implementation.
 const temporarilyHeldBuffersForPostMessage = new Set();
 export const serializeWrfArrayForPostMessage = (
-  wrfArray: Uint8Array
+  wrfArray: WrfArray
 ): PostMessageTypedArray => {
   if (!(typeof wrfArray === "object" && isWrfBuffer(wrfArray.buffer))) {
     throw new Error("Only pass Wrf arrays to serializeWrfArrayForPostMessage");
   }
   const wrfBuffer = wrfArray.buffer as WrfBuffer;
 
-  if (wrfBuffer.readonly) {
+  if (wrfBuffer.__wrflibBufferData.readonly) {
     // Store the buffer temporarily until we've received confirmation that the Arc has been incremented.
     // Otherwise it might get garbage collected and deallocated (if the Arc's count was 1) before it gets
     // incremented.
@@ -128,11 +150,7 @@ export const callRust: CallRust = async (name, params = []) => {
     if (typeof param === "string") {
       return param;
     } else if (isWrfBuffer(param.buffer)) {
-      if (!wrfArrayCoversWrfBuffer(param)) {
-        throw new Error(
-          "callRust only supports buffers that span the entire underlying WrfBuffer"
-        );
-      }
+      checkValidWrfArray(param);
       return serializeWrfArrayForPostMessage(param);
     } else {
       if (!(param.buffer instanceof SharedArrayBuffer)) {
@@ -149,39 +167,40 @@ export const callRust: CallRust = async (name, params = []) => {
   );
 };
 
-export const createBuffer = async (data: Uint8Array): Promise<Uint8Array> => {
+export const createBuffer: CreateBuffer = async (data) => {
   const bufferLen = data.byteLength;
-  const bufferPtr = await rpc.send<number>(WorkerEvent.CreateBuffer, data, [
+  const bufferPtr = await rpc.send(WorkerEvent.CreateBuffer, data, [
     data.buffer,
   ]);
 
   return transformParamsFromRust([
     {
+      paramType: getWrfParamType(data, false),
       bufferPtr,
       bufferLen,
       bufferCap: bufferLen,
-      arcPtr: null,
+      readonly: false,
     },
-  ])[0] as Uint8Array;
+  ])[0] as typeof data;
 };
 
-export const createReadOnlyBuffer = async (
-  data: Uint8Array
-): Promise<Uint8Array> => {
+export const createReadOnlyBuffer: CreateBuffer = async (data) => {
   const bufferLen = data.byteLength;
-  const { bufferPtr, arcPtr } = await rpc.send<{
-    bufferPtr: number;
-    arcPtr: number;
-  }>(WorkerEvent.CreateReadOnlyBuffer, data, [data.buffer]);
+  const { bufferPtr, arcPtr } = await rpc.send(
+    WorkerEvent.CreateReadOnlyBuffer,
+    data,
+    [data.buffer]
+  );
 
   return transformParamsFromRust([
     {
+      paramType: getWrfParamType(data, true),
       bufferPtr,
       bufferLen,
-      bufferCap: undefined,
       arcPtr,
+      readonly: true,
     },
-  ])[0] as Uint8Array;
+  ])[0] as typeof data;
 };
 
 export const deserializeWrfArrayFromPostMessage = (
@@ -217,6 +236,26 @@ export const initialize = (
 
     rpc = new Rpc(new Worker(new URL("./wrf_wasm_worker.ts", import.meta.url)));
 
+    let wasmFilename: string;
+    if ("filename" in initParams) {
+      wasmFilename = initParams.filename;
+    } else {
+      // @ts-ignore
+      const env = new URL(window.document.location).searchParams.get("debug")
+        ? "debug"
+        : "release";
+      wasmFilename = `target/wasm32-unknown-unknown/${env}/${initParams.targetName}.wasm`;
+    }
+    const wasmPath = new URL(wasmFilename, document.baseURI).href;
+
+    // Safari (as of version 15.2) needs the WebAssembly Module to be compiled on the browser's
+    // main thread. This also allows us to start compiling while still waiting for the DOM to load.
+    const wasmModulePromise = WebAssembly.compileStreaming(fetch(wasmPath));
+
+    // TODO(JP): These file handles are only sent to a worker when it starts running;
+    // it currently can't receive any file handles added after that.
+    const fileHandles: FileHandle[] = [];
+
     const loader = () => {
       const isMobileSafari = self.navigator.platform.match(/iPhone|iPad/i);
       const isAndroid = self.navigator.userAgent.match(/Android/i);
@@ -226,7 +265,7 @@ export const initialize = (
       rpc.receive(WorkerEvent.ShowIncompatibleBrowserNotification, () => {
         const span = document.createElement("span");
         span.style.color = "white";
-        canvas.parentNode.replaceChild(span, canvas);
+        assertNotNull(canvas.parentNode).replaceChild(span, canvas);
         span.innerHTML =
           "Sorry, we need browser support for WebGL to run<br/>Please update your browser to a more modern one<br/>Update to at least iOS 10, Safari 10, latest Chrome, Edge or Firefox<br/>Go and update and come back, your browser will be better, faster and more secure!<br/>If you are using chrome on OSX on a 2011/2012 mac please enable your GPU at: Override software rendering list:Enable (the top item) in: <a href='about://flags'>about://flags</a>. Or switch to Firefox or Safari.";
       });
@@ -234,39 +273,39 @@ export const initialize = (
       rpc.receive(WorkerEvent.RemoveLoadingIndicators, () => {
         const loaders = document.getElementsByClassName("cx_webgl_loader");
         for (let i = 0; i < loaders.length; i++) {
-          loaders[i].parentNode.removeChild(loaders[i]);
+          assertNotNull(loaders[i].parentNode).removeChild(loaders[i]);
         }
       });
 
-      rpc.receive(WorkerEvent.SetDocumentTitle, ({ title }) => {
+      rpc.receive(WorkerEvent.SetDocumentTitle, (title: string) => {
         document.title = title;
       });
 
-      rpc.receive(WorkerEvent.SetMouseCursor, ({ style }) => {
+      rpc.receive(WorkerEvent.SetMouseCursor, (style: string) => {
         document.body.style.cursor = style;
       });
 
       rpc.receive(WorkerEvent.Fullscreen, () => {
         if (document.body.requestFullscreen) {
           document.body.requestFullscreen();
-        } else if (document.body["webkitRequestFullscreen"]) {
-          document.body["webkitRequestFullscreen"]();
-        } else if (document.body["mozRequestFullscreen"]) {
-          document.body["mozRequestFullscreen"]();
+        } else if (document.body.webkitRequestFullscreen) {
+          document.body.webkitRequestFullscreen();
+        } else if (document.body.mozRequestFullscreen) {
+          document.body.mozRequestFullscreen();
         }
       });
 
       rpc.receive(WorkerEvent.Normalscreen, () => {
         if (document.exitFullscreen) {
           document.exitFullscreen();
-        } else if (document["webkitExitFullscreen"]) {
-          document["webkitExitFullscreen"]();
-        } else if (document["mozExitFullscreen"]) {
-          document["mozExitFullscreen"]();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        } else if (document.mozExitFullscreen) {
+          document.mozExitFullscreen();
         }
       });
 
-      rpc.receive(WorkerEvent.TextCopyResponse, ({ textCopyResponse }) => {
+      rpc.receive(WorkerEvent.TextCopyResponse, (textCopyResponse: string) => {
         window.navigator.clipboard.writeText(textCopyResponse);
       });
 
@@ -306,11 +345,25 @@ export const initialize = (
           }
           ev.preventDefault();
           ev.stopPropagation();
-          if (rpcInitialized) rpc.send(WorkerEvent.Drop, { files });
+          const fileHandlesToSend: FileHandle[] = [];
+          for (const file of files) {
+            const fileHandle = {
+              id: fileHandles.length,
+              basename: file.name,
+              file,
+              lastReadStart: -1,
+              lastReadEnd: -1,
+            };
+            fileHandlesToSend.push(fileHandle);
+            fileHandles.push(fileHandle);
+          }
+          if (rpcInitialized) {
+            rpc.send(WorkerEvent.Drop, { fileHandles, fileHandlesToSend });
+          }
         });
       });
 
-      rpc.receive(WorkerEvent.CallJs, ({ fnName, params }: CallJSData) => {
+      rpc.receive(WorkerEvent.CallJs, ({ fnName, params }) => {
         const fn = jsFunctions[fnName];
         if (!fn) {
           console.error(
@@ -344,62 +397,86 @@ export const initialize = (
 
       document.addEventListener("mousedown", (event) => {
         if (rpcInitialized)
-          rpc.send(WorkerEvent.CanvasMouseDown, {
-            event: makeRpcEvent(event),
-          });
+          rpc.send(WorkerEvent.CanvasMouseDown, makeRpcMouseEvent(event));
       });
       window.addEventListener("mouseup", (event) => {
         if (rpcInitialized)
-          rpc.send(WorkerEvent.WindowMouseUp, {
-            event: makeRpcEvent(event),
-          });
+          rpc.send(WorkerEvent.WindowMouseUp, makeRpcMouseEvent(event));
       });
       window.addEventListener("mousemove", (event) => {
         document.body.scrollTop = 0;
         document.body.scrollLeft = 0;
         if (rpcInitialized)
-          rpc.send(WorkerEvent.WindowMouseMove, {
-            event: makeRpcEvent(event),
-          });
+          rpc.send(WorkerEvent.WindowMouseMove, makeRpcMouseEvent(event));
       });
       window.addEventListener("mouseout", (event) => {
         if (rpcInitialized)
-          rpc.send(WorkerEvent.WindowMouseOut, {
-            event: makeRpcEvent(event),
-          });
+          rpc.send(WorkerEvent.WindowMouseOut, makeRpcMouseEvent(event));
       });
+
+      document.addEventListener(
+        "touchstart",
+        (event: TouchEvent) => {
+          event.preventDefault();
+          if (rpcInitialized)
+            rpc.send(WorkerEvent.WindowTouchStart, makeRpcTouchEvent(event));
+        },
+        { passive: false }
+      );
+      window.addEventListener(
+        "touchmove",
+        (event: TouchEvent) => {
+          event.preventDefault();
+          if (rpcInitialized)
+            rpc.send(WorkerEvent.WindowTouchMove, makeRpcTouchEvent(event));
+        },
+        { passive: false }
+      );
+      const touchEndCancelLeave = (event: TouchEvent) => {
+        event.preventDefault();
+        if (rpcInitialized)
+          rpc.send(
+            WorkerEvent.WindowTouchEndCancelLeave,
+            makeRpcTouchEvent(event)
+          );
+      };
+      window.addEventListener("touchend", touchEndCancelLeave);
+      window.addEventListener("touchcancel", touchEndCancelLeave);
+
       document.addEventListener("wheel", (event) => {
         if (rpcInitialized)
-          rpc.send(WorkerEvent.CanvasWheel, {
-            event: makeRpcEvent(event),
-          });
+          rpc.send(WorkerEvent.CanvasWheel, makeRpcWheelEvent(event));
       });
       window.addEventListener("focus", () => {
-        if (rpcInitialized) rpc.send(WorkerEvent.WindowFocus, {});
+        if (rpcInitialized) rpc.send(WorkerEvent.WindowFocus);
       });
       window.addEventListener("blur", () => {
-        if (rpcInitialized) rpc.send(WorkerEvent.WindowBlur, {});
+        if (rpcInitialized) rpc.send(WorkerEvent.WindowBlur);
       });
 
       if (!isMobileSafari && !isAndroid) {
         // mobile keyboards are unusable on a UI like this
         const { showTextIME } = makeTextarea((taEvent: TextareaEvent) => {
-          const eventType: WorkerEvent = taEvent.type;
-          if (rpcInitialized) rpc.send(eventType, taEvent);
+          if (rpcInitialized) rpc.send(taEvent.type, taEvent);
         });
         rpc.receive(WorkerEvent.ShowTextIME, showTextIME);
       }
 
+      // One of these variables should get set, depending on if
+      // the browser supports OffscreenCanvas or not.
+      let offscreenCanvas: OffscreenCanvas;
+      let webglRenderer: WebGLRenderer;
+
       function getSizingData(): SizingData {
         const canFullscreen = !!(
           document.fullscreenEnabled ||
-          document["webkitFullscreenEnabled"] ||
-          document["mozFullscreenEnabled"]
+          document.webkitFullscreenEnabled ||
+          document.mozFullscreenEnabled
         );
         const isFullscreen = !!(
           document.fullscreenElement ||
-          document["webkitFullscreenElement"] ||
-          document["mozFullscreenElement"]
+          document.webkitFullscreenElement ||
+          document.mozFullscreenElement
         );
         return {
           width: canvas.offsetWidth,
@@ -423,7 +500,11 @@ export const initialize = (
         //     }
         // }
 
-        if (rpcInitialized) rpc.send(WorkerEvent.ScreenResize, getSizingData());
+        const sizingData = getSizingData();
+        if (webglRenderer) {
+          webglRenderer.resize(sizingData);
+        }
+        if (rpcInitialized) rpc.send(WorkerEvent.ScreenResize, sizingData);
       }
       window.addEventListener("resize", () => onScreenResize());
       window.addEventListener("orientationchange", () => onScreenResize());
@@ -435,7 +516,7 @@ export const initialize = (
         mq.addEventListener("change", () => onScreenResize());
       } else {
         // poll for it. yes. its terrible
-        self.setInterval((_) => {
+        self.setInterval(() => {
           if (window.devicePixelRatio != dpiFactor) {
             dpiFactor = window.devicePixelRatio;
             onScreenResize();
@@ -443,8 +524,19 @@ export const initialize = (
         }, 1000);
       }
 
-      const offscreenCanvas = canvas.transferControlToOffscreen();
-      const baseUri = document.baseURI;
+      // Some browsers (e.g. Safari 15.2) require SharedArrayBuffers to be initialized
+      // on the browser's main thread; so that's why this has to happen here.
+      //
+      // We also do this before initializing `WebAssembly.Memory`, to make sure we have
+      // enough memory for both.. (This is mostly relevant on mobile; see note below.)
+      const taskWorkerSab = initTaskWorkerSab();
+      const taskWorkerRpc = new Rpc(
+        new Worker(new URL("./task_worker.ts", import.meta.url))
+      );
+      taskWorkerRpc.send(TaskWorkerEvent.Init, {
+        taskWorkerSab,
+        wasmMemory,
+      });
 
       // Initial has to be equal to or higher than required by the app (which at the time of writing
       // is around 20 pages).
@@ -452,40 +544,138 @@ export const initialize = (
       // the maximum for wasm32 (4GB). Browsers should use virtual memory, as to not actually take up
       // all this space until requested by the app. TODO(JP): We might need to check this behavior in
       // different browsers at some point (in Chrome it seems to work fine).
-      wasmMemory = new WebAssembly.Memory({
-        initial: 40,
-        maximum: 65535,
-        shared: true,
-      });
-
-      let wasmFilename: string;
-      if ("filename" in initParams) {
-        wasmFilename = initParams.filename;
-      } else {
-        // @ts-ignore
-        const env = new URL(window.document.location).searchParams.get("debug")
-          ? "debug"
-          : "release";
-        wasmFilename = `target/wasm32-unknown-unknown/${env}/${initParams.targetName}.wasm`;
+      //
+      // In Safari on my phone (JP), using maximum:65535 causes an out-of-memory error, so we instead
+      // try a hardcoded value of ~400MB.. Note that especially on mobile, all of
+      // this is quite tricky; see e.g. https://github.com/WebAssembly/design/issues/1397
+      //
+      // TODO(JP): It looks like when using shared memory, the maximum might get fully allocated on
+      // some devices (mobile?), which means that there is little room left for JS objects, and it
+      // means that the web page is at higher risk of getting evicted when switching tabs. There are a
+      // few options here:
+      // 1. Allow the user to specify a maximum by hand for mobile in general; or for specific
+      //    devices (cumbersome!).
+      // 2. Allow single-threaded operation, where we don't specify a maximum (but run the risk of
+      //    getting much less memory to use and therefore the app crashing; see again
+      //    https://github.com/WebAssembly/design/issues/1397 for more details).
+      try {
+        wasmMemory = new WebAssembly.Memory({
+          initial: 40,
+          maximum: 65535,
+          shared: true,
+        });
+      } catch (_) {
+        console.log("Can't allocate full WebAssembly memory; trying ~400MB");
+        try {
+          wasmMemory = new WebAssembly.Memory({
+            initial: 40,
+            maximum: 6000,
+            shared: true,
+          });
+        } catch (_) {
+          throw new Error("Can't initilialize WebAssembly memory..");
+        }
       }
 
-      rpc
-        .send(
-          WorkerEvent.Init,
-          {
-            offscreenCanvas,
-            wasmFilename,
-            sizingData: getSizingData(),
-            baseUri,
-            memory: wasmMemory,
-          },
-          [offscreenCanvas]
-        )
-        .then(() => {
-          rpcInitialized = true;
-          onScreenResize();
-          resolve();
+      // If the browser supports OffscreenCanvas, then we'll use that. Otherwise, we render on
+      // the browser's main thread using WebGLRenderer.
+      try {
+        offscreenCanvas = canvas.transferControlToOffscreen();
+      } catch (_) {
+        webglRenderer = new WebGLRenderer(
+          canvas,
+          wasmMemory,
+          getSizingData(),
+          () => {
+            rpc.send(WorkerEvent.ShowIncompatibleBrowserNotification);
+          }
+        );
+        rpc.receive(WorkerEvent.RunWebGL, (zerdeParserPtr) => {
+          webglRenderer.processMessages(zerdeParserPtr);
+          return new Promise((resolve) => {
+            requestAnimationFrame(() => {
+              resolve(undefined);
+            });
+          });
         });
+      }
+
+      wasmModulePromise.then((wasmModule) => {
+        // Threads need to be spawned on the browser's main thread, otherwise Safari (as of version 15.2)
+        // throws errors.
+        const asyncWorkers = new Set();
+        const threadSpawn = ({
+          ctxPtr,
+          tlsAndStackData,
+        }: {
+          ctxPtr: BigInt;
+          tlsAndStackData: TlsAndStackData;
+        }) => {
+          const worker = new Worker(
+            new URL("./async_worker.ts", import.meta.url)
+          );
+          const workerErrorHandler = (event: unknown) => {
+            console.log("Async worker error event: ", event);
+          };
+          worker.onerror = workerErrorHandler;
+          worker.onmessageerror = workerErrorHandler;
+          const workerRpc = new Rpc<AsyncWorkerRpc>(worker);
+
+          // Add the worker to an array of workers, to prevent them getting killed when
+          // during garbage collection in Firefox; see https://bugzilla.mozilla.org/show_bug.cgi?id=1592227
+          asyncWorkers.add(worker);
+
+          const channel = new MessageChannel();
+          rpc.send(WorkerEvent.BindMainWorkerPort, channel.port1, [
+            channel.port1,
+          ]);
+
+          workerRpc.receive(AsyncWorkerEvent.ThreadSpawn, threadSpawn);
+
+          workerRpc
+            .send(
+              AsyncWorkerEvent.Run,
+              {
+                wasmModule,
+                memory: wasmMemory,
+                taskWorkerSab,
+                ctxPtr,
+                fileHandles,
+                baseUri: document.baseURI,
+                tlsAndStackData,
+                mainWorkerPort: channel.port2,
+              },
+              [channel.port2]
+            )
+            .catch((e) => {
+              console.error("async worker failed", e);
+            })
+            .finally(() => {
+              worker.terminate();
+              asyncWorkers.delete(worker);
+            });
+        };
+        rpc.receive(WorkerEvent.ThreadSpawn, threadSpawn);
+
+        rpc
+          .send(
+            WorkerEvent.Init,
+            {
+              wasmModule,
+              offscreenCanvas,
+              sizingData: getSizingData(),
+              baseUri: document.baseURI,
+              memory: wasmMemory,
+              taskWorkerSab,
+            },
+            offscreenCanvas ? [offscreenCanvas] : []
+          )
+          .then(() => {
+            rpcInitialized = true;
+            onScreenResize();
+            resolve();
+          });
+      });
     };
 
     if (document.readyState !== "loading") {

@@ -6,7 +6,7 @@
 
 //! Collection of standard [`Shader`] functions.
 
-use crate::cx::*;
+use crate::*;
 
 impl Cx {
     /// Collection of standard [`Shader`] functions.

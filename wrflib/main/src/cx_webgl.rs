@@ -8,7 +8,7 @@
 //!
 //! Communicates with wrf_wasm_worker.js using some functions in `cx_wasm32.rs`.
 
-use crate::cx::*;
+use crate::{zerde::ZerdeBuilder, *};
 use wrflib_shader_compiler::generate_glsl;
 
 impl Cx {
@@ -20,6 +20,7 @@ impl Cx {
         clip: (Vec2, Vec2),
         zbias: &mut f32,
         zbias_step: f32,
+        zerde_webgl: &mut ZerdeWebGLMessages,
     ) {
         // tad ugly otherwise the borrow checker locks 'self' and we can't recur
         let draw_calls_len = self.views[view_id].draw_calls_len;
@@ -36,11 +37,13 @@ impl Cx {
                     clip,
                     zbias,
                     zbias_step,
+                    zerde_webgl,
                 );
             } else {
+                let gpu_geometry_id = GpuGeometry::get_id(self, view_id, draw_call_id);
+
                 let cxview = &mut self.views[view_id];
                 let draw_call = &mut cxview.draw_calls[draw_call_id];
-                let sh = &self.shaders[draw_call.shader_id];
 
                 if draw_call.instance_dirty || draw_call.platform.inst_vb_id.is_none() {
                     draw_call.instance_dirty = false;
@@ -48,7 +51,7 @@ impl Cx {
                         draw_call.platform.inst_vb_id = Some(self.platform.vertex_buffers);
                         self.platform.vertex_buffers += 1;
                     }
-                    self.platform.zerde_eventloop_msgs.alloc_array_buffer(
+                    zerde_webgl.alloc_array_buffer(
                         draw_call.platform.inst_vb_id.unwrap(),
                         draw_call.instances.len(),
                         draw_call.instances.as_ptr() as *const f32,
@@ -66,20 +69,12 @@ impl Cx {
                     let cxtexture = &mut self.textures[*texture_id as usize];
                     if cxtexture.update_image {
                         cxtexture.update_image = false;
-                        self.platform.zerde_eventloop_msgs.update_texture_image2d(*texture_id as usize, cxtexture);
+                        zerde_webgl.update_texture_image2d(*texture_id as usize, cxtexture);
                     }
                 }
 
-                let geometry_id = if let Some(geometry) = draw_call.props.geometry {
-                    geometry.geometry_id
-                } else if let Some(geometry) = sh.default_geometry {
-                    geometry.geometry_id
-                } else {
-                    continue;
-                };
-
                 // update geometry?
-                let geometry = &mut self.geometries[geometry_id];
+                let geometry = &mut self.gpu_geometries[gpu_geometry_id];
 
                 if geometry.dirty || geometry.platform.vb_id.is_none() || geometry.platform.ib_id.is_none() {
                     if geometry.platform.vb_id.is_none() {
@@ -90,16 +85,18 @@ impl Cx {
                         geometry.platform.ib_id = Some(self.platform.index_buffers);
                         self.platform.index_buffers += 1;
                     }
-                    self.platform.zerde_eventloop_msgs.alloc_array_buffer(
+                    let vertex_attributes = geometry.geometry.vertices_f32_slice();
+                    zerde_webgl.alloc_array_buffer(
                         geometry.platform.vb_id.unwrap(),
-                        geometry.vertices.len(),
-                        geometry.vertices.as_ptr() as *const f32,
+                        vertex_attributes.len(),
+                        vertex_attributes.as_ptr(),
                     );
 
-                    self.platform.zerde_eventloop_msgs.alloc_index_buffer(
+                    let triangle_indices = geometry.geometry.indices_u32_slice();
+                    zerde_webgl.alloc_index_buffer(
                         geometry.platform.ib_id.unwrap(),
-                        geometry.indices.len(),
-                        geometry.indices.as_ptr() as *const u32,
+                        triangle_indices.len(),
+                        triangle_indices.as_ptr(),
                     );
 
                     geometry.dirty = false;
@@ -127,7 +124,7 @@ impl Cx {
                     vao.geom_vb_id = geometry.platform.vb_id;
                     vao.geom_ib_id = geometry.platform.ib_id;
 
-                    self.platform.zerde_eventloop_msgs.alloc_vao(
+                    zerde_webgl.alloc_vao(
                         vao.vao_id,
                         vao.shader_id.unwrap(),
                         vao.geom_ib_id.unwrap(),
@@ -136,7 +133,7 @@ impl Cx {
                     );
                 }
 
-                self.platform.zerde_eventloop_msgs.draw_call(
+                zerde_webgl.draw_call(
                     draw_call.shader_id,
                     draw_call.platform.vao.as_ref().unwrap().vao_id,
                     self.passes[pass_id].pass_uniforms.as_slice(),
@@ -163,7 +160,7 @@ impl Cx {
         self.passes[pass_id].set_dpi_factor(dpi_factor);
     }
 
-    pub(crate) fn draw_pass_to_canvas(&mut self, pass_id: usize, dpi_factor: f32) {
+    pub(crate) fn draw_pass_to_canvas(&mut self, pass_id: usize, dpi_factor: f32, zerde_webgl: &mut ZerdeWebGLMessages) {
         let view_id = self.passes[pass_id].main_view_id.unwrap();
 
         // get the color and depth
@@ -179,11 +176,11 @@ impl Cx {
             ClearDepth::InitWith(depth) => depth,
             ClearDepth::ClearWith(depth) => depth,
         };
-        self.platform.zerde_eventloop_msgs.begin_main_canvas(clear_color, clear_depth as f32);
+        zerde_webgl.begin_main_canvas(clear_color, clear_depth as f32);
 
         self.setup_render_pass(pass_id, dpi_factor);
 
-        self.platform.zerde_eventloop_msgs.set_default_depth_and_blend_mode();
+        zerde_webgl.set_default_depth_and_blend_mode();
 
         let mut zbias = 0.0;
         let zbias_step = self.passes[pass_id].zbias_step;
@@ -195,28 +192,25 @@ impl Cx {
             (Vec2 { x: -50000., y: -50000. }, Vec2 { x: 50000., y: 50000. }),
             &mut zbias,
             zbias_step,
+            zerde_webgl,
         );
     }
 
-    pub(crate) fn draw_pass_to_texture(&mut self, pass_id: usize, dpi_factor: f32) {
+    pub(crate) fn draw_pass_to_texture(&mut self, pass_id: usize, dpi_factor: f32, zerde_webgl: &mut ZerdeWebGLMessages) {
         let pass_size = self.passes[pass_id].pass_size;
         let view_id = self.passes[pass_id].main_view_id.unwrap();
 
         self.setup_render_pass(pass_id, dpi_factor);
 
-        self.platform.zerde_eventloop_msgs.begin_render_targets(
-            pass_id,
-            (pass_size.x * dpi_factor) as usize,
-            (pass_size.y * dpi_factor) as usize,
-        );
+        zerde_webgl.begin_render_targets(pass_id, (pass_size.x * dpi_factor) as usize, (pass_size.y * dpi_factor) as usize);
 
         for color_texture in &self.passes[pass_id].color_textures {
             match color_texture.clear_color {
                 ClearColor::InitWith(color) => {
-                    self.platform.zerde_eventloop_msgs.add_color_target(color_texture.texture_id as usize, true, color);
+                    zerde_webgl.add_color_target(color_texture.texture_id as usize, true, color);
                 }
                 ClearColor::ClearWith(color) => {
-                    self.platform.zerde_eventloop_msgs.add_color_target(color_texture.texture_id as usize, false, color);
+                    zerde_webgl.add_color_target(color_texture.texture_id as usize, false, color);
                 }
             }
         }
@@ -225,18 +219,18 @@ impl Cx {
         if let Some(depth_texture_id) = self.passes[pass_id].depth_texture {
             match self.passes[pass_id].clear_depth {
                 ClearDepth::InitWith(depth_clear) => {
-                    self.platform.zerde_eventloop_msgs.set_depth_target(depth_texture_id as usize, true, depth_clear as f32);
+                    zerde_webgl.set_depth_target(depth_texture_id as usize, true, depth_clear as f32);
                 }
                 ClearDepth::ClearWith(depth_clear) => {
-                    self.platform.zerde_eventloop_msgs.set_depth_target(depth_texture_id as usize, false, depth_clear as f32);
+                    zerde_webgl.set_depth_target(depth_texture_id as usize, false, depth_clear as f32);
                 }
             }
         }
 
-        self.platform.zerde_eventloop_msgs.end_render_targets();
+        zerde_webgl.end_render_targets();
 
         // set the default depth and blendmode
-        self.platform.zerde_eventloop_msgs.set_default_depth_and_blend_mode();
+        zerde_webgl.set_default_depth_and_blend_mode();
         let mut zbias = 0.0;
         let zbias_step = self.passes[pass_id].zbias_step;
 
@@ -247,10 +241,11 @@ impl Cx {
             (Vec2 { x: -50000., y: -50000. }, Vec2 { x: 50000., y: 50000. }),
             &mut zbias,
             zbias_step,
+            zerde_webgl,
         );
     }
 
-    pub(crate) fn webgl_compile_shaders(&mut self) {
+    pub(crate) fn webgl_compile_shaders(&mut self, zerde_webgl: &mut ZerdeWebGLMessages) {
         for shader_id in self.shader_recompile_ids.drain(..) {
             let shader = unsafe { self.shaders.get_unchecked_mut(shader_id) };
             let shader_ast = shader.shader_ast.as_ref().unwrap();
@@ -297,7 +292,7 @@ impl Cx {
                 ));
             }
 
-            self.platform.zerde_eventloop_msgs.compile_webgl_shader(shader_id, &vertex, &fragment, &shader.mapping);
+            zerde_webgl.compile_webgl_shader(shader_id, &vertex, &fragment, &shader.mapping);
             shader.platform = Some(CxPlatformShader {});
             shader.shader_ast = None;
         }
@@ -332,9 +327,150 @@ pub(crate) struct CxPlatformShader {}
 pub(crate) struct CxPlatformTexture {}
 
 #[derive(Clone, Default)]
-pub(crate) struct CxPlatformGeometry {
+pub(crate) struct CxPlatformGpuGeometry {
     pub(crate) vb_id: Option<usize>,
     pub(crate) ib_id: Option<usize>,
 }
 
 impl CxPlatformDrawCall {}
+
+pub(crate) struct ZerdeWebGLMessages {
+    builder: ZerdeBuilder,
+}
+
+impl ZerdeWebGLMessages {
+    pub(crate) fn new() -> Self {
+        Self { builder: ZerdeBuilder::new() }
+    }
+
+    pub(crate) fn take_ptr(self /* move! */) -> u64 {
+        self.builder.take_ptr()
+    }
+
+    pub(crate) fn end(&mut self) {
+        self.builder.send_u32(0);
+    }
+
+    fn send_propdefvec(&mut self, prop_defs: &Vec<PropDef>) {
+        self.builder.send_u32(prop_defs.len() as u32);
+        for prop_def in prop_defs {
+            self.builder.send_string(match prop_def.ty {
+                Ty::Vec4 => "vec4",
+                Ty::Vec3 => "vec3",
+                Ty::Vec2 => "vec2",
+                Ty::Float => "float",
+                Ty::Mat4 => "mat4",
+                Ty::Texture2D => "sampler2D",
+                _ => panic!("unexpected type in send_propdefvec"),
+            });
+            self.builder.send_string(&prop_def.name);
+        }
+    }
+
+    pub(crate) fn compile_webgl_shader(&mut self, shader_id: usize, vertex: &str, fragment: &str, mapping: &CxShaderMapping) {
+        self.builder.send_u32(1);
+        self.builder.send_u32(shader_id as u32);
+        self.builder.send_string(fragment);
+        self.builder.send_string(vertex);
+        self.builder.send_u32(mapping.geometry_props.total_slots as u32);
+        self.builder.send_u32(mapping.instance_props.total_slots as u32);
+        self.send_propdefvec(&mapping.pass_uniforms);
+        self.send_propdefvec(&mapping.view_uniforms);
+        self.send_propdefvec(&mapping.draw_uniforms);
+        self.send_propdefvec(&mapping.user_uniforms);
+        self.send_propdefvec(&mapping.textures);
+    }
+
+    pub(crate) fn alloc_array_buffer(&mut self, buffer_id: usize, len: usize, data: *const f32) {
+        self.builder.send_u32(2);
+        self.builder.send_u32(buffer_id as u32);
+        self.builder.send_u32(len as u32);
+        self.builder.send_u32(data as u32);
+    }
+
+    pub(crate) fn alloc_index_buffer(&mut self, buffer_id: usize, len: usize, data: *const u32) {
+        self.builder.send_u32(3);
+        self.builder.send_u32(buffer_id as u32);
+        self.builder.send_u32(len as u32);
+        self.builder.send_u32(data as u32);
+    }
+
+    pub(crate) fn alloc_vao(&mut self, vao_id: usize, shader_id: usize, geom_ib_id: usize, geom_vb_id: usize, inst_vb_id: usize) {
+        self.builder.send_u32(4);
+        self.builder.send_u32(vao_id as u32);
+        self.builder.send_u32(shader_id as u32);
+        self.builder.send_u32(geom_ib_id as u32);
+        self.builder.send_u32(geom_vb_id as u32);
+        self.builder.send_u32(inst_vb_id as u32);
+    }
+
+    pub(crate) fn draw_call(
+        &mut self,
+        shader_id: usize,
+        vao_id: usize,
+        uniforms_pass: &[f32],
+        uniforms_view: &[f32],
+        uniforms_draw: &[f32],
+        uniforms_user: &[f32],
+        textures: &Vec<u32>,
+    ) {
+        self.builder.send_u32(5);
+        self.builder.send_u32(shader_id as u32);
+        self.builder.send_u32(vao_id as u32);
+        self.builder.send_u32(uniforms_pass.as_ptr() as u32);
+        self.builder.send_u32(uniforms_view.as_ptr() as u32);
+        self.builder.send_u32(uniforms_draw.as_ptr() as u32);
+        self.builder.send_u32(uniforms_user.as_ptr() as u32);
+        self.builder.send_u32(textures.as_ptr() as u32);
+    }
+
+    pub(crate) fn update_texture_image2d(&mut self, texture_id: usize, texture: &mut CxTexture) {
+        //usize, width: usize, height: usize, data: &Vec<u32>
+        self.builder.send_u32(6);
+        self.builder.send_u32(texture_id as u32);
+        self.builder.send_u32(texture.desc.width.unwrap() as u32);
+        self.builder.send_u32(texture.desc.height.unwrap() as u32);
+        self.builder.send_u32(texture.image_u32.as_ptr() as u32)
+    }
+
+    pub(crate) fn begin_render_targets(&mut self, pass_id: usize, width: usize, height: usize) {
+        self.builder.send_u32(7);
+        self.builder.send_u32(pass_id as u32);
+        self.builder.send_u32(width as u32);
+        self.builder.send_u32(height as u32);
+    }
+
+    pub(crate) fn add_color_target(&mut self, texture_id: usize, init_only: bool, color: Vec4) {
+        self.builder.send_u32(8);
+        self.builder.send_u32(texture_id as u32);
+        self.builder.send_u32(if init_only { 1 } else { 0 });
+        self.builder.send_f32(color.x);
+        self.builder.send_f32(color.y);
+        self.builder.send_f32(color.z);
+        self.builder.send_f32(color.w);
+    }
+
+    pub(crate) fn set_depth_target(&mut self, texture_id: usize, init_only: bool, depth: f32) {
+        self.builder.send_u32(9);
+        self.builder.send_u32(texture_id as u32);
+        self.builder.send_u32(if init_only { 1 } else { 0 });
+        self.builder.send_f32(depth);
+    }
+
+    pub(crate) fn end_render_targets(&mut self) {
+        self.builder.send_u32(10);
+    }
+
+    pub(crate) fn set_default_depth_and_blend_mode(&mut self) {
+        self.builder.send_u32(11);
+    }
+
+    pub(crate) fn begin_main_canvas(&mut self, color: Vec4, depth: f32) {
+        self.builder.send_u32(12);
+        self.builder.send_f32(color.x);
+        self.builder.send_f32(color.y);
+        self.builder.send_f32(color.z);
+        self.builder.send_f32(color.w);
+        self.builder.send_f32(depth);
+    }
+}

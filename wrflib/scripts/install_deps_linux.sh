@@ -15,7 +15,7 @@ rustup toolchain install nightly-2021-08-03
 rustup target add wasm32-unknown-unknown
 rustup component add rustfmt
 rustup component add clippy
-cargo install cargo-bundle
+cargo install cargo-bundle mdbook
 sudo apt install -y libxcursor-dev libx11-dev libgl1-mesa-dev cmake git libgtk-3-dev
 rustup component add rust-src
 

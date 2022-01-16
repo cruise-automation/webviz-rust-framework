@@ -4,7 +4,7 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
-import { CallRust } from "./types";
+import { CallRust, WrfArray } from "./types";
 import { jsRuntime } from "./type_of_runtime";
 import { allocatedArcs, allocatedVecs, WrfBuffer } from "./wrf_buffer";
 
@@ -13,6 +13,35 @@ export const expect = <T>(actual: T, expected: T): void => {
     console.debug(`Success: Got ${actual}, Expected ${expected}`);
   } else {
     throw new Error(`Failure: Got ${actual}, Expected ${expected}`);
+  }
+};
+
+// TODO(Paras): Would be nice to combine the two functions below at some point.
+export const expectThrow = (f: () => void, expectedMessage?: string): void => {
+  let error: Error | undefined;
+  try {
+    f();
+  } catch (e: any) {
+    error = e;
+  }
+  expect(!!error, true);
+  if (error && expectedMessage) {
+    expect(error.message, expectedMessage);
+  }
+};
+export const expectThrowAsync = async (
+  f: () => Promise<unknown>,
+  expectedMessage?: string
+): Promise<void> => {
+  let error: Error | undefined;
+  try {
+    await f();
+  } catch (e: any) {
+    error = e;
+  }
+  expect(!!error, true);
+  if (error && expectedMessage) {
+    expect(error.message, expectedMessage);
   }
 };
 
@@ -32,22 +61,29 @@ const checkConditionTimeout = async (
 // Generate some dummy data and then delete it. This usually triggers the garbage collector.
 const generateGarbage = () => {
   for (let i = 0; i < 10000; i++) {
+    // @ts-ignore
     self["garbage_" + i] = { i };
   }
   for (let i = 0; i < 10000; i++) {
+    // @ts-ignore
     delete self["garbage_" + i];
   }
 };
 
 const arcAllocated = async (callRust: CallRust, buffer: WrfBuffer) => {
-  // We still have the buffer here! So it should still be allocated.
-  expect(allocatedArcs[buffer.__wrflibBufferData.arcPtr], true);
+  if (!buffer.__wrflibBufferData.readonly)
+    throw new Error("arcAllocated called on mutable buffer");
 
-  const [result] = await callRust("check_arc_count", [
-    `${BigInt(buffer.__wrflibBufferData.arcPtr)}`,
-  ]);
+  const arcPtr = buffer.__wrflibBufferData.arcPtr;
+
+  // We still have the buffer here! So it should still be allocated.
+  expect(allocatedArcs[arcPtr], true);
+
+  const [result] = await callRust("check_arc_count", [`${BigInt(arcPtr)}`]);
   const [countBeforeDeallocation] = result;
   expect(countBeforeDeallocation, 1);
+
+  return arcPtr;
 };
 
 const arcDeallocated = async (arcPtr: number) => {
@@ -86,16 +122,14 @@ const vecDeallocated = async (bufferPtr: number) => {
 // and can easily break if you restucture the function, use a different/newer browser, etc!
 export const expectDeallocationOrUnregister = (
   callRust: CallRust,
-  wrfArray: Uint8Array
+  wrfArray: WrfArray
 ): Promise<void> => {
   // Deallocation code is only run in WASM for now.
   if (jsRuntime === "cef") return Promise.resolve();
 
   const buffer = wrfArray.buffer as WrfBuffer;
   return buffer.readonly
-    ? arcAllocated(callRust, buffer).then(() =>
-        arcDeallocated(buffer.__wrflibBufferData.arcPtr)
-      )
+    ? arcAllocated(callRust, buffer).then((arcPtr) => arcDeallocated(arcPtr))
     : vecDeallocated(buffer.__wrflibBufferData.bufferPtr);
 };
 

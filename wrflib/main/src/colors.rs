@@ -4,7 +4,7 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
-use crate::cx::*;
+use crate::*;
 
 pub const COLOR_ALICEBLUE: Vec4 = vec4(0.941_176_5, 0.972_549, 1.0, 1.0);
 pub const COLOR_ANTIQUEWHITE: Vec4 = vec4(0.980_392_16, 0.921_568_63, 0.843_137_26, 1.0);

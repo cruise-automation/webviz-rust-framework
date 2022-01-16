@@ -79,6 +79,7 @@ pub const fn vec4(x: f32, y: f32, z: f32, w: f32) -> Vec4 {
 
 /// Vector (as in linear algebra, not as in [`Vec`]!) with two elements.
 #[derive(Clone, Copy, Default, Debug, PartialEq)]
+#[repr(C)]
 pub struct Vec2 {
     pub x: f32,
     pub y: f32,
@@ -110,6 +111,14 @@ impl Vec2 {
     pub fn to_vec3(&self) -> Vec3 {
         Vec3 { x: self.x, y: self.y, z: 0.0 }
     }
+
+    pub fn as_array(&self) -> &[f32; 2] {
+        unsafe { &*(self as *const _ as *const [f32; 2]) }
+    }
+
+    pub fn as_mut_array(&mut self) -> &mut [f32; 2] {
+        unsafe { &mut *(self as *mut _ as *mut [f32; 2]) }
+    }
 }
 
 impl fmt::Display for Vec2 {
@@ -123,6 +132,7 @@ const TODEG: f32 = 57.295_78;
 
 /// Vector (as in linear algebra, not as in [`Vec`]!) with three elements.
 #[derive(Clone, Copy, Default, PartialEq, Debug)]
+#[repr(C)]
 pub struct Vec3 {
     pub x: f32,
     pub y: f32,
@@ -174,6 +184,14 @@ impl Vec3 {
     pub fn clamp(&self, min: &Vec3, max: &Vec3) -> Vec3 {
         vec3(self.x.clamp(min.x, max.x), self.y.clamp(min.y, max.y), self.z.clamp(min.z, max.z))
     }
+
+    pub fn as_array(&self) -> &[f32; 3] {
+        unsafe { &*(self as *const _ as *const [f32; 3]) }
+    }
+
+    pub fn as_mut_array(&mut self) -> &mut [f32; 3] {
+        unsafe { &mut *(self as *mut _ as *mut [f32; 3]) }
+    }
 }
 
 impl fmt::Display for Vec3 {
@@ -184,6 +202,7 @@ impl fmt::Display for Vec3 {
 
 /// Vector (as in linear algebra, not as in [`Vec`]!) with four elements.
 #[derive(Clone, Copy, Default, Debug, PartialEq)]
+#[repr(C)]
 pub struct Vec4 {
     pub x: f32,
     pub y: f32,
@@ -383,6 +402,14 @@ impl Vec4 {
 
     pub fn clamp(&self, min: &Vec4, max: &Vec4) -> Vec4 {
         vec4(self.x.clamp(min.x, max.x), self.y.clamp(min.y, max.y), self.z.clamp(min.z, max.z), self.w.clamp(min.w, max.w))
+    }
+
+    pub fn as_array(&self) -> &[f32; 4] {
+        unsafe { &*(self as *const _ as *const [f32; 4]) }
+    }
+
+    pub fn as_mut_array(&mut self) -> &mut [f32; 4] {
+        unsafe { &mut *(self as *mut _ as *mut [f32; 4]) }
     }
 }
 

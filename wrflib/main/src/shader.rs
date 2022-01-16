@@ -6,23 +6,52 @@
 
 //! Managing [GPU shaders](https://en.wikipedia.org/wiki/Shader).
 
-use crate::cx::*;
+use crate::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use wrflib_shader_compiler::ty::Ty;
 use wrflib_shader_compiler::{Decl, ShaderAst};
 
-/// Contains all information necessary to build a shader. Create using [`Cx::define_shader`].
+/// Contains all information necessary to build a shader.
+/// Define a new shader.
+///
+/// Pass in a [`Geometry`] which gets used for instancing (e.g. a quad or a
+/// cube).
+///
+/// The different [`CodeFragment`]s are appended together (but preserving their
+/// filename/line/column information for error messages). They are split out
+/// into `base_code_fragments` and `main_code_fragment` purely for
+/// convenience. (We could instead have used a single [`slice`] but they are
+/// annoying to get through concatenation..)
+///
+/// TODO(JP): Would be good to instead compile shaders beforehand, ie. during
+/// compile time. Should look into that at some point.
 pub struct Shader {
-    /// The default [`Geometry`] that we will draw with, if any. Can be overridden using [`DrawCallProps::geometry`].
-    default_geometry: Option<Geometry>,
+    /// The [`Geometry`] that we will draw with, if any. Can be overridden using [`DrawCallProps::gpu_geometry`].
+    pub build_geom: Option<fn() -> Geometry>,
     /// A bunch of [`CodeFragment`]s that will get concatenated.
-    base_code_fragments: &'static [CodeFragment],
-    /// The main [`CodeFragment`] that will be concatanated after the `base_code_fragments`.
-    main_code_fragment: CodeFragment,
-    /// The id of the shader (index into [`Cx::shaders`]), or [`UNCOMPILED_SHADER_ID`] if uninitialized.
-    shader_id: AtomicUsize,
+    pub code_to_concatenate: &'static [CodeFragment],
+    /// The id of the shader (index into [`Cx::shaders`]), or [`Shader::UNCOMPILED_SHADER_ID`] if uninitialized.
+    /// You should never read or modify this manually (see TODO below).
+    ///
+    /// TODO(JP): This shouldn't be public, but right now that's necessary for using [`Shader::DEFAULT`]. We might want to
+    /// switch to a `define_shader` helper function once we can pass function pointers to `const` functions (see
+    /// <https://github.com/rust-lang/rust/issues/63997> and <https://github.com/rust-lang/rust/issues/57563>).
+    pub shader_id: AtomicUsize,
 }
-const UNCOMPILED_SHADER_ID: usize = usize::MAX;
+
+impl Shader {
+    /// TODO(JP): We might want to switch to a `define_shader` helper function once we can pass function pointers
+    /// to `const` functions (see <https://github.com/rust-lang/rust/issues/63997> and
+    /// <https://github.com/rust-lang/rust/issues/57563>).
+    ///
+    /// We suppress `clippy::declare_interior_mutable_const` here since we don't actually want shader_id in this constant
+    /// to be editable.
+    #[allow(clippy::declare_interior_mutable_const)]
+    pub const DEFAULT: Shader =
+        Shader { build_geom: None, code_to_concatenate: &[], shader_id: AtomicUsize::new(Self::UNCOMPILED_SHADER_ID) };
+
+    const UNCOMPILED_SHADER_ID: usize = usize::MAX;
+}
 
 /// Contains information of a [`CxShader`] of what instances, instances, textures
 /// and so on it contains. That information can then be used to modify a [`Shader`
@@ -266,58 +295,35 @@ impl UniformProps {
 /// The actual shader information, which gets stored on [`Cx`]. Once compiled the
 /// [`ShaderAst`] will be removed, and the [`CxPlatformShader`] (platform-specific
 /// part of the compiled shader) gets set.
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub struct CxShader {
     pub name: String,
-    pub default_geometry: Option<Geometry>,
+    pub gpu_geometry: Option<GpuGeometry>,
     pub(crate) platform: Option<CxPlatformShader>,
     pub mapping: CxShaderMapping,
     pub shader_ast: Option<ShaderAst>,
 }
 
 impl Cx {
-    /// Define a new shader.
-    ///
-    /// Pass in a [`Geometry`] which gets used for instancing (e.g. a quad or a
-    /// cube).
-    ///
-    /// The different [`CodeFragment`]s are appended together (but preserving their
-    /// filename/line/column information for error messages). They are split out
-    /// into `base_code_fragments` and `main_code_fragment` purely for
-    /// convenience. (We could instead have used a single [`slice`] but they are
-    /// annoying to get through concatenation..)
-    ///
-    /// TODO(JP): Would be good to instead compile shaders beforehand, ie. during
-    /// compile time. Should look into that at some point.
-    pub const fn define_shader(
-        default_geometry: Option<Geometry>,
-        base_code_fragments: &'static [CodeFragment],
-        main_code_fragment: CodeFragment,
-    ) -> Shader {
-        Shader { default_geometry, base_code_fragments, main_code_fragment, shader_id: AtomicUsize::new(UNCOMPILED_SHADER_ID) }
-    }
-
     /// Get an individual [`Shader`] from a static [`Shader`].
     ///
     /// For more information on what [`LocationHash`] is used for here, see [`Shader`].
     pub(crate) fn get_shader_id(&mut self, shader: &'static Shader) -> usize {
         let shader_id = shader.shader_id.load(Ordering::Relaxed);
-        if shader_id != UNCOMPILED_SHADER_ID {
+        if shader_id != Shader::UNCOMPILED_SHADER_ID {
             shader_id
         } else {
-            // Use the main_code_fragment's location as the shader name.
-            let shader_name = format!(
-                "{}:{}:{}",
-                shader.main_code_fragment.filename, shader.main_code_fragment.line, shader.main_code_fragment.col
-            );
-            let code_fragments: Vec<&CodeFragment> =
-                shader.base_code_fragments.iter().chain([&shader.main_code_fragment]).collect();
-            let shader_ast = self.shader_ast_generator.generate_shader_ast(&shader_name, code_fragments);
+            // Use the last code fragment as the shader name.
+            let main_code_fragment = shader.code_to_concatenate.last().expect("No code fragments found");
+            let shader_name = format!("{}:{}:{}", main_code_fragment.filename, main_code_fragment.line, main_code_fragment.col);
+            let shader_ast = self.shader_ast_generator.generate_shader_ast(&shader_name, shader.code_to_concatenate);
+
+            let gpu_geometry = shader.build_geom.map(|build_geom| GpuGeometry::new(self, (build_geom)()));
 
             let shader_id = self.shaders.len();
             self.shaders.push(CxShader {
                 name: shader_name,
-                default_geometry: shader.default_geometry,
+                gpu_geometry,
                 mapping: CxShaderMapping::from_shader_ast(shader_ast.clone()),
                 platform: None,
                 shader_ast: Some(shader_ast),

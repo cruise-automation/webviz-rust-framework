@@ -26,8 +26,6 @@ pub struct Splitter {
     pub _drag_pos_start: f32,
     pub _drag_max_pos: f32,
     pub _hit_state_margin: Option<Margin>,
-
-    pub _turtle: Option<Turtle>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -96,8 +94,6 @@ impl Splitter {
             split_view: View::default(),
             bg: Background::default().with_radius(0.5),
             animator: Animator::default(),
-
-            _turtle: None,
         }
     }
 
@@ -238,19 +234,14 @@ impl Splitter {
         };
         let dpi_factor = cx.get_dpi_factor_of(&self.bg.area());
         self._calc_pos -= self._calc_pos % (1.0 / dpi_factor);
-        let turtle = match self.axis {
-            Axis::Horizontal => {
-                cx.begin_turtle(Layout { walk: Walk::wh(Width::Fill, Height::Fix(self._calc_pos)), ..Layout::default() })
-            }
-            Axis::Vertical => {
-                cx.begin_turtle(Layout { walk: Walk::wh(Width::Fix(self._calc_pos), Height::Fill), ..Layout::default() })
-            }
+        match self.axis {
+            Axis::Horizontal => cx.begin_row(Width::Fill, Height::Fix(self._calc_pos)),
+            Axis::Vertical => cx.begin_row(Width::Fix(self._calc_pos), Height::Fill),
         };
-        self._turtle = Some(turtle);
     }
 
     pub fn mid_draw(&mut self, cx: &mut Cx) {
-        cx.end_turtle(self._turtle.take().unwrap());
+        cx.end_row();
         let rect = cx.get_turtle_rect();
         let origin = cx.get_turtle_origin();
 
@@ -283,11 +274,11 @@ impl Splitter {
                 self.split_view.end_view(cx);
             }
         };
-        self._turtle = Some(cx.begin_turtle(Layout::default()));
+        cx.begin_row(Width::Fill, Height::Fill);
     }
 
     pub fn end_draw(&mut self, cx: &mut Cx) {
-        cx.end_turtle(self._turtle.take().unwrap());
+        cx.end_row();
         // draw the splitter in the middle of the turtle
         let rect = cx.get_turtle_rect();
 

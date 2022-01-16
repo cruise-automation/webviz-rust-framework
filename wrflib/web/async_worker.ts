@@ -8,12 +8,19 @@ import {
   Rpc,
   getWasmEnv,
   initThreadLocalStorageAndStackOtherWorkers,
+  makeThreadLocalStorageAndStackDataOnExistingThread,
 } from "./common";
-import { AsyncWorkerEvent, AsyncWorkerRunValue, WasmExports } from "./types";
+import {
+  AsyncWorkerRpc,
+  Worker,
+  AsyncWorkerEvent,
+  MainWorkerChannelEvent,
+} from "./rpc_types";
+import { WasmExports } from "./types";
 
-const rpc = new Rpc(self);
+const rpc = new Rpc<Worker<AsyncWorkerRpc>>(self);
 
-rpc.receive<AsyncWorkerRunValue, void>(
+rpc.receive(
   AsyncWorkerEvent.Run,
   ({
     wasmModule,
@@ -23,15 +30,26 @@ rpc.receive<AsyncWorkerRunValue, void>(
     fileHandles,
     baseUri,
     tlsAndStackData,
+    mainWorkerPort,
   }) => {
+    let exports: WasmExports;
+
+    const mainThreadRpc = new Rpc(mainWorkerPort);
+
     const sendEventFromAnyThread = (eventPtr: BigInt) => {
-      rpc.send(AsyncWorkerEvent.SendEventFromAnyThread, { eventPtr });
+      mainThreadRpc.send(
+        MainWorkerChannelEvent.SendEventFromAnyThread,
+        eventPtr
+      );
     };
     const threadSpawn = (ctxPtr: BigInt) => {
-      rpc.send(AsyncWorkerEvent.ThreadSpawn, { ctxPtr });
+      rpc.send(AsyncWorkerEvent.ThreadSpawn, {
+        ctxPtr,
+        tlsAndStackData:
+          makeThreadLocalStorageAndStackDataOnExistingThread(exports),
+      });
     };
 
-    let exports: WasmExports;
     const getExports = () => {
       return exports;
     };

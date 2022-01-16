@@ -7,7 +7,18 @@
 // This file should only be imported by WebWorkers
 /// <reference lib="WebWorker" />
 
-import { FileHandle, TlsAndStackData, WasmEnv, WasmExports } from "./types";
+import { RpcSpec } from "./rpc_types";
+import {
+  FileHandle,
+  MutableBufferData,
+  RustWrfParam,
+  TlsAndStackData,
+  WasmEnv,
+  WasmExports,
+  WrfArray,
+  WrfParamType,
+} from "./types";
+import { getCachedWrfBuffer, getWrfBufferWasm } from "./wrf_buffer";
 import { ZerdeBuilder } from "./zerde";
 
 ////////////////////////////////////////////////////////////////
@@ -65,12 +76,13 @@ function _createLinkedChannels(): { local: Channel; remote: Channel } {
 // To attach rpc within an a web worker:
 //   const rpc = new Rpc(global);
 // Check out the tests for more examples.
-export class Rpc {
+// See `rpc_types.ts` for descriptions of how to set up typed interactions.
+export class Rpc<T extends RpcSpec> {
   static transferrables = "$$TRANSFERRABLES";
-  _channel = undefined;
+  _channel: Channel;
   _messageId = 0;
   _pendingCallbacks: Record<number, (arg0: any) => void> = {};
-  _receivers = new Map();
+  _receivers = new Map<string, (value: any) => any>();
 
   constructor(channel: Channel) {
     this._channel = channel;
@@ -83,7 +95,11 @@ export class Rpc {
   }
 
   _onChannelMessage = (ev: MessageEvent): void => {
-    const { id, topic, data } = ev.data;
+    const { id, topic, data } = ev.data as {
+      topic: string;
+      id: number;
+      data: unknown;
+    };
     if (topic === RESPONSE) {
       this._pendingCallbacks[id](ev.data);
       delete this._pendingCallbacks[id];
@@ -98,9 +114,9 @@ export class Rpc {
       // This works both when `handler` returns a value or a Promise.
       resolve(handler(data));
     })
-      .then((result) => {
+      .then((result: any) => {
         if (!result) {
-          this._channel.postMessage({ topic: RESPONSE, id });
+          this.postMessage({ topic: RESPONSE, id }, []);
           return;
         }
         const transferrables = result[Rpc.transferrables];
@@ -110,7 +126,7 @@ export class Rpc {
           id,
           data: result,
         };
-        this._channel.postMessage(message, transferrables);
+        this.postMessage(message, transferrables);
       })
       .catch((err) => {
         const message = {
@@ -123,18 +139,18 @@ export class Rpc {
             stack: err.stack,
           },
         };
-        this._channel.postMessage(message);
+        this.postMessage(message, []);
       });
   };
 
   // send a message across the rpc boundary to a receiver on the other side
   // this returns a promise for the receiver's response.  If there is no registered
   // receiver for the given topic, this method throws
-  send<TResult>(
-    topic: string,
-    data?: unknown,
+  send<U extends keyof T["send"]>(
+    topic: U,
+    data?: T["send"][U][0],
     transfer?: any[]
-  ): Promise<TResult> {
+  ): Promise<T["send"][U][1]> {
     const id = this._messageId++;
     const message = { topic, id, data };
     const result = new Promise<any>((resolve, reject) => {
@@ -149,18 +165,29 @@ export class Rpc {
         }
       };
     });
-    this._channel.postMessage(message, transfer);
+    this.postMessage(message, transfer);
     return result;
   }
 
   // register a receiver for a given message on a topic
   // only one receiver can be registered per topic and currently
   // 'deregistering' a receiver is not supported since this is not common
-  receive<T, TOut>(topic: string, handler: (arg0: T) => TOut): void {
+  receive<U extends keyof T["receive"] & string>(
+    topic: U,
+    handler: (arg0: T["receive"][U][0]) => T["receive"][U][1]
+  ): void {
     if (this._receivers.has(topic)) {
       throw new Error(`Receiver already registered for topic: ${topic}`);
     }
     this._receivers.set(topic, handler);
+  }
+
+  private postMessage(message: unknown, transfer: unknown[] | undefined) {
+    try {
+      this._channel.postMessage(message, transfer);
+    } catch (e) {
+      console.error("Rpc postMessage call itself failed: ", e);
+    }
   }
 }
 
@@ -265,8 +292,8 @@ const sendTaskWorkerMessage = (
 // - `__wasm_init_memory` is again called automatically, but will be skipped, since an
 //   (atomic) flag has been set not to initialize static memory again.
 // - We need to initialize memory for both the shadow stack and the Thread Local
-//   Storage (TLS), using `makeThreadLocalStorageAndStackDataOnMainWorker`. We do this
-//   by allocating memory on the heap on the main thread, since allocating memory DOES
+//   Storage (TLS), using `makeThreadLocalStorageAndStackDataOnExistingThread`. We do this
+//   by allocating memory on the heap on an already initialized thread, since allocating memory DOES
 //   require the shadow stack to be initialized.
 // - We then use this memory for both the TLS (on the lower side) and the shadow stack
 //   (on the upper side, since it moves downward), using `initThreadLocalStorageAndStackOtherWorkers`.
@@ -298,7 +325,7 @@ export const initThreadLocalStorageMainWorker = (
 //
 // This is easier than trying to allocate the appropriate amount of data in the other
 // itself, which is possible (e.g. using memory.grow) but kind of cumbersome.
-export const makeThreadLocalStorageAndStackDataOnMainWorker = (
+export const makeThreadLocalStorageAndStackDataOnExistingThread = (
   wasmExports: WasmExports
 ): TlsAndStackData => {
   // Align size to 64 bits / 8 bytes.
@@ -334,23 +361,38 @@ export const initThreadLocalStorageAndStackOtherWorkers = (
 // Common wasm functions
 ////////////////////////////////////////////////////////////////
 
-export const copyUint8ArrayToRustBuffer = (
-  inputBuffer: Uint8Array,
+export const copyArrayToRustBuffer = (
+  inputBuffer: WrfArray,
   outputBuffer: ArrayBuffer,
   outputPtr: number
 ): void => {
-  const u8len = inputBuffer.byteLength;
-  const u8out = new Uint8Array(outputBuffer, outputPtr, u8len);
-  u8out.set(inputBuffer);
+  // should be the same type as inputBuffer
+  // @ts-ignore: constructor is getting typed as Function instead of a constructor
+  new inputBuffer.constructor(outputBuffer, outputPtr, inputBuffer.length).set(
+    inputBuffer
+  );
+};
+
+export const getWrfParamType = (
+  array: WrfArray,
+  readonly: boolean
+): WrfParamType => {
+  if (array instanceof Uint8Array) {
+    return readonly ? WrfParamType.ReadOnlyU8Buffer : WrfParamType.U8Buffer;
+  } else if (array instanceof Float32Array) {
+    return readonly ? WrfParamType.ReadOnlyF32Buffer : WrfParamType.F32Buffer;
+  } else {
+    throw new Error("Invalid array type");
+  }
 };
 
 export const createWasmBuffer = (
   memory: WebAssembly.Memory,
   exports: WasmExports,
-  data: Uint8Array
+  data: WrfArray
 ): number => {
   const vecPtr = Number(exports.allocWasmVec(BigInt(data.byteLength)));
-  copyUint8ArrayToRustBuffer(data, memory.buffer, vecPtr);
+  copyArrayToRustBuffer(data, memory.buffer, vecPtr);
   return vecPtr;
 };
 
@@ -437,7 +479,7 @@ export const getWasmEnv = ({
       const buffer = fileReaderSync.readAsArrayBuffer(
         file.file.slice(start, end)
       );
-      copyUint8ArrayToRustBuffer(
+      copyArrayToRustBuffer(
         new Uint8Array(buffer),
         memory.buffer,
         Number(bufPtr)
@@ -484,3 +526,53 @@ export const getWasmEnv = ({
     },
   };
 };
+
+export function transformParamsFromRustImpl(
+  memory: WebAssembly.Memory,
+  destructor: (arcPtr: number) => void,
+  mutableDestructor: (bufferData: MutableBufferData) => void,
+  params: RustWrfParam[]
+): (string | WrfArray)[] {
+  return params.map((param) => {
+    if (typeof param === "string") {
+      return param;
+    } else {
+      const wrfBuffer = getWrfBufferWasm(
+        memory,
+        param,
+        destructor,
+        mutableDestructor
+      );
+
+      if (param.paramType === WrfParamType.String) {
+        throw new Error("WrfParam buffer type called with string paramType");
+      }
+
+      // These are actually WrfArray types, since we overwrite TypedArrays in overwriteTypedArraysWithWrfArrays()
+      const ArrayConstructor = {
+        [WrfParamType.U8Buffer]: Uint8Array,
+        [WrfParamType.ReadOnlyU8Buffer]: Uint8Array,
+        [WrfParamType.F32Buffer]: Float32Array,
+        [WrfParamType.ReadOnlyF32Buffer]: Float32Array,
+      }[param.paramType];
+      return getCachedWrfBuffer(
+        wrfBuffer,
+        new ArrayConstructor(
+          wrfBuffer,
+          param.bufferPtr,
+          param.bufferLen / ArrayConstructor.BYTES_PER_ELEMENT
+        )
+      );
+    }
+  });
+}
+
+export function assertNotNull<T>(
+  value: T | null | undefined,
+  objectName = "Value"
+): T {
+  if (value === null || value === undefined) {
+    throw new Error(`Assertion failed: ${objectName} is null`);
+  }
+  return value;
+}

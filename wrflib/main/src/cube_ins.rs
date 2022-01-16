@@ -6,7 +6,7 @@
 
 //! Drawing 3d cubes.
 
-use crate::cx::*;
+use crate::*;
 
 /// Draw a cube; similar to [`crate::QuadIns`]. Is currently not used much, so mostly
 /// for demonstration purposes.

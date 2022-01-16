@@ -1,4 +1,4 @@
-use crate::cx::*;
+use crate::*;
 
 /// Indicates when to wrap the current line to a new line. See also [`Direction`].
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -261,4 +261,24 @@ impl Default for Height {
     fn default() -> Self {
         Height::Fill
     }
+}
+
+/// Defines how elements on [`Cx::turtle_align_list`] should be moved horizontally
+pub(crate) struct AlignX(pub f32);
+
+impl AlignX {
+    // Note: LEFT is the default so not needed as explicit option
+    pub(crate) const CENTER: AlignX = AlignX(0.5);
+    #[allow(dead_code)]
+    pub(crate) const RIGHT: AlignX = AlignX(1.0);
+}
+
+/// Defines how elements on [`Cx::turtle_align_list`] should be moved vertically
+pub(crate) struct AlignY(pub f32);
+
+impl AlignY {
+    // Note: TOP is the default so not needed as explicit option
+    pub(crate) const CENTER: AlignY = AlignY(0.5);
+    #[allow(dead_code)]
+    pub(crate) const BOTTOM: AlignY = AlignY(1.0);
 }

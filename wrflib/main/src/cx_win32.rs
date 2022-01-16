@@ -6,7 +6,7 @@
 
 //! Win32 API bindings.
 
-use crate::cx::*;
+use crate::*;
 use std::collections::{BTreeSet, HashMap};
 use std::convert::TryInto;
 use std::ffi::OsStr;

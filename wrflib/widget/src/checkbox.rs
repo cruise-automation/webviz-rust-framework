@@ -17,63 +17,67 @@ struct CheckboxIns {
     down: f32,
 }
 
-static SHADER: Shader = Cx::define_shader(
-    Some(GEOM_QUAD2D),
-    &[Cx::STD_SHADER, QuadIns::SHADER],
-    code_fragment!(
-        r#"
-        uniform time: float;
-        instance checked: float;
-        instance loaded: float;
-        instance errored: float;
-        instance hover: float;
-        instance down: float;
-        const stroke_width: float = 1.1;
-        const active_color: vec4 = #f0f0f0;
-        const error_color: vec4 = #ff0000;
-        const inactive_color: vec4 = #ccc;
+static SHADER: Shader = Shader {
+    build_geom: Some(QuadIns::build_geom),
+    code_to_concatenate: &[
+        Cx::STD_SHADER,
+        QuadIns::SHADER,
+        code_fragment!(
+            r#"
+            uniform time: float;
+            instance checked: float;
+            instance loaded: float;
+            instance errored: float;
+            instance hover: float;
+            instance down: float;
+            const stroke_width: float = 1.1;
+            const active_color: vec4 = #f0f0f0;
+            const error_color: vec4 = #ff0000;
+            const inactive_color: vec4 = #ccc;
 
-        fn pixel() -> vec4 {
-            let df = Df::viewport(pos * rect_size);
+            fn pixel() -> vec4 {
+                let df = Df::viewport(pos * rect_size);
 
-            df.rect(0., 0., rect_size.x, rect_size.y);
-            df.fill(mix(vec4(0.,0.,0.,0.), vec4(1.,1.,1.,0.3), hover));
+                df.rect(0., 0., rect_size.x, rect_size.y);
+                df.fill(mix(vec4(0.,0.,0.,0.), vec4(1.,1.,1.,0.3), hover));
 
-            let circle_size = 7. - stroke_width / 2. + down * 3.;
-            df.circle(rect_size.y / 2., rect_size.y / 2., circle_size);
-            if checked > 0. {
-                if errored > 0. {
-                    df.stroke_keep(error_color, stroke_width);
-                    df.fill(error_color);
-                }
-                else if loaded > 0. {
-                    df.stroke_keep(active_color, stroke_width);
-                    df.fill(active_color);
-                } else {
-                    let t = time*2.;
-                    let location = mod(t, 4.*PI);
-                    let angle_start = 0.;
-                    let angle_end = 0.;
-                    if(location > 2.*PI) {
-                        angle_start = 0.;
-                        angle_end = mod(t, 2.*PI);
-                    } else {
-                        angle_start = mod(t, 2.*PI);
-                        angle_end = 2.*PI;
+                let circle_size = 7. - stroke_width / 2. + down * 3.;
+                df.circle(rect_size.y / 2., rect_size.y / 2., circle_size);
+                if checked > 0. {
+                    if errored > 0. {
+                        df.stroke_keep(error_color, stroke_width);
+                        df.fill(error_color);
                     }
+                    else if loaded > 0. {
+                        df.stroke_keep(active_color, stroke_width);
+                        df.fill(active_color);
+                    } else {
+                        let t = time*2.;
+                        let location = mod(t, 4.*PI);
+                        let angle_start = 0.;
+                        let angle_end = 0.;
+                        if(location > 2.*PI) {
+                            angle_start = 0.;
+                            angle_end = mod(t, 2.*PI);
+                        } else {
+                            angle_start = mod(t, 2.*PI);
+                            angle_end = 2.*PI;
+                        }
+                        df.stroke(inactive_color, stroke_width);
+                        df.arc(rect_size.y / 2., rect_size.y / 2., circle_size, angle_start, angle_end);
+                        df.stroke_keep(inactive_color, stroke_width);
+                        df.fill(inactive_color);
+                    }
+                } else {
                     df.stroke(inactive_color, stroke_width);
-                    df.arc(rect_size.y / 2., rect_size.y / 2., circle_size, angle_start, angle_end);
-                    df.stroke_keep(inactive_color, stroke_width);
-                    df.fill(inactive_color);
                 }
-            } else {
-                df.stroke(inactive_color, stroke_width);
-            }
 
-            return df.result;
-        }"#
-    ),
-);
+                return df.result;
+            }"#
+        ),
+    ],
+    ..Shader::DEFAULT
+};
 
 #[derive(Default)]
 pub struct Checkbox {
@@ -175,11 +179,10 @@ impl Checkbox {
 
     pub fn draw(&mut self, cx: &mut Cx, checked: bool, loaded: bool, errored: bool, label: &str, fade_in_time: f64) {
         cx.begin_shader_group(&[&SHADER, &TEXT_INS_SHADER]);
-        let turtle = cx.begin_turtle(Layout {
-            walk: Walk::wh(Width::Fill, Height::Fix(24.)),
-            padding: Padding::all(5.),
-            ..Layout::default()
-        });
+
+        cx.begin_row(Width::Fill, Height::Fix(24.));
+        cx.begin_padding_box(Padding::all(5.));
+
         if cx.last_event_time < fade_in_time {
             cx.request_draw();
         } else {
@@ -193,7 +196,7 @@ impl Checkbox {
             self.area = cx.add_instances(
                 &SHADER,
                 &[CheckboxIns {
-                    base: QuadIns::from_rect(cx.get_turtle_rect()),
+                    base: QuadIns::from_rect(cx.get_box_rect()),
                     checked: checked as u8 as f32,
                     loaded: loaded as u8 as f32,
                     errored: errored as u8 as f32,
@@ -223,7 +226,9 @@ impl Checkbox {
 
             self.manual_animate(cx);
         }
-        cx.end_turtle(turtle);
+        cx.end_padding_box();
+        cx.end_row();
+
         cx.end_shader_group();
     }
 }

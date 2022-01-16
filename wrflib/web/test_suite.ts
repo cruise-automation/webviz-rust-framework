@@ -4,33 +4,49 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
-import { Rpc } from "./common";
+import { assertNotNull, Rpc } from "./common";
 import { TestSuiteTests } from "./test_suite_worker";
-import { PostMessageTypedArray } from "./types";
+import { PostMessageTypedArray, WrfArray } from "./types";
 import { wrfBufferTests } from "./wrf_buffer.test";
 import * as wrf from "./wrf_runtime";
 import {
   expect,
   expectDeallocationOrUnregister as _expectDeallocationOrUnregister,
+  expectThrowAsync,
   setInTest,
 } from "./wrf_test";
 
-const expectDeallocationOrUnregister = (buffer: Uint8Array) =>
+const expectDeallocationOrUnregister = (buffer: WrfArray) =>
   _expectDeallocationOrUnregister(wrf.callRust, buffer);
 
-const rpc = new Rpc(
+export type TestSuiteWorkerSpec = {
+  send: {
+    runTest: [TestSuiteTests, void];
+    initWasm: [MessagePort, void];
+    sendWorker: [PostMessageTypedArray, void];
+    testSendWrfArrayToMainThread: [
+      void,
+      {
+        array: PostMessageTypedArray;
+        subarray: PostMessageTypedArray;
+      }
+    ];
+    testCallRustInSameThreadSyncWithWrfbuffer: [void, PostMessageTypedArray];
+  };
+  receive: Record<string, never>;
+};
+const rpc = new Rpc<TestSuiteWorkerSpec>(
   new Worker(new URL("./test_suite_worker.ts", import.meta.url))
 );
 
-const runWorkerTest = (testName: TestSuiteTests) => async () => {
-  return await rpc.send("run_test", testName);
-};
+const runWorkerTest = (testName: TestSuiteTests) => () =>
+  rpc.send("runTest", testName);
 
 wrf.initialize({ targetName: "test_suite" }).then(() => {
   // Initialize the worker by sending a "wrf worker port" to it in the first message.
   if (wrf.jsRuntime === "wasm") {
     const wrfWorkerPort = wrf.wrfNewWorkerPort();
-    rpc.send("init_wasm", wrfWorkerPort, [wrfWorkerPort]);
+    rpc.send("initWasm", wrfWorkerPort, [wrfWorkerPort]);
   }
 
   wrf.registerCallJsCallbacks({
@@ -38,14 +54,14 @@ wrf.initialize({ targetName: "test_suite" }).then(() => {
       console.log("log fn called", params[0]);
       const div = document.createElement("div");
       div.innerText = "log fn called: " + params[0];
-      document.getElementById("js_root").append(div);
+      assertNotNull(document.getElementById("js_root")).append(div);
     },
     sendWorker(params) {
       const toSend = params[0] as Uint8Array;
       console.log("sending data", toSend);
       // Note: uncomment to see the error about sending typed arrays
       // worker.postMessage(buffers[0]);
-      rpc.send("send_worker", wrf.serializeWrfArrayForPostMessage(toSend));
+      rpc.send("sendWorker", wrf.serializeWrfArrayForPostMessage(toSend));
     },
   });
 
@@ -56,11 +72,13 @@ wrf.initialize({ targetName: "test_suite" }).then(() => {
           "Call rust (no return) from worker": runWorkerTest(
             "testCallRustNoReturnFromWorker"
           ),
+          "Call rust with Float32Array from worker": runWorkerTest(
+            "testCallRustFloat32ArrayFromWorker"
+          ),
+          "Call rust in same thread sync with Float32Array from worker":
+            runWorkerTest("testCallRustInSameThreadSyncFloat32ArrayFromWorker"),
           "Send wrf array to main thread": async () => {
-            const result = await rpc.send<{
-              array: PostMessageTypedArray;
-              subarray: PostMessageTypedArray;
-            }>("test_send_wrf_array_to_main_thread");
+            const result = await rpc.send("testSendWrfArrayToMainThread");
 
             const array = wrf.deserializeWrfArrayFromPostMessage(result.array);
             const subarray = wrf.deserializeWrfArrayFromPostMessage(
@@ -78,8 +96,8 @@ wrf.initialize({ targetName: "test_suite" }).then(() => {
             expect(subarray[1], 50);
           },
           "Call Rust in same thread with wrfbuffer": async () => {
-            const result = await rpc.send<PostMessageTypedArray>(
-              "test_call_rust_in_same_thread_sync_with_wrfbuffer"
+            const result = await rpc.send(
+              "testCallRustInSameThreadSyncWithWrfbuffer"
             );
             const array = wrf.deserializeWrfArrayFromPostMessage(result);
             expect(array.length, 8);
@@ -110,6 +128,45 @@ wrf.initialize({ targetName: "test_suite" }).then(() => {
             expect(result[1], 40);
             expect(result[2], 50);
             expect(result[3], 60);
+          },
+          "Call Rust with Float32Array (in same thread)": async () => {
+            // Using a normal array
+            const input = new Float32Array([0.1, 0.9, 0.3]);
+            const result = wrf.callRustInSameThreadSync("array_multiply", [
+              JSON.stringify(10),
+              input,
+            ])[0] as Float32Array;
+            expect(result.length, 3);
+            expect(result[0], 1);
+            expect(result[1], 9);
+            expect(result[2], 3);
+
+            // Using a WrfArray
+            const input2 = await wrf.createBuffer(
+              new Float32Array([0.1, 0.9, 0.3])
+            );
+            const result2 = wrf.callRustInSameThreadSync("array_multiply", [
+              JSON.stringify(10),
+              input2,
+            ])[0] as Float32Array;
+            expect(result2.length, 3);
+            expect(result2[0], 1);
+            expect(result2[1], 9);
+            expect(result2[2], 3);
+
+            // Using a readonly WrfArray
+            const input3 = await wrf.createReadOnlyBuffer(
+              new Float32Array([0.1, 0.9, 0.3])
+            );
+
+            const result3 = wrf.callRustInSameThreadSync("array_multiply", [
+              JSON.stringify(10),
+              input3,
+            ])[0] as Float32Array;
+            expect(result3.length, 3);
+            expect(result3[0], 1);
+            expect(result3[1], 9);
+            expect(result3[2], 3);
           },
         };
 
@@ -218,12 +275,81 @@ wrf.initialize({ targetName: "test_suite" }).then(() => {
         expectDeallocationOrUnregister(result),
       ]);
     },
+    "Call Rust with Float32Array": async () => {
+      // Using a normal array
+      const input = new Float32Array([0.1, 0.9, 0.3]);
+      const result = (
+        await wrf.callRust("array_multiply", [JSON.stringify(10), input])
+      )[0] as Float32Array;
+      expect(result.length, 3);
+      expect(result[0], 1);
+      expect(result[1], 9);
+      expect(result[2], 3);
+
+      // Using a WrfArray
+      const input2 = await wrf.createBuffer(new Float32Array([0.1, 0.9, 0.3]));
+      const result2 = (
+        await wrf.callRust("array_multiply", [JSON.stringify(10), input2])
+      )[0] as Float32Array;
+
+      expect(result2.length, 3);
+      expect(result2[0], 1);
+      expect(result2[1], 9);
+      expect(result2[2], 3);
+
+      // Using a readonly WrfArray
+      const input3 = await wrf.createReadOnlyBuffer(
+        new Float32Array([0.1, 0.9, 0.3])
+      );
+
+      const result3 = (
+        await wrf.callRust("array_multiply", [JSON.stringify(10), input3])
+      )[0] as Float32Array;
+
+      expect(result3.length, 3);
+      expect(result3[0], 1);
+      expect(result3[1], 9);
+      expect(result3[2], 3);
+
+      return Promise.all([
+        expectDeallocationOrUnregister(result),
+        expectDeallocationOrUnregister(input2),
+        expectDeallocationOrUnregister(result2),
+        expectDeallocationOrUnregister(input3),
+        expectDeallocationOrUnregister(result3),
+      ]);
+    },
+    "Cast WrBuffers": async () => {
+      const input = await wrf.createBuffer(new Float32Array([0.1]));
+      const castArray = new Uint8Array(input.buffer);
+      expect(castArray.length, 4);
+      expect(castArray[0], 205);
+      expect(castArray[1], 204);
+      expect(castArray[2], 204);
+      expect(castArray[3], 61);
+      await expectThrowAsync(
+        () => wrf.callRust("verify_cast_array", [castArray]),
+        "Cannot call Rust with a buffer which has been cast to a different type. Expected F32Buffer but got U8Buffer"
+      );
+
+      const input2 = await wrf.createReadOnlyBuffer(new Float32Array([0.1]));
+      const castArray2 = new Uint8Array(input2.buffer);
+      expect(castArray2.length, 4);
+      expect(castArray2[0], 205);
+      expect(castArray2[1], 204);
+      expect(castArray2[2], 204);
+      expect(castArray2[3], 61);
+      await expectThrowAsync(
+        () => wrf.callRust("verify_cast_array", [castArray2]),
+        "Cannot call Rust with a buffer which has been cast to a different type. Expected ReadOnlyF32Buffer but got ReadOnlyU8Buffer"
+      );
+    },
     ...runtimeSpecificTests,
     ...wrfBufferTests,
   };
 
   const makeButtons = () => {
-    const jsRoot = document.getElementById("js_root");
+    const jsRoot = assertNotNull(document.getElementById("js_root"));
 
     const runAllButton = document.createElement("button");
     runAllButton.innerText = "Run All Tests 3x";

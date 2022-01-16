@@ -7,8 +7,8 @@
 //! Windows platform-specific entry point.
 //!
 //! Win 10 only because of DX12 + terminal API.
-use crate::cx::*;
 use crate::cx_win32::*;
+use crate::*;
 
 impl Cx {
     pub fn event_loop<F>(&mut self, mut event_handler: F)

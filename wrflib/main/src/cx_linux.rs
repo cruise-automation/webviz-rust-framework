@@ -6,8 +6,8 @@
 
 //! Linux platform-specific entry point.
 
-use crate::cx::*;
 use crate::cx_xlib::*;
+use crate::*;
 
 impl Cx {
     pub fn event_loop<F>(&mut self, mut event_handler: F)
