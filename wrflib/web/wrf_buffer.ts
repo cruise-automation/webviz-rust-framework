@@ -8,7 +8,7 @@
 
 import { getWrfParamType } from "./common";
 import { BufferData, MutableBufferData, WrfArray, WrfParamType } from "./types";
-import { inTest } from "./wrf_test";
+import { inTest } from "./test_helpers";
 
 // TODO(Paras) - Make sure we monkeypatch on web workers as well
 export class WrfBuffer extends SharedArrayBuffer {
@@ -133,7 +133,7 @@ export const classesToExtend = {
 };
 
 for (const [cls, wrfCls] of Object.entries(classesToExtend)) {
-  // Get a new type name by prefixing old one with "Wrf".
+  // Get a new type name by prefixing old one with "Wrflib".
   // e.g. Uint8Array is extended by WrfUint8Array, etc
   if (cls in self) {
     // @ts-ignore

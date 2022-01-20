@@ -64,7 +64,7 @@ pub struct FileTree {
 
     node_bg: Background,
 
-    node_layout: Layout,
+    node_layout_size: LayoutSize,
     row_height: f32,
     color_tree_folder: Vec4,
     color_tree_file: Vec4,
@@ -82,8 +82,10 @@ pub enum FileTreeEvent {
     SelectFolder { path: String },
 }
 
-const FILLER_WALK: Walk = Walk { width: Width::Fix(10.0), height: Height::Fill };
+const FILLER_WALK: LayoutSize = LayoutSize { width: Width::Fix(10.0), height: Height::Fill };
 const FILLER_PADDING: Padding = Padding { l: 1., t: 0., r: 4., b: 0. };
+
+const NODE_PADDING: Padding = Padding { l: 5., t: 0., r: 0., b: 1. };
 
 const TEXT_STYLE_LABEL: TextStyle = TextStyle { top_drop: 1.3, ..TEXT_STYLE_NORMAL };
 
@@ -112,7 +114,7 @@ impl FileTree {
 
             node_bg: Background::default(),
             //node_layout: LayoutFileTreeNode::id(),
-            node_layout: Layout::default(),
+            node_layout_size: LayoutSize::default(),
             row_height: 0.,
             color_tree_folder: Vec4::default(),
             color_tree_file: Vec4::default(),
@@ -123,11 +125,7 @@ impl FileTree {
 
     fn apply_style(&mut self) {
         let node_height = 20.;
-        self.node_layout = Layout {
-            walk: Walk::wh(Width::Fill, Height::Fix(node_height)),
-            padding: Padding { l: 5., t: 0., r: 0., b: 1. },
-            ..Layout::default()
-        };
+        self.node_layout_size = LayoutSize::new(Width::Fill, Height::Fix(node_height));
         self.row_height = node_height;
         self.color_tree_folder = COLOR_TREE_FOLDER;
         self.color_tree_file = COLOR_TREE_FILE;
@@ -316,13 +314,13 @@ impl FileTree {
 
     fn walk_filler(cx: &mut Cx) -> Rect {
         cx.begin_padding_box(FILLER_PADDING);
-        let rect = cx.walk_turtle(FILLER_WALK);
+        let rect = cx.add_box(FILLER_WALK);
         cx.end_padding_box();
         rect
     }
 
     pub fn draw(&mut self, cx: &mut Cx) {
-        self.view.begin_view(cx, Layout::default());
+        self.view.begin_view(cx, LayoutSize::FILL);
 
         self.apply_style();
 
@@ -359,11 +357,11 @@ impl FileTree {
 
             node_draw.animator.draw(cx, Self::get_default_anim(counter, false));
 
-            let mut node_layout = self.node_layout;
-            node_layout.walk.height = Height::Fix(self.row_height * scale as f32);
+            let mut node_layout_size = self.node_layout_size;
+            node_layout_size.height = Height::Fix(self.row_height * scale as f32);
 
-            self.node_bg.begin_draw(cx, node_layout.walk.width, node_layout.walk.height, node_draw.animator.get_vec4(0));
-            cx.begin_padding_box(node_layout.padding);
+            self.node_bg.begin_draw(cx, node_layout_size.width, node_layout_size.height, node_draw.animator.get_vec4(0));
+            cx.begin_padding_box(NODE_PADDING);
 
             node_draw.area = self.node_bg.area();
             node_draw.component_base.register_component_area(cx, node_draw.area);
@@ -416,10 +414,7 @@ impl FileTree {
                     filler.anim_pos = 1.;
                     let rect = Self::walk_filler(cx);
                     filler.draw_quad_abs(cx, rect);
-                    // move the turtle down a bit
-                    //cx.move_turtle(0., 3.5);
-                    //cx.realign_turtle(Align::LEFT_CENTER, false);
-                    cx.begin_row(self.node_layout.walk.width, self.node_layout.walk.height);
+                    cx.begin_row(self.node_layout_size.width, self.node_layout_size.height);
                     cx.begin_center_y_align();
                     tree_text_props.color = self.color_tree_folder;
                     let wleft = cx.get_width_left() - 10.;
@@ -453,12 +448,10 @@ impl FileTree {
                     scale_stack.push(scale * new_scale);
                 }
                 FileNode::File { name, .. } => {
-                    //cx.move_turtle(0., 3.5);
-                    cx.begin_row(self.node_layout.walk.width, self.node_layout.walk.height);
+                    cx.begin_row(self.node_layout_size.width, self.node_layout_size.height);
                     cx.begin_center_y_align();
                     let wleft = cx.get_width_left() - 10.;
                     tree_text_props.wrapping = Wrapping::Ellipsis(wleft);
-                    //cx.realign_turtle(Align::LEFT_CENTER, false);
                     tree_text_props.color = if is_marked { self.color_tree_folder } else { self.color_tree_file };
                     TextIns::draw_walk(cx, name, &tree_text_props);
                     cx.end_center_y_align();
@@ -468,7 +461,6 @@ impl FileTree {
             cx.end_padding_box();
             self.node_bg.end_draw(cx);
 
-            cx.turtle_new_line();
             // if any of the parents is closing, don't count alternating lines
             if !file_walker.current_closing() {
                 counter += 1;
@@ -477,8 +469,8 @@ impl FileTree {
 
         // draw filler nodes
         if self.row_height > 0. {
-            let view_total = cx.get_turtle_bounds();
-            let rect_now = cx.get_turtle_rect();
+            let view_total = cx.get_box_bounds();
+            let rect_now = cx.get_box_rect();
             let mut y = view_total.y;
             while y < rect_now.size.y {
                 self.node_bg.begin_draw(
@@ -488,7 +480,6 @@ impl FileTree {
                     if counter & 1 == 0 { LIST_ANIMS_COLOR_BG_EVEN } else { LIST_ANIMS_COLOR_BG_ODD },
                 );
                 self.node_bg.end_draw(cx);
-                cx.turtle_new_line();
                 y += self.row_height;
                 counter += 1;
             }
@@ -496,14 +487,10 @@ impl FileTree {
 
         // draw the drag item overlay layer if need be
         if let Some(mv) = &self._drag_move {
-            self.drag_view.begin_view(
-                cx,
-                Layout {
-                    absolute: true,
-                    padding: Padding { l: mv.abs.x + 5., t: mv.abs.y + 5., ..Default::default() },
-                    ..Default::default()
-                },
-            );
+            cx.begin_absolute_box();
+            self.drag_view.begin_view(cx, LayoutSize::FILL);
+            cx.begin_padding_box(Padding { l: mv.abs.x + 5., t: mv.abs.y + 5., r: 0., b: 0. });
+
             let mut file_walker = FileWalker::new(&mut self.root_node);
             while let Some((_depth, _index, _len, node)) = file_walker.walk() {
                 let node_draw = if let Some(node_draw) = node.get_draw() {
@@ -526,7 +513,10 @@ impl FileTree {
                     self.drag_bg.end_draw(cx);
                 }
             }
+
+            cx.end_padding_box();
             self.drag_view.end_view(cx);
+            cx.end_absolute_box();
         }
 
         ScrollShadow::draw_shadow_top(cx, 0.25);

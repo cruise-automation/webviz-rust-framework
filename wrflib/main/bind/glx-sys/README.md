@@ -1,3 +1,3 @@
-The glx bindings for [Wrf](https://github.com/janpaul123/wrflib).
+The glx bindings for [Wrflib](https://github.com/cruise-automation/webviz-rust-framework).
 
-This is early stage and experimental. For now, see the [repository](https://github.com/janpaul123/wrflib) for usage details. We will add better documentation over time.
+This is early stage and experimental. For now, see the [repository](https://github.com/cruise-automation/webviz-rust-framework) for usage details. We will add better documentation over time.

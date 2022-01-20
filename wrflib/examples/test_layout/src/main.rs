@@ -59,9 +59,9 @@ impl LayoutExampleApp {
     }
 
     fn draw_padding_slider(&mut self, cx: &mut Cx) {
-        // This is the important non-trivial case of Compute turtle (padding_box) enclosing Fill one (slider)
-        // It is tricky because Fill turtle doesn't have outer bounds (width/height) passed to it as
-        // the outer turtle Compute is unbounded
+        // This is the important non-trivial case of Compute box (padding_box) enclosing Fill one (slider)
+        // It is tricky because Fill box doesn't have outer bounds (width/height) passed to it as
+        // the outer box Compute is unbounded
         cx.begin_row(Width::Fill, Height::Compute);
         {
             cx.begin_padding_box(Padding::all(self.padding_value));
@@ -155,7 +155,7 @@ impl LayoutExampleApp {
     pub fn draw(&mut self, cx: &mut Cx) {
         self.window.begin_window(cx);
         self.pass.begin_pass(cx, Vec4::color("500"));
-        self.main_view.begin_view(cx, Layout { direction: Direction::Down, ..Layout::default() });
+        self.main_view.begin_view(cx, LayoutSize::FILL);
 
         // cut fixed size top bar
         cx.begin_row(Width::Fill, Height::Fix(27.));

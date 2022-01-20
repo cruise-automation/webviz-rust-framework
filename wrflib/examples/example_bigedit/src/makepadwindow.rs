@@ -97,7 +97,7 @@ impl WrfWindow {
                                 closeable: true,
                                 title: "treeworld.rs".to_string(),
                                 item: Panel::FileEditor {
-                                    path: "main/wrflib/wrflib/examples/bigedit/src/treeworld.rs".to_string(),
+                                    path: "main/wrflib/wrflib/examples/example_bigedit/src/treeworld.rs".to_string(),
                                     scroll_pos: Vec2::default(),
                                     editor_id: 2,
                                 },

@@ -15,6 +15,7 @@ import {
   PostMessageTypedArray,
   CreateBuffer,
   WrfParamType,
+  Initialize,
 } from "./types";
 import {
   getCachedWrfBuffer,
@@ -27,6 +28,7 @@ import {
 import { ZerdeBuilder } from "./zerde";
 import { zerdeKeyboardHandlers } from "./zerde_keyboard_handlers";
 import { WorkerEvent } from "./rpc_types";
+import { addDefaultStyles } from "./default_styles";
 
 type CefParams = (string | [ArrayBuffer, WrfParamType])[];
 type CefBufferData = [ArrayBuffer, number | undefined, WrfParamType];
@@ -60,8 +62,8 @@ let newCallbackId = 0;
 // keeping track of pending callbacks from rust side
 const pendingCallbacks: Record<number, (arg0: WrfParam[]) => void> = {};
 
-export const callRust: CallRust = (name, params = []) => {
-  const cefParams: CefParams = params.map((param) => {
+const transformParamsForRust = (params: WrfParam[]): CefParams =>
+  params.map((param) => {
     if (typeof param === "string") {
       return param;
     } else {
@@ -75,10 +77,13 @@ export const callRust: CallRust = (name, params = []) => {
       }
       const paramType = getWrfParamType(param, false);
       const [cefBuffer] = window.cefCreateArrayBuffer(param.length, paramType);
+      // TODO(Dmitry): implement optimization to avoid copying when possible
       copyArrayToRustBuffer(param, cefBuffer, 0);
       return [cefBuffer, paramType];
     }
   });
+
+export const callRust: CallRust = (name, params = []) => {
   const callbackId = newCallbackId++;
   const promise = new Promise<WrfParam[]>((resolve, _reject) => {
     pendingCallbacks[callbackId] = (data) => {
@@ -86,7 +91,7 @@ export const callRust: CallRust = (name, params = []) => {
       resolve(data);
     };
   });
-  window.cefCallRust(name, cefParams, callbackId);
+  window.cefCallRust(name, transformParamsForRust(params), callbackId);
   return promise;
 };
 
@@ -162,24 +167,13 @@ const transformReturnParams = (returnParams: FromCefParams) =>
 export const callRustInSameThreadSync: CallRustInSameThreadSync = (
   name,
   params = []
-) => {
-  const cefParams: CefParams = params.map((param) => {
-    if (typeof param === "string") {
-      return param;
-    } else {
-      const paramType = getWrfParamType(param, false);
-      const [cefBuffer] = window.cefCreateArrayBuffer(param.length, paramType);
-      // TODO(Dmitry): implement optimization to avoid copying when possible
-      copyArrayToRustBuffer(param, cefBuffer, 0);
-      return [cefBuffer, paramType];
-    }
-  });
-  const returnParams = window.cefCallRustInSameThreadSync(name, cefParams);
-  return transformReturnParams(returnParams);
-};
+) =>
+  transformReturnParams(
+    window.cefCallRustInSameThreadSync(name, transformParamsForRust(params))
+  );
 
-export const wrfNewWorkerPort = (): MessagePort => {
-  throw new Error("`wrfNewWorkerPort` is currently not supported on CEF");
+export const newWorkerPort = (): MessagePort => {
+  throw new Error("`newWorkerPort` is currently not supported on CEF");
 };
 
 export const serializeWrfArrayForPostMessage = (
@@ -198,7 +192,7 @@ export const deserializeWrfArrayFromPostMessage = (
   );
 };
 
-export const initialize = (_initParams: unknown): Promise<void> =>
+export const initialize: Initialize = (initParams) =>
   new Promise<void>((resolve) => {
     overwriteTypedArraysWithWrfArrays();
 
@@ -213,6 +207,10 @@ export const initialize = (_initParams: unknown): Promise<void> =>
     };
 
     document.addEventListener("DOMContentLoaded", () => {
+      if (initParams.defaultStyles) {
+        addDefaultStyles();
+      }
+
       const { showTextIME, textareaHasFocus } = makeTextarea(
         (taEvent: TextareaEvent) => {
           const slots = 20;
@@ -275,7 +273,8 @@ export const initialize = (_initParams: unknown): Promise<void> =>
     });
   });
 
-export const createBuffer: CreateBuffer = async (data) => {
+// TODO(JP): See comment at CreateBuffer type.
+export const createMutableBuffer: CreateBuffer = async (data) => {
   const paramType = getWrfParamType(data, false);
   const [cefBuffer] = window.cefCreateArrayBuffer(data.length, paramType);
   copyArrayToRustBuffer(data, cefBuffer, 0);
@@ -284,6 +283,7 @@ export const createBuffer: CreateBuffer = async (data) => {
   ])[0] as typeof data;
 };
 
+// TODO(JP): See comment at CreateBuffer type.
 export const createReadOnlyBuffer: CreateBuffer = async (data) => {
   const paramType = getWrfParamType(data, true);
   const [cefBuffer, arcPtr] = window.cefCreateArrayBuffer(

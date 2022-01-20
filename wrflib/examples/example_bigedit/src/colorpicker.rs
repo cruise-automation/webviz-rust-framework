@@ -247,9 +247,9 @@ impl ColorPicker {
 
     pub fn draw(&mut self, cx: &mut Cx, hsva: Vec4, height_scale: f32) {
         // i wanna draw a wheel with 'width' set but height a fixed height.
-        self.size = cx.get_turtle_rect().size.x;
+        self.size = cx.get_box_rect().size.x;
 
-        let rect = cx.walk_turtle(Walk { width: Width::Fill, height: Height::Fix(self.size * height_scale) });
+        let rect = cx.add_box(LayoutSize { width: Width::Fill, height: Height::Fix(self.size * height_scale) });
 
         self.area = cx.add_instances(
             &SHADER,

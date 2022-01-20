@@ -34,6 +34,11 @@ export type Worker<T extends RpcSpec> = {
   send: T["receive"];
 };
 
+export type WorkerCallRustParams = {
+  name: string;
+  params: (string | PostMessageTypedArray | WrfArray)[];
+};
+
 export enum WorkerEvent {
   CallRust = "WorkerEvent.CallRust",
   CreateBuffer = "WorkerEvent.CreateBuffer",
@@ -81,10 +86,7 @@ export type WasmWorkerRpc = {
     [WorkerEvent.DecrementArc]: [number, void];
     [WorkerEvent.DeallocVec]: [MutableBufferData, void];
     [WorkerEvent.IncrementArc]: [number, void];
-    [WorkerEvent.CallRust]: [
-      { name: string; params: (string | PostMessageTypedArray | WrfArray)[] },
-      Promise<RustWrfParam[]>
-    ];
+    [WorkerEvent.CallRust]: [WorkerCallRustParams, Promise<RustWrfParam[]>];
     [WorkerEvent.CreateBuffer]: [WrfArray, number];
     [WorkerEvent.CreateReadOnlyBuffer]: [
       WrfArray,
@@ -225,7 +227,7 @@ export type WebWorkerRpc = {
     ];
     [MainWorkerChannelEvent.SendEventFromAnyThread]: [BigInt, void];
     [MainWorkerChannelEvent.CallRust]: [
-      { name: string; params: (string | PostMessageTypedArray | WrfArray)[] },
+      WorkerCallRustParams,
       Promise<RustWrfParam[]>
     ];
   };

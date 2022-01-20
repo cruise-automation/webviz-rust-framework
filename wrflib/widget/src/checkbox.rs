@@ -204,7 +204,7 @@ impl Checkbox {
                 }],
             );
 
-            cx.walk_turtle(Walk::wh(Width::Fix(20.), Height::Fix(0.)));
+            cx.add_box(LayoutSize::new(Width::Fix(20.), Height::Fix(0.)));
             let draw_str_props = TextInsProps {
                 wrapping: Wrapping::Ellipsis(cx.get_width_left() - 20.),
                 color: if errored {

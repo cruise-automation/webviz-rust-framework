@@ -209,11 +209,7 @@ impl IndentLines {
         self.instances.clear();
     }
     fn make_quad_rel(&mut self, cx: &mut Cx, rect: Rect, color: Vec4, indent_id: f32) {
-        self.instances.push(IndentLinesIns {
-            quad: QuadIns::from_rect(rect.translate(cx.get_turtle_origin())),
-            color,
-            indent_id,
-        });
+        self.instances.push(IndentLinesIns { quad: QuadIns::from_rect(rect.translate(cx.get_box_origin())), color, indent_id });
         self.write_uniforms(cx)
     }
     fn draw(&mut self, cx: &mut Cx) {
@@ -247,7 +243,7 @@ impl Cursor {
         self.area = cx.add_instances(
             &SHADER_CURSOR,
             &[CursorIns {
-                base: QuadIns::from_rect(rect.translate(cx.get_turtle_origin())).with_draw_depth(1.3),
+                base: QuadIns::from_rect(rect.translate(cx.get_box_origin())).with_draw_depth(1.3),
                 color: COLOR_CURSOR,
             }],
         );
@@ -1172,24 +1168,25 @@ impl TextEditor {
         self._line_largest_font = TEXT_STYLE_MONO.font_size;
         self._last_indent_color = self.colors.indent_line_unknown;
         // indent
-        cx.move_turtle(self.line_number_width, self.top_padding);
+        cx.move_draw_pos(self.line_number_width, self.top_padding);
     }
 
     pub fn begin_text_editor(
         &mut self,
         cx: &mut Cx,
         text_buffer: &TextBuffer,
-        override_view_walk: Option<Walk>,
+        override_layout_size: Option<LayoutSize>,
     ) -> Result<(), ()> {
         // adjust dilation based on DPI factor
 
-        let view_layout = if let Some(view_walk) = override_view_walk {
-            Layout { walk: view_walk, ..Layout::default() }
+        if let Some(layout_size) = override_layout_size {
+            self.view.begin_view(cx, layout_size);
+            cx.begin_row(layout_size.width, layout_size.height);
         } else {
-            Layout::default()
+            self.view.begin_view(cx, LayoutSize::FILL);
+            cx.begin_row(Width::Compute, Height::Compute);
         };
 
-        self.view.begin_view(cx, view_layout);
         self.apply_style();
 
         //println!("{:?}", self.cursors.set[0]);
@@ -1275,18 +1272,26 @@ impl TextEditor {
         }
     }
 
+    fn line_is_visible(&self, cx: &mut Cx, min_height: f32, scroll: Vec2) -> bool {
+        let pos = cx.get_draw_pos();
+        let vy = cx.get_box_origin().y + scroll.y;
+        let vh = cx.get_height_total();
+        return !(pos.y > vy + vh || pos.y + min_height < vy);
+    }
+
     fn draw_new_line(&mut self, cx: &mut Cx) {
         // line geometry is used for scrolling look up of cursors
+        let relative_offset = cx.get_draw_pos() - cx.get_box_origin();
         let line_geom = LineGeom {
-            walk: cx.get_rel_turtle_pos(),
+            walk: relative_offset,
             font_size: self._line_largest_font,
             was_folded: self._line_was_folded,
             indent_id: if let Some((_, id)) = self._indent_stack.last() { *id } else { 0. },
         };
 
         // draw a linenumber if we are visible
-        let origin = cx.get_turtle_origin();
-        if self.draw_line_numbers && cx.turtle_line_is_visible(self._monospace_size.y, self._scroll_pos) {
+        let origin = cx.get_box_origin();
+        if self.draw_line_numbers && self.line_is_visible(cx, self._monospace_size.y, self._scroll_pos) {
             // lets format a number, we go to 4 numbers
             // yes this is dumb as rocks. but we need to be cheapnfast
             let mut line_number_text = String::with_capacity(6);
@@ -1339,9 +1344,9 @@ impl TextEditor {
             ));
         }
 
-        cx.turtle_new_line_min_height(self._monospace_size.y);
+        cx.draw_new_line_min_height(self._monospace_size.y);
 
-        cx.move_turtle(self.line_number_width, 0.);
+        cx.move_draw_pos(self.line_number_width, 0.);
 
         self._tokens_on_line = 0;
         //self._line_was_visible = false;
@@ -1355,7 +1360,7 @@ impl TextEditor {
     }
 
     fn draw_indent_lines(&mut self, cx: &mut Cx, geom_y: f32, tabs: usize) {
-        let y_pos = geom_y - cx.get_turtle_origin().y;
+        let y_pos = geom_y - cx.get_box_origin().y;
         let tab_variable_width = self._monospace_base.x * 4. * TEXT_STYLE_MONO.font_size * self._anim_font_scale;
         let tab_fixed_width = self._monospace_base.x * 4. * TEXT_STYLE_MONO.font_size;
         let mut off = self.line_number_width;
@@ -1421,7 +1426,7 @@ impl TextEditor {
                                 * self._anim_font_scale
                                 * 4.
                                 * (self.folding_depth as f32));
-                        cx.move_turtle(dx, 0.0);
+                        cx.move_draw_pos(dx, 0.0);
                         self._line_was_folded = true;
                         self._anim_font_scale
                     } else {
@@ -1465,9 +1470,12 @@ impl TextEditor {
             }
         }
         // lets check if the geom is visible
-        if let Some(geom) =
-            cx.walk_turtle_right_no_wrap(self._monospace_size.x * (chunk.len() as f32), self._monospace_size.y, self._scroll_pos)
-        {
+        if let Some(geom) = self.move_cursor_right_no_wrap(
+            cx,
+            self._monospace_size.x * (chunk.len() as f32),
+            self._monospace_size.y,
+            self._scroll_pos,
+        ) {
             let mut mark_spaces = 0.0;
             // determine chunk color
             let color = match token_type {
@@ -1619,6 +1627,23 @@ impl TextEditor {
         }
     }
 
+    fn move_cursor_right_no_wrap(&self, cx: &mut Cx, w: f32, h: f32, scroll: Vec2) -> Option<Rect> {
+        // Save position before updating it
+        let pos = cx.get_draw_pos();
+
+        cx.add_box(LayoutSize::new(Width::Fix(w), Height::Fix(h)));
+        let origin = cx.get_box_origin();
+        let vx = origin.x + scroll.x;
+        let vy = origin.y + scroll.y;
+        let vw = cx.get_width_total();
+        let vh = cx.get_height_total();
+        if pos.x > vx + vw || pos.x + w < vx || pos.y > vy + vh || pos.y + h < vy {
+            None
+        } else {
+            Some(Rect { pos: vec2(pos.x, pos.y), size: vec2(w, h) })
+        }
+    }
+
     fn draw_paren_open(&mut self, token_chunks_index: usize, offset: usize, next_char: char, chunk: &[char]) {
         let marked = if let Some(pos) = self.cursors.get_last_cursor_singular() {
             pos == offset || pos == offset + 1 && next_char != '(' && next_char != '{' && next_char != '['
@@ -1706,9 +1731,6 @@ impl TextEditor {
             // lets insert an empty newline at the bottom so its nicer to scroll
             self.draw_new_line(cx);
         }
-        if !cx.is_height_computed() {
-            cx.walk_turtle(Walk::wh(Width::Fix(0.0), Height::Fix(self._monospace_size.y)));
-        }
 
         self.place_ime_and_draw_cursor_row(cx);
         self.draw_selections(cx);
@@ -1720,7 +1742,7 @@ impl TextEditor {
         if self.draw_line_numbers {
             self.gutter_bg.draw_with_scroll_sticky(
                 cx,
-                Rect { pos: cx.get_turtle_origin(), size: vec2(self.line_number_width, cx.get_height_total()) },
+                Rect { pos: cx.get_box_origin(), size: vec2(self.line_number_width, cx.get_height_total()) },
                 COLOR_GUTTER_BG,
             );
         }
@@ -1728,15 +1750,13 @@ impl TextEditor {
 
         // inject a final page
         self._final_fill_height = cx.get_height_total() - self._monospace_size.y;
-        if !cx.is_height_computed() {
-            cx.walk_turtle(Walk::wh(Width::Fix(0.0), Height::Fix(self._final_fill_height)));
-        }
         self.draw_shadows(cx);
 
         // last bits
         self.do_selection_scrolling(cx, text_buffer);
         self.set_indent_line_highlight_id(cx);
 
+        cx.end_row();
         self.view.end_view(cx);
         self.component_base.register_component_area(cx, self.view.area());
 
@@ -1765,7 +1785,7 @@ impl TextEditor {
 
     fn draw_cursors(&mut self, cx: &mut Cx) {
         if self.has_key_focus(cx) {
-            let origin = cx.get_turtle_origin();
+            let origin = cx.get_box_origin();
             self.cursor.blink = self._cursor_blink_flipflop;
             for rc in &self._draw_cursors.cursors {
                 self.cursor.draw_quad_rel(cx, Rect { pos: vec2(rc.x, rc.y) - origin, size: vec2(rc.w, rc.h) });
@@ -1783,7 +1803,7 @@ impl TextEditor {
     }
 
     fn draw_message_markers(&mut self, cx: &mut Cx, text_buffer: &TextBuffer) {
-        let origin = cx.get_turtle_origin();
+        let origin = cx.get_box_origin();
         let message_markers = &mut self._draw_messages.selections;
 
         for i in 0..message_markers.len() {
@@ -1794,16 +1814,15 @@ impl TextEditor {
                 TextBufferMessageLevel::Error => self.colors.message_marker_error,
                 TextBufferMessageLevel::Log => self.colors.message_marker_log,
             };
-            self.message_marker
-                .draw_quad_abs(cx, Rect { pos: cx.get_turtle_origin() + mark.rc.pos - origin, size: mark.rc.size });
+            self.message_marker.draw_quad_abs(cx, Rect { pos: cx.get_box_origin() + mark.rc.pos - origin, size: mark.rc.size });
         }
     }
 
     pub fn draw_search_markers(&mut self, cx: &mut Cx) {
-        let origin = cx.get_turtle_origin();
+        let origin = cx.get_box_origin();
 
         for mark in &self._draw_search.selections {
-            self.search_marker.draw_quad_abs(cx, Rect { pos: cx.get_turtle_origin() + mark.rc.pos - origin, size: mark.rc.size });
+            self.search_marker.draw_quad_abs(cx, Rect { pos: cx.get_box_origin() + mark.rc.pos - origin, size: mark.rc.size });
         }
     }
 
@@ -1853,8 +1872,8 @@ impl TextEditor {
                     self.cursor_row.draw(
                         cx,
                         Rect {
-                            pos: vec2(self.line_number_width + cx.get_turtle_origin().x, rc.y),
-                            size: vec2(cx.get_width_total().max(cx.get_turtle_bounds().x) - self.line_number_width, rc.h),
+                            pos: vec2(self.line_number_width + cx.get_box_origin().x, rc.y),
+                            size: vec2(cx.get_width_total().max(cx.get_box_bounds().x) - self.line_number_width, rc.h),
                         },
                         COLOR_CURSOR_ROW,
                     );

@@ -49,9 +49,9 @@ impl MaybeCefBrowser {
         }
     }
 
-    pub(crate) fn register_call_rust_in_same_thread_sync_fn(&mut self, func: CallRustInSameThreadSyncFn) {
+    pub(crate) fn on_call_rust_in_same_thread_sync(&mut self, func: CallRustInSameThreadSyncFn) {
         match self {
-            MaybeCefBrowser::Initialized(cef_browser) => cef_browser.register_call_rust_in_same_thread_sync_fn(func),
+            MaybeCefBrowser::Initialized(cef_browser) => cef_browser.on_call_rust_in_same_thread_sync(func),
             MaybeCefBrowser::Uninitialized { call_rust_in_same_thread_sync_fn, .. } => {
                 *call_rust_in_same_thread_sync_fn = Some(func)
             }
@@ -84,7 +84,7 @@ impl MaybeCefBrowser {
                     get_resource_url_callback,
                 );
                 if let Some(func) = call_rust_in_same_thread_sync_fn {
-                    cef_browser.register_call_rust_in_same_thread_sync_fn(*func);
+                    cef_browser.on_call_rust_in_same_thread_sync(*func);
                 }
                 *self = MaybeCefBrowser::Initialized(cef_browser);
             }
@@ -167,16 +167,16 @@ fn make_buffers_and_arc_ptrs(params: Vec<WrfParam>) -> V8Value {
         let param_type = match &param {
             WrfParam::String(_) => WRF_PARAM_STRING,
             WrfParam::ReadOnlyU8Buffer(_) => WRF_PARAM_READ_ONLY_UINT8_BUFFER,
-            WrfParam::U8Buffer(_) => WRF_PARAM_UINT8_BUFFER,
+            WrfParam::MutableU8Buffer(_) => WRF_PARAM_UINT8_BUFFER,
             WrfParam::ReadOnlyF32Buffer(_) => WRF_PARAM_READ_ONLY_FLOAT32_BUFFER,
-            WrfParam::F32Buffer(_) => WRF_PARAM_FLOAT32_BUFFER,
+            WrfParam::MutableF32Buffer(_) => WRF_PARAM_FLOAT32_BUFFER,
         };
         let value = match param {
             WrfParam::String(str) => V8Value::create_string(&str),
             WrfParam::ReadOnlyU8Buffer(buffer) => make_readonly_buffer(param_type, buffer),
-            WrfParam::U8Buffer(buffer) => make_mutable_buffer(param_type, buffer),
+            WrfParam::MutableU8Buffer(buffer) => make_mutable_buffer(param_type, buffer),
             WrfParam::ReadOnlyF32Buffer(buffer) => make_readonly_buffer(param_type, buffer),
-            WrfParam::F32Buffer(buffer) => make_mutable_buffer(param_type, buffer),
+            WrfParam::MutableF32Buffer(buffer) => make_mutable_buffer(param_type, buffer),
         };
 
         values.set_value_byindex(index, &value);
@@ -704,7 +704,7 @@ impl CefBrowser {
         frame.execute_javascript(&code, &script_url, start_line);
     }
 
-    fn register_call_rust_in_same_thread_sync_fn(&mut self, func: CallRustInSameThreadSyncFn) {
+    fn on_call_rust_in_same_thread_sync(&mut self, func: CallRustInSameThreadSyncFn) {
         *self.call_rust_in_same_thread_sync_fn.write().unwrap() = Some(func);
     }
 }

@@ -154,7 +154,7 @@ pub struct PropDef {
 /// Contains information about the special "rect_pos" and "rect_size" fields.
 /// These fields describe the typical rectangles drawn in [`crate::QuadIns`]. It is
 /// useful to have generalized access to them, so we can e.g. move a whole bunch
-/// of rectangles at the same time, e.g. for alignment in [`CxTurtle`].
+/// of rectangles at the same time, e.g. for alignment in [`CxLayoutBox`].
 /// TODO(JP): We might want to consider instead doing bulk moves using [`DrawCall`-
 /// or [`View`]-level uniforms.
 #[derive(Debug, Default, Clone)]

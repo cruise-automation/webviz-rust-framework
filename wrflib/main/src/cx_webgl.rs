@@ -6,7 +6,7 @@
 
 //! WebGL bindings.
 //!
-//! Communicates with wrf_wasm_worker.js using some functions in `cx_wasm32.rs`.
+//! Communicates with main_worker.ts using some functions in `cx_wasm32.rs`.
 
 use crate::{zerde::ZerdeBuilder, *};
 use wrflib_shader_compiler::generate_glsl;

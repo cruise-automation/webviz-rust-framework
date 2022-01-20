@@ -226,7 +226,7 @@ pub trait ChartTooltipRenderer {
     ///
     /// Use `pos` to position the elements that need to be rendered.
     ///
-    /// TODO(Hernan): Add support for turtles and other layout mechanisms.
+    /// TODO(Hernan): Add support for boxes and other layout mechanisms.
     fn draw_tooltip(&self, cx: &mut Cx, config: &ChartConfig, pos: Vec2);
 }
 
@@ -822,7 +822,7 @@ impl Chart {
     }
 
     fn draw_chart(&mut self, cx: &mut Cx, config: &ChartConfig) {
-        self.chart_view.begin_view(cx, Layout::default());
+        self.chart_view.begin_view(cx, LayoutSize::FILL);
 
         let rect = cx.get_turtle_rect();
 
@@ -879,7 +879,7 @@ impl Chart {
     }
 
     fn draw_view(&mut self, cx: &mut Cx) {
-        self.view.begin_view(cx, Layout::default());
+        self.view.begin_view(cx, LayoutSize::FILL);
         let rect = cx.get_box_rect();
         let color_texture_handle = self.color_texture.get_color(cx);
         let area = ImageIns::draw(cx, rect, color_texture_handle);

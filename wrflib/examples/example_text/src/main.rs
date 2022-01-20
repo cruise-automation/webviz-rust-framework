@@ -115,9 +115,9 @@ impl TourExampleApp {
     pub fn draw(&mut self, cx: &mut Cx) {
         self.window.begin_window(cx);
         self.pass.begin_pass(cx, Vec4::color("333"));
-        self.main_view.begin_view(cx, Layout { direction: Direction::Down, ..Layout::default() });
+        self.main_view.begin_view(cx, LayoutSize::FILL);
 
-        // There should always be a outer turtle spanning the whole content as a first turtle
+        // There should always be a outer box spanning the whole content as a first box
         cx.begin_column(Width::Fill, Height::Fill); // window
 
         // cut fixed size top bar

@@ -21,7 +21,7 @@ use crate::*;
 /// of the draw tree (using [`Event::hits`], [`Cx::key_focus`], etc), and more.
 ///
 /// TODO(JP): this can currently point to a [`View`]/[`CxView`] that isn't
-/// actually in the draw tree any more (ie. there the corresponding [`CxView`] is
+/// actually in the draw tree anymore (ie. there the corresponding [`CxView`] is
 /// never referenced in the draw tree), or which just doesn't exist at all any
 /// more (ie. the [`View`] object has also been removed). There is currently no
 /// was of telling if any of this is the case, since there is no "garbage

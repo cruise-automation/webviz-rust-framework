@@ -43,7 +43,9 @@ export function makeTextarea(callback: (taEvent: TextareaEvent) => void): {
       if (
         ta &&
         document.activeElement !== ta &&
-        !document.getElementById("js_root")?.contains(document.activeElement)
+        !document
+          .getElementById("wrflib_js_root")
+          ?.contains(document.activeElement)
       ) {
         ta.focus();
       }
@@ -78,43 +80,12 @@ export function makeTextarea(callback: (taEvent: TextareaEvent) => void): {
     if (ta) document.body.removeChild(ta);
 
     ta = document.createElement("textarea");
-    ta.className = "cx_webgl_textinput";
+    ta.className = "wrflib_textarea";
     ta.setAttribute("autocomplete", "off");
     ta.setAttribute("autocorrect", "off");
     ta.setAttribute("autocapitalize", "off");
     ta.setAttribute("spellcheck", "false");
-    const style = document.createElement("style");
-    style.innerHTML = `
-      textarea.cx_webgl_textinput {
-        z-index: 1000;
-        position: absolute;
-        opacity: 0;
-        border-radius: 4px;
-        color:white;
-        font-size: 6;
-        background: gray;
-        -moz-appearance: none;
-        appearance:none;
-        border:none;
-        resize: none;
-        outline: none;
-        overflow: hidden;
-        text-indent: 0px;
-        padding: 0 0px;
-        margin: 0 -1px;
-        text-indent: 0px;
-        -ms-user-select: text;
-        -moz-user-select: text;
-        -webkit-user-select: text;
-        user-select: text;
-        white-space: pre!important;
-      }
-      textarea:focus.cx_webgl_textinput {
-        outline: 0px !important;
-        -webkit-appearance: none;
-      }
-    `;
-    document.body.appendChild(style);
+
     ta.style.left = -100 + "px";
     ta.style.top = -100 + "px";
     ta.style.height = 1 + "px";

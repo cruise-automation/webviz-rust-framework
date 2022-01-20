@@ -126,7 +126,7 @@ macro_rules! main_app {
 /// This can be used when application state and canvas drawing are not needed,
 /// but instead just JavaScript to Rust communications.
 /// TODO(Paras): This is a bit of hack right now, since we end up instantiating a lot
-/// of Wrf features that end up unused. We should split out the framework in the future
+/// of Wrflib features that end up unused. We should split out the framework in the future
 /// so that thisuse case does not initialize unused parts of Wrflib as well as JavaScript
 /// mouse and keyboard event handlers.
 #[macro_export]

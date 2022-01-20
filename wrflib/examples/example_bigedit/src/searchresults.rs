@@ -225,7 +225,7 @@ impl SearchResults {
     }
 
     pub fn draw_search_result_tab(&mut self, cx: &mut Cx, _search_index: &SearchIndex) {
-        cx.move_turtle(0., 2.);
+        cx.move_draw_pos(0., 2.);
         self.search_input.draw(cx);
     }
 
@@ -249,7 +249,7 @@ impl SearchResults {
             counter += 1;
         }
 
-        self.list.walk_turtle_to_end(cx, row_height);
+        self.list.walk_box_to_end(cx, row_height);
 
         // draw filler nodes
         for _ in (self.list.end_item + 1)..self.list.end_fill {
@@ -341,8 +341,8 @@ impl SearchResultDraw {
             &format!("{}:{} - {}", split.last().unwrap(), pos.row, split[0..split.len() - 1].join("/")),
             &TextInsProps { wrapping: Wrapping::Word, color: vec4(0.6, 0.6, 0.6, 1.0), ..TextInsProps::DEFAULT },
         );
-        cx.turtle_new_line();
-        cx.move_turtle(0., 5.);
+        cx.draw_new_line();
+        cx.move_draw_pos(0., 5.);
 
         self.text_editor.search_markers_bypass.truncate(0);
         self.text_editor.search_markers_bypass.push(TextCursor { tail: tok.offset, head: tok.offset + tok.len, max: 0 });
@@ -373,14 +373,13 @@ impl SearchResultDraw {
     }
 
     fn draw_filler(&mut self, cx: &mut Cx, counter: usize) {
-        let view_total = cx.get_turtle_bounds();
         self.item_bg.begin_draw(
             cx,
             Width::Fill,
-            Height::Fix(ITEM_CLOSED_HEIGHT),
+            // Draw filler node of fixed height, until hitting the visibile boundaries, to prevent unneccesary scrolling
+            Height::FillUntil(ITEM_CLOSED_HEIGHT),
             if counter & 1 == 0 { vec4(0.16, 0.16, 0.16, 1.0) } else { vec4(0.15, 0.15, 0.15, 1.0) },
         );
         self.item_bg.end_draw(cx);
-        cx.set_turtle_bounds(view_total); // do this so it doesnt impact the turtle
     }
 }

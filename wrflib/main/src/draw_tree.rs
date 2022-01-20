@@ -33,8 +33,8 @@ use crate::Debugger;
 ///
 /// A [`View`] has a few special features:
 /// * It has its own [`Rect`], within which everything is clipped (see also [`DrawUniforms`]).
-///   This typically gets set by the return value of [`Cx::end_turtle`] for the [`Turtle`] that
-///   is associated with the [`View`]. TODO(JP): Look into decoupling [`Turtle`] from [`View`].
+///   This typically gets set by the return value of [`Cx::end_typed_box`] for the [`CxLayoutBox`] that
+///   is associated with the [`View`]. TODO(JP): Look into decoupling [`CxLayoutBox`] from [`View`].
 /// * It can scroll (but does not have to; again see also [`DrawUniforms`]).
 /// * It has its own set of [`DrawCall`]s, which are isolated from the [`DrawCall`]s of the
 ///   parent [`View`].
@@ -63,15 +63,19 @@ impl View {
 
     /// Register the [`View`] in the draw tree.
     ///
-    /// This also creates a new [`CxTurtle`] with the [`Layout`] that you pass in.
+    /// This also creates a new [`CxLayoutBox`] with the [`LayoutSize`] that is passed in.
     /// Note that you should not create a [`View`] just in order to get a new
-    /// [`CxTurtle`], since creating a [`View`] is relatively expensive -- no
+    /// [`CxLayoutBox`], since creating a [`View`] is relatively expensive -- no
     /// [`DrawCall`]s inside this [`View`] will get merged with ones outside of
     /// it, so adding too many [`View`]s will create too many individual calls to
     /// the GPU.
     ///
-    /// TODO(JP): Perhaps we should decouple [`CxTurtle`] and [`View`] altogether?
-    pub fn begin_view(&mut self, cx: &mut Cx, layout: Layout) {
+    /// TODO(JP): Perhaps we should decouple [`CxLayoutBox`] and [`View`] altogether?
+    pub fn begin_view(&mut self, cx: &mut Cx, layout_size: LayoutSize) {
+        self.begin_view_with_layout(cx, Layout { direction: Direction::Down, layout_size, ..Layout::default() });
+    }
+
+    fn begin_view_with_layout(&mut self, cx: &mut Cx, layout: Layout) {
         if !cx.in_redraw_cycle {
             panic!("calling begin_view outside of redraw cycle is not possible!");
         }
@@ -95,7 +99,7 @@ impl View {
             // we are the first view on a window
             let cxpass = &mut cx.passes[pass_id];
             cxpass.main_view_id = Some(view_id);
-            // we should take the window geometry and abs position as our turtle layout
+            // we should take the window geometry and abs position as our box layout
             (Layout { absolute: true, abs_size: Some(cxpass.pass_size), ..layout }, true)
         } else {
             (layout, false)
@@ -145,7 +149,14 @@ impl View {
             }
         }
 
-        let turtle = cx.begin_turtle(override_layout);
+        // TODO(JP): Do we want to keep this? We don't really use this for anything except as a
+        // convenience. I talked with Rik about redrawing of [`View`]s, and one idea was to always
+        // fully invalidate the closest [`View`] parent that did not have a [`Layout`] with
+        // [`Width::Compute`] or [`Height::Compute`], but that seems to fragile to me. It would be
+        // better to check if a [`CxView::rect`] actually changed and in that case trigger a redraw
+        // or even a panic (with some way of manually overriding the panic). So anyway, I think we
+        // should strive to remove this after all.
+        cx.begin_typed_box(CxBoxType::View, override_layout);
 
         // prepare drawlist for drawing
         let cxview = &mut cx.views[view_id];
@@ -158,7 +169,6 @@ impl View {
         self.redraw_id = cx.redraw_id;
         cxview.redraw_id = cx.redraw_id;
         cxview.draw_calls_len = 0;
-        cxview.turtle = Some(turtle);
 
         cx.view_stack.push(view_id);
 
@@ -183,7 +193,7 @@ impl View {
         false
     }
 
-    /// End the [`View`], by ending the [`CxTurtle`]. Returns a [`ViewArea`] that
+    /// End the [`View`], by ending the [`CxLayoutBox`]. Returns a [`ViewArea`] that
     /// you can hold onto.
     ///
     /// Should only be called if [`View::begin_view`] returned [`Result::Ok`].
@@ -195,22 +205,21 @@ impl View {
 
         let view_id = self.view_id.unwrap();
 
-        if cx.debug_flags.enable_turtle_debugger && View::is_main_view(view_id, cx) {
+        if cx.debug_flags.enable_layout_debugger && View::is_main_view(view_id, cx) {
             self.debugger.draw(cx);
         }
 
         let view_area = Area::View(ViewArea { view_id, redraw_id: cx.redraw_id });
         // Make sure that ViewArea would also be aligned when underlying calls getting moved
-        cx.turtle_align_list.push(view_area);
+        cx.layout_box_align_list.push(view_area);
 
-        let turtle = cx.views[view_id].turtle.take().unwrap();
-        let rect = cx.end_turtle(turtle);
+        let rect = cx.end_typed_box(CxBoxType::View);
         cx.views[view_id].rect = rect;
         cx.view_stack.pop();
         view_area
     }
 
-    /// Get the [`Rect`] that the [`CxTurtle`] associated with the [`View`]
+    /// Get the [`Rect`] that the [`CxLayoutBox`] associated with the [`View`]
     /// returned.
     ///
     /// TODO(JP): Should we return an [`Option<Rect>`] instead of just
@@ -363,7 +372,7 @@ impl Cx {
         };
         dc.instances.extend_from_slice(data.as_f32_slice());
         let area = Area::InstanceRange(ia);
-        self.add_to_turtle_align_list(area);
+        self.add_to_box_align_list(area);
         area
     }
 
@@ -690,9 +699,9 @@ pub struct CxView {
     /// represent either actual draw calls or child [`CxView`]s (see [`DrawCall`] and
     /// [`CxView`] for more documentation).
     pub(crate) draw_calls: Vec<DrawCall>,
-    /// The [`Rect`] of the [`CxTurtle`] that we created in [`View::begin_view`].
+    /// The [`Rect`] of the [`CxLayoutBox`] that we created in [`View::begin_view`].
     ///
-    /// TODO(JP): We want to decouple [`CxTurtle`] more from [`CxView`], so we have to
+    /// TODO(JP): We want to decouple [`CxLayoutBox`] more from [`CxView`], so we have to
     /// figure out what to do with this. For [`View`]s that are actively used for
     /// scrolling and clipping, having this `rect` makes sense, but maybe not for
     /// other uses?
@@ -726,16 +735,7 @@ pub struct CxView {
     /// The scroll position that gets snapped to actual pixel values (taking into account
     /// the device pixel ratio; called `dpi_factor` internally).
     pub(crate) snapped_scroll: Vec2,
-    /// The [`Turtle`] used at the root of the [`View`].
-    ///
-    /// TODO(JP): Do we want to keep this? We don't really use this for anything except as a
-    /// convenience. I talked with Rik about redrawing of [`View`]s, and one idea was to always
-    /// fully invalidate the closest [`View`] parent that did not have a [`Layout`] with
-    /// [`Width::Compute`] or [`Height::Compute`], but that seems to fragile to me. It would be
-    /// better to check if a [`CxView::rect`] actually changed and in that case trigger a redraw
-    /// or even a panic (with some way of manually overriding the panic). So anyway, I think we
-    /// should strive to remove this after all.
-    turtle: Option<Turtle>,
+
     /// Platform-specific fields. Currently only used on Windows.
     #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     pub(crate) platform: CxPlatformView,

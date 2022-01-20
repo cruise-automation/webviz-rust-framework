@@ -20,24 +20,24 @@ impl Default for LineWrap {
     }
 }
 
-/// Configure how a [`CxTurtle`] is going to walk, typically bounded by the
-/// dimensions of a parent [`CxTurtle`].
+/// Configure how a [`CxLayoutBox`] is going to walk, typically bounded by the
+/// dimensions of a parent [`CxLayoutBox`].
 #[derive(Copy, Clone, Debug)]
-pub struct Layout {
-    /// See [`Walk`].
-    pub walk: Walk,
+pub(crate) struct Layout {
+    /// See [`LayoutSize`].
+    pub layout_size: LayoutSize,
     /// See [`Padding`].
     pub padding: Padding,
     /// See [`Direction`].
     pub direction: Direction,
     /// See [`LineWrap`].
     pub line_wrap: LineWrap,
-    /// Absolutely position by overriding the [`CxTurtle::origin`] with (0,0) instead of using the parent's
+    /// Absolutely position by overriding the [`CxLayoutBox::origin`] with (0,0) instead of using the parent's
     /// current position.
     pub absolute: bool,
     /// Override the maximum size of the [`Window`]/[`Pass`]. Should typically
-    /// not be used; instead set [`CxTurtle::width`] and [`CxTurtle::height`]
-    /// through [`Layout::walk`].
+    /// not be used; instead set [`CxLayoutBox::width`] and [`CxLayoutBox::height`]
+    /// through [`Layout::layout_size`].
     pub abs_size: Option<Vec2>,
 }
 
@@ -45,95 +45,52 @@ impl Layout {
     /// TODO(JP): Replace these with Layout::default() when
     /// <https://github.com/rust-lang/rust/issues/67792> gets done
     pub const DEFAULT: Layout = Layout {
-        walk: Walk::DEFAULT,
+        layout_size: LayoutSize::DEFAULT,
         padding: Padding::DEFAULT,
         direction: Direction::DEFAULT,
         line_wrap: LineWrap::DEFAULT,
         absolute: false,
         abs_size: None,
     };
-
-    pub fn abs_origin_zero() -> Self {
-        Layout { absolute: true, ..Default::default() }
-    }
 }
+
 impl Default for Layout {
     fn default() -> Self {
         Layout::DEFAULT
     }
 }
 
-/// Determines how a [`CxTurtle`] should walk. Can be applied to a new [`CxTurtle`]
-/// through [`Layout::walk`], or directly to move an existing [`CxTurtle`] by
-/// using [`Cx::walk_turtle`].
+/// Determines how a [`CxLayoutBox`] should walk. Can be applied to a new [`CxLayoutBox`]
+/// through [`Layout::layout_size`], or directly to move an existing [`CxLayoutBox`] by
+/// using [`Cx::add_box`].
 #[derive(Copy, Clone, Debug)]
-pub struct Walk {
+pub struct LayoutSize {
     pub width: Width,
     pub height: Height,
 }
 
-impl Walk {
+impl LayoutSize {
     /// TODO(JP): Replace these with Align::default() when
     /// <https://github.com/rust-lang/rust/issues/67792> gets done
-    pub const DEFAULT: Walk = Walk { width: Width::DEFAULT, height: Height::DEFAULT };
+    pub const DEFAULT: LayoutSize = LayoutSize { width: Width::DEFAULT, height: Height::DEFAULT };
+    pub const FILL: LayoutSize = LayoutSize { width: Width::Fill, height: Height::Fill };
 
-    pub const fn wh(w: Width, h: Height) -> Self {
+    pub const fn new(w: Width, h: Height) -> Self {
         Self { width: w, height: h }
     }
 }
-impl Default for Walk {
+impl Default for LayoutSize {
     fn default() -> Self {
-        Walk::DEFAULT
-    }
-}
-
-/// A margin that should be added around a [`Walk`].
-///
-/// TODO(JP): these values can be negative, which can be quite confusing, but we
-/// seem to actually honor that in the turtle code. Might be good to look into that
-/// and see if we should forbid that or not (we seem to never actually do that yet).
-#[derive(Clone, Copy, Debug)]
-pub struct Margin {
-    pub l: f32,
-    pub t: f32,
-    pub r: f32,
-    pub b: f32,
-}
-impl Margin {
-    pub const ZERO: Margin = Margin { l: 0.0, t: 0.0, r: 0.0, b: 0.0 };
-
-    /// TODO(JP): Replace these with Margin::default() when
-    /// <https://github.com/rust-lang/rust/issues/67792> gets done
-    pub const DEFAULT: Margin = Margin::ZERO;
-
-    pub const fn all(v: f32) -> Margin {
-        Margin { l: v, t: v, r: v, b: v }
-    }
-
-    pub const fn left(v: f32) -> Margin {
-        Margin { l: v, ..Margin::ZERO }
-    }
-
-    pub const fn top(v: f32) -> Margin {
-        Margin { t: v, ..Margin::ZERO }
-    }
-
-    pub const fn right(v: f32) -> Margin {
-        Margin { r: v, ..Margin::ZERO }
-    }
-
-    pub const fn bottom(v: f32) -> Margin {
-        Margin { b: v, ..Margin::ZERO }
-    }
-}
-impl Default for Margin {
-    fn default() -> Self {
-        Margin::DEFAULT
+        LayoutSize::DEFAULT
     }
 }
 
 /// Inner padding dimensions that should be applied on top of the width/height
-/// from the parent [`CxTurtle`].
+/// from the parent [`CxLayoutBox`].
+
+/// TODO(JP): these values can be negative, which can be quite confusing, but we
+/// seem to actually honor that in the layout boxes code. Might be good to look into that
+/// and see if we should forbid that or not (we seem to never actually do that yet).
 #[derive(Clone, Copy, Debug)]
 pub struct Padding {
     pub l: f32,
@@ -174,15 +131,15 @@ impl Default for Padding {
     }
 }
 
-/// The direction in which the [`CxTurtle`] should walk. It will typically walk
+/// The direction in which the [`CxLayoutBox`] should walk. It will typically walk
 /// in a straight line in this direction. E.g. when walking to [`Direction::Right`],
-/// it will only walk horizontally, not vertically, until it hits the [`CxTurtle::width`],
+/// it will only walk horizontally, not vertically, until it hits the [`CxLayoutBox::width`],
 /// at which point it will wrap around using [`LineWrap`], based on the maximum
 /// height of widgets that have been drawn so far, which is registered in
-/// [`CxTurtle::biggest`].
+/// [`CxLayoutBox::biggest`].
 ///
 /// TODO(JP): This line wrapping behavior makes sense for [`Direction::Right`],
-/// but not so much for [`Direction::Down`].. Maybe we should split [`CxTurtle`]
+/// but not so much for [`Direction::Down`].. Maybe we should split [`CxLayoutBox`]
 /// into different kinds of behavior?
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Direction {
@@ -200,7 +157,7 @@ impl Default for Direction {
     }
 }
 
-/// Different ways in which a [`Walk`] can get a width.
+/// Different ways in which a [`LayoutSize`] can get a width.
 ///
 /// TODO(JP): Something like `FillUpTo(f32)` or `FillMax(f32)` might be useful here, to mimic
 /// CSS'es `max-width`. For now you can manually use `Cx::get_width_left` with
@@ -213,10 +170,10 @@ pub enum Width {
     Fill,
     /// Use a fixed width.
     Fix(f32),
-    /// Will defer computation of [`CxTurtle::width`] by setting it to [`f32::NAN`],
+    /// Will defer computation of [`CxLayoutBox::width`] by setting it to [`f32::NAN`],
     /// and only properly computing it later on.
     ///
-    /// TODO(JP): This can also be passed into [`Cx::walk_turtle`] but there it
+    /// TODO(JP): This can also be passed into [`Cx::add_box`] but there it
     /// makes no sense!
     Compute,
     // Fill up as much of the available space as possible up to provided width
@@ -233,7 +190,7 @@ impl Default for Width {
     }
 }
 
-/// Different ways in which a [`Walk`] can get a height.
+/// Different ways in which a [`LayoutSize`] can get a height.
 ///
 /// See [`Width`] for more documentation, since it's analogous.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -263,7 +220,7 @@ impl Default for Height {
     }
 }
 
-/// Defines how elements on [`Cx::turtle_align_list`] should be moved horizontally
+/// Defines how elements on [`Cx::layout_box_align_list`] should be moved horizontally
 pub(crate) struct AlignX(pub f32);
 
 impl AlignX {
@@ -273,7 +230,7 @@ impl AlignX {
     pub(crate) const RIGHT: AlignX = AlignX(1.0);
 }
 
-/// Defines how elements on [`Cx::turtle_align_list`] should be moved vertically
+/// Defines how elements on [`Cx::layout_box_align_list`] should be moved vertically
 pub(crate) struct AlignY(pub f32);
 
 impl AlignY {

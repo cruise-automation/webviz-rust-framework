@@ -178,7 +178,7 @@ impl ColorSliders {
         cx.begin_column(Width::Fix(100.), Height::Fill);
 
         TextIns::draw_walk(cx, &self.label, &TextInsProps::DEFAULT);
-        cx.move_turtle(0., 20.);
+        cx.move_draw_pos(0., 20.);
         TextIns::draw_walk(cx, "R", &TextInsProps::DEFAULT);
         self.slider_r.draw(cx, color.x, 0.0, 1.0, None, 1.0, None);
         TextIns::draw_walk(cx, "G", &TextInsProps::DEFAULT);
@@ -251,18 +251,21 @@ impl ShaderEditor {
         self.window.begin_window(cx);
         self.pass.begin_pass(cx, Vec4::color("300"));
 
-        self.main_view.begin_view(cx, Layout::default());
+        self.main_view.begin_view(cx, LayoutSize::FILL);
+        cx.begin_row(Width::Fill, Height::Fill);
+
         self.primary_color_picker.draw_sliders(cx, self.quad.primary_color);
         self.secondary_color_picker.draw_sliders(cx, self.quad.secondary_color);
 
         let quad_size: f32 = cx.get_width_left().min(cx.get_height_left());
-        cx.move_turtle(cx.get_width_left() - quad_size, 0.);
-        self.quad.base = QuadIns::from_rect(Rect { pos: cx.get_turtle_pos(), size: vec2(quad_size, quad_size) });
+        cx.move_draw_pos(cx.get_width_left() - quad_size, 0.);
+        self.quad.base = QuadIns::from_rect(Rect { pos: cx.get_draw_pos(), size: vec2(quad_size, quad_size) });
 
         self.quad_area = cx.add_instances(&SHADER, &[self.quad.clone()]);
 
         self.component_base.register_component_area(cx, self.quad_area);
 
+        cx.end_row();
         self.main_view.end_view(cx);
         self.pass.end_pass(cx);
         self.window.end_window(cx);

@@ -47,19 +47,19 @@ impl PaddingExampleApp {
     pub fn draw(&mut self, cx: &mut Cx) {
         self.window.begin_window(cx);
         self.pass.begin_pass(cx, Vec4::color("500"));
-        self.main_view.begin_view(cx, Layout { direction: Direction::Down, ..Layout::default() });
+        self.main_view.begin_view(cx, LayoutSize::FILL);
 
         // cut fixed size top bar
         cx.begin_row(Width::Fill, Height::Fix(27.));
         cx.end_row();
 
         cx.begin_row(Width::Fill, Height::Fill);
-
-        cx.begin_padding_box(Padding::all(30.));
-        self.quad.begin_fill(cx, "inner", COLOR_INNER);
-        self.quad.end_fill(cx);
-        cx.end_padding_box();
-
+        {
+            cx.begin_padding_box(Padding::all(30.));
+            self.quad.begin_fill(cx, "inner", COLOR_INNER);
+            self.quad.end_fill(cx);
+            cx.end_padding_box();
+        }
         cx.end_row();
 
         self.main_view.end_view(cx);

@@ -101,13 +101,11 @@ This is our package manifest, needed when structuring any Rust application. For 
 ### Compiling
 Compile this into a WebAssembly binary by calling:
 ```
-./build_wasm.sh --release
+./build_wasm.sh -p tutorial_js_rust_bridge
 ```
 <!--- TODO(Paras): Not sure what the path will be for this script. -->
 
-You'll now see a binary placed in `target/wasm32-unknown-unknown/release/tutorial_js_rust_bridge.wasm`.
-
-(It's important to add the `--release`, since by default Wrflib will load a release version. If you omit it, a debug version will be built, which you can load by adding `?debug=true` to the URL later on; also as described in [Getting Started](./getting_started.md).)
+You'll now see a binary placed in `target/wasm32-unknown-unknown/debug/tutorial_js_rust_bridge.wasm`.
 
 ### Serving
 To load this file on the Web, we'll need an HTTP server. There's no strict requirement on the backend, as long as:
@@ -128,8 +126,11 @@ Now that we have our backend ready, let's write our new JavaScript.
 Our existing code is modified to be:
 ```js
 // index.js
-wrf.initialize({ targetName: 'tutorial_js_rust_bridge' }).then(() => {
-  wrf.callRust('sum');
+wrflib.initialize({
+    filename: `path/to/target/wasm32-unknown-unknown/debug/tutorial_js_rust_bridge.wasm`,
+    defaultStyles: true
+}).then(() => {
+  wrflib.callRust('sum');
 });
 ```
 
@@ -137,7 +138,7 @@ wrf.initialize({ targetName: 'tutorial_js_rust_bridge' }).then(() => {
 <!-- index.html -->
 <html>
     <head>
-        <script type="text/javascript" src="path/to/wrf_runtime.js"></script>
+        <script type="text/javascript" src="path/to/wrflib_runtime.js"></script>
         <script type="text/javascript" src="./index.js"></script>
     </head>
     <body>
@@ -146,9 +147,9 @@ wrf.initialize({ targetName: 'tutorial_js_rust_bridge' }).then(() => {
 </html>
 ```
 ### What's new?
-- `wrf.initialize`, where our target name is our application name from Cargo. This assumes our web server is at the same port that served this HTML.
-- `wrf.callRust`, where the first parameter specifies a `name` of associated logic in Rust.
-- Importing `wrf_runtime` in our HTML.
+- `wrflib.initialize`, with a path to the `.wasm` file. This assumes our web server is at the same port that served this HTML.
+- `wrflib.callRust`, where the first parameter specifies a `name` of associated logic in Rust.
+- Importing `wrflib_runtime` in our HTML.
 
 ### Results
 Load up the web page — in the console you should see your summed up result. Hooray! Baby steps.
@@ -159,10 +160,9 @@ This approach shows how to trigger Rust code from JavaScript, but is missing fun
 Here is our modified code.
 
 ```js
-wrf.initialize({ targetName: 'tutorial_js_rust_bridge' }).then(() => {
-  const values = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-  wrf.callRust('sum', [values]);
-});
+// index.js (after wrflib.initialize)
+const values = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+wrflib.callRust('sum', [values]);
 ```
 
 ```rust,noplayground
@@ -178,7 +178,7 @@ fn sum(values: &[u8]) {
 
 fn call_rust(name: String, params: Vec<WrfParam>) -> Vec<WrfParam> {
     if name == "sum" {
-        let values = params[0].as_u8_buffer();
+        let values = params[0].as_u8_slice();
         sum(&values);
     }
 
@@ -191,20 +191,18 @@ register_call_rust!(call_rust);
 ### What's new?
 `callRust` can be passed a second parameter, a list of parameters of arbitrary length. Parameters must be either strings or [TypedArrays](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Typed_arrays). In the above case, we're using a `Uint8Array`.
 
-Our callback in Rust must now read this value, casting the parameter to the correct type. For Uint8Arrays, we can use the `as_u8_buffer()` convenience method for this. Now we can use this like any normal array!
+Our callback in Rust must now read this value, casting the parameter to the correct type. For Uint8Arrays, we can use the `as_u8_slice()` convenience method for this. Now we can use this like any normal array!
 
 ## Getting Rust outputs into JavaScript
 Outputs work with a similar parameter structure, with the ability to pass both strings and buffers.
 
 Here is our modified code.
 ```js
-wrf.initialize({ targetName: 'tutorial_js_rust_bridge' }).then(async () => {
-  const values = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-  const results = await wrf.callRust('sum', [values]);
-  const sumArray = results[0]
-  const sum = sumArray[0];
-  document.getElementById('root').textContent = sum;
-});
+// index.js (after wrflib.initialize)
+const values = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+const [sumArray] = await wrflib.callRust('sum', [values]);
+const sum = sumArray[0];
+document.getElementById('root').textContent = sum;
 ```
 
 ```rust,noplayground
@@ -217,7 +215,7 @@ fn sum(values: &[u8]) -> u8 {
 
 fn call_rust(name: String, params: Vec<WrfParam>) -> Vec<WrfParam> {
     if name == "sum" {
-        let values = params[0].as_u8_buffer();
+        let values = params[0].as_u8_slice();
         let response = vec![sum(&values)].into_param();
         return vec![response];
     }

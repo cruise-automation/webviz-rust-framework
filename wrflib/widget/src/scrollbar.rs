@@ -426,7 +426,7 @@ impl ScrollBar {
                         &SHADER,
                         &[ScrollBarIns {
                             base: QuadIns::from_rect(Rect {
-                                pos: cx.get_turtle_origin() + vec2(self.bar_side_margin, view_rect.size.y - self.bar_size),
+                                pos: cx.get_box_origin() + vec2(self.bar_side_margin, view_rect.size.y - self.bar_size),
                                 size: vec2(self.scroll_size, self.bar_size),
                             })
                             .with_draw_depth(2.5),
@@ -455,7 +455,7 @@ impl ScrollBar {
                         &SHADER,
                         &[ScrollBarIns {
                             base: QuadIns::from_rect(Rect {
-                                pos: cx.get_turtle_origin() + vec2(view_rect.size.x - self.bar_size, self.bar_side_margin),
+                                pos: cx.get_box_origin() + vec2(view_rect.size.x - self.bar_size, self.bar_side_margin),
                                 size: vec2(self.bar_size, self.scroll_size),
                             })
                             .with_draw_depth(2.5),

@@ -397,6 +397,48 @@ impl Default for Event {
     }
 }
 
+/// A margin around the area that is checked for event hits
+#[derive(Clone, Copy, Debug)]
+pub struct Margin {
+    pub l: f32,
+    pub t: f32,
+    pub r: f32,
+    pub b: f32,
+}
+impl Margin {
+    pub const ZERO: Margin = Margin { l: 0.0, t: 0.0, r: 0.0, b: 0.0 };
+
+    /// TODO(JP): Replace these with Margin::default() when
+    /// <https://github.com/rust-lang/rust/issues/67792> gets done
+    pub const DEFAULT: Margin = Margin::ZERO;
+
+    pub const fn all(v: f32) -> Margin {
+        Margin { l: v, t: v, r: v, b: v }
+    }
+
+    pub const fn left(v: f32) -> Margin {
+        Margin { l: v, ..Margin::ZERO }
+    }
+
+    pub const fn top(v: f32) -> Margin {
+        Margin { t: v, ..Margin::ZERO }
+    }
+
+    pub const fn right(v: f32) -> Margin {
+        Margin { r: v, ..Margin::ZERO }
+    }
+
+    pub const fn bottom(v: f32) -> Margin {
+        Margin { b: v, ..Margin::ZERO }
+    }
+}
+
+impl Default for Margin {
+    fn default() -> Self {
+        Margin::DEFAULT
+    }
+}
+
 /// Modify the behavior of [`Event::hits`].
 #[derive(Clone, Debug, Default)]
 pub struct HitOpt {

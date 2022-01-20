@@ -6,7 +6,7 @@
 
 import { WrfParamType } from "./types";
 import { WrfBuffer, classesToExtend, containsWrfBuffer } from "./wrf_buffer";
-import { expect, expectThrow } from "./wrf_test";
+import { expect, expectThrow } from "./test_helpers";
 
 declare global {
   interface Window {

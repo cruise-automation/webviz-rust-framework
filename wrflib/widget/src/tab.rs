@@ -267,7 +267,7 @@ impl Tab {
         cx.end_padding_box(); // tab content
         let rect = cx.end_row(); // tab
 
-        // We need to close corresponding turtles which we opened in absolute mode
+        // We need to close corresponding boxes which we opened in absolute mode
         if self.abs_origin.is_some() {
             cx.end_padding_box(); // close padding_box for absolute box
             cx.end_absolute_box();

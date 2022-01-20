@@ -59,7 +59,7 @@ impl Debugger {
         let logs = cx.debug_logs.clone();
         for log in logs {
             match log {
-                DebugLog::EndTurtle { rect } => {
+                DebugLog::EndBox { rect } => {
                     self.draw_border(cx, rect);
                 }
             }

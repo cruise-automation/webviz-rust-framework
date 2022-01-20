@@ -12,7 +12,7 @@ fn sum(values: &[u8]) -> u8 {
 
 fn call_rust(name: String, params: Vec<WrfParam>) -> Vec<WrfParam> {
     if name == "sum" {
-        let values = params[0].as_u8_buffer();
+        let values = params[0].as_u8_slice();
         let response = vec![sum(values)].into_param();
         return vec![response];
     }

@@ -120,7 +120,7 @@ impl FpsCounter {
             }
         }
 
-        let area = cx.add_instances(&SHADER, &[QuadIns::from_rect(cx.get_turtle_rect())]);
+        let area = cx.add_instances(&SHADER, &[QuadIns::from_rect(cx.get_box_rect())]);
         area.write_texture_2d(cx, "texture", texture_handle);
         area.write_user_uniforms(cx, FpsCounterUniforms { sample_length: self.points.len() as f32, max_fps: max_fps as f32 });
     }
@@ -140,13 +140,13 @@ impl FpsCounter {
             TextIns::draw_str(
                 cx,
                 &format!("{:.1} fps", fps),
-                cx.get_turtle_origin() + Vec2 { x: 0., y: TOP_PADDING },
+                cx.get_box_origin() + Vec2 { x: 0., y: TOP_PADDING },
                 &TextInsProps::DEFAULT,
             );
             TextIns::draw_str(
                 cx,
                 &format!("{:.1} avg", avg),
-                cx.get_turtle_origin() + Vec2 { x: 0., y: TOP_PADDING + cx.get_height_left() / 2. },
+                cx.get_box_origin() + Vec2 { x: 0., y: TOP_PADDING + cx.get_height_left() / 2. },
                 &TextInsProps::DEFAULT,
             );
             cx.end_row();

@@ -9,8 +9,8 @@ const path = require("path");
 module.exports = {
   entry: {
     /* eslint-disable camelcase */
-    wrf_runtime: "./wrf_runtime.ts",
-    wrf_web_worker_runtime: "./wrf_web_worker_runtime.ts",
+    wrflib_runtime: "./wrflib_runtime.ts",
+    wrflib_worker_runtime: "./wrflib_worker_runtime.ts",
     test_suite: "./test_suite.ts",
     /* eslint-enable camelcase */
   },
@@ -18,7 +18,7 @@ module.exports = {
     path: path.resolve(__dirname, "dist"),
     filename: "[name].js",
     library: {
-      name: "wrf",
+      name: "wrflib",
       type: "umd",
     },
   },

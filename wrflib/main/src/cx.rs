@@ -96,9 +96,8 @@ pub struct Cx {
     /// Stack of [`View::view_id`]s / indices into [`Cx::views`], using [`View::begin_view`]
     /// and [`View::end_view`].
     pub(crate) view_stack: Vec<usize>,
-    /// A stack of [`CxTurtle`]s, using [`Cx::begin_turtle`] and [`Cx::end_turtle`]. Turtles all the
-    /// way down!
-    pub(crate) turtles: Vec<CxTurtle>,
+    /// A stack of [`CxLayoutBox`]s, using [`Cx::begin_typed_box`] and [`Cx::end_typed_box`]
+    pub(crate) layout_boxes: Vec<CxLayoutBox>,
 
     /// The instance offsets for the different [`Shader`]s when the current "shader group" was started.
     ///
@@ -106,15 +105,15 @@ pub struct Cx {
     pub(crate) shader_group_instance_offsets: Vec<usize>,
 
     /// A list of [`Area`]s that we want to align later on. This is kept separate
-    /// from [`Cx::turtles`] (even though this is part of the turtle layout
-    /// system) so that a parent [`CxTurtle`] can align a bunch of stuff that was
-    /// drawn using child [`CxTurtle`]s.
+    /// from [`Cx::layout_boxes`] (even though this is part of the box layout
+    /// system) so that a parent [`CxLayoutBox`] can align a bunch of stuff that was
+    /// drawn using child [`CxLayoutBox`]s.
     ///
     /// TODO(JP): This may currently only contain [`Area::InstanceRange`], so
     /// maybe we should change the type of this? It might also be nice to be able
     /// explicitly push [`Area::View`] on this list though, and then set a uniform
     /// on the entire [`CxView`], for better performance?
-    pub(crate) turtle_align_list: Vec<Area>,
+    pub(crate) layout_box_align_list: Vec<Area>,
 
     /// The system-default `dpi_factor`. See also [`PassUniforms::dpi_factor`].
     ///
@@ -245,8 +244,8 @@ pub struct CxDebugFlags {
     /// since the batching of draw calls can be confusing sometimes (and you should never rely on it happening).
     pub disable_draw_call_batching: bool,
 
-    /// Enables overlay with borders of end_turtle rects
-    pub enable_turtle_debugger: bool,
+    /// Enables overlay with borders of CxLayoutBox rects
+    pub enable_layout_debugger: bool,
 }
 
 /// What kind of debug information should be printed about the draw tree.
@@ -323,8 +322,8 @@ impl Cx {
             window_stack: Vec::new(),
             pass_stack: Vec::with_capacity(10),
             view_stack: Vec::with_capacity(50),
-            turtles: Vec::with_capacity(100),
-            turtle_align_list: Vec::with_capacity(100),
+            layout_boxes: Vec::with_capacity(100),
+            layout_box_align_list: Vec::with_capacity(100),
             shader_group_instance_offsets: Vec::with_capacity(10),
 
             last_event_time: 0.0,
@@ -397,8 +396,8 @@ impl Cx {
                 if ke.modifiers.control && ke.modifiers.alt && ke.modifiers.logo {
                     match ke.key_code {
                         KeyCode::Key1 => {
-                            self.debug_flags.enable_turtle_debugger = !self.debug_flags.enable_turtle_debugger;
-                            log!("Set enable_turtle_debugger to {}", self.debug_flags.enable_turtle_debugger);
+                            self.debug_flags.enable_layout_debugger = !self.debug_flags.enable_layout_debugger;
+                            log!("Set enable_layout_debugger to {}", self.debug_flags.enable_layout_debugger);
                             self.request_draw();
                         }
                         KeyCode::Key2 => {
@@ -665,7 +664,7 @@ impl Cx {
         // self.profile();
         self.in_redraw_cycle = true;
         self.redraw_id += 1;
-        self.turtle_align_list.clear();
+        self.layout_box_align_list.clear();
         self.debug_logs.clear();
 
         // TODO(Paras): Terrible hack.
@@ -690,8 +689,8 @@ impl Cx {
         if !self.window_stack.is_empty() {
             panic!("Window stack disaligned, forgot an end_window(cx)");
         }
-        if !self.turtles.is_empty() {
-            panic!("Turtle stack disaligned, forgot an end_turtle()");
+        if !self.layout_boxes.is_empty() {
+            panic!("LayoutBoxes stack disaligned, forgot an end_box(cx)");
         }
         if !self.shader_group_instance_offsets.is_empty() {
             panic!("Shader group stack disaligned, forgot an end_shader_group()");
@@ -932,7 +931,7 @@ pub trait CxDesktopVsWasmCommon {
     fn return_to_js(&mut self, callback_id: u32, params: Vec<WrfParam>);
 
     #[cfg(any(target_arch = "wasm32", feature = "cef"))]
-    fn register_call_rust_in_same_thread_sync_fn(&mut self, func: CallRustInSameThreadSyncFn);
+    fn on_call_rust_in_same_thread_sync(&mut self, func: CallRustInSameThreadSyncFn);
 }
 
 /// A bunch of traits that are common between the different target platforms. This trait makes sure

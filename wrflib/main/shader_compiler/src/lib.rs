@@ -7,7 +7,7 @@
 //! Compiles shaders using our own shader language, and outputs it into
 //! various target shader languages.
 //!
-//! For internal Wrf use, unless you know what you're doing.
+//! For internal Wrflib use, unless you know what you're doing.
 
 // We want to use links to private fields, since we use `--document-private-items`.
 #![allow(rustdoc::private_intra_doc_links)]

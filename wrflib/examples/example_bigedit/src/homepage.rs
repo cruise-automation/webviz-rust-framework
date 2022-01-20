@@ -99,7 +99,7 @@ impl HomePage {
     }
 
     pub fn draw(&mut self, cx: &mut Cx) {
-        self.view.begin_view(cx, Layout::default());
+        self.view.begin_view(cx, LayoutSize::FILL);
         cx.begin_column(Width::FillUntil(550.), Height::Compute);
         cx.begin_padding_box(Padding { l: 10., r: 10., t: 0., b: 0. });
 

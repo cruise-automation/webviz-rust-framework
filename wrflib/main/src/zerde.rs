@@ -217,13 +217,13 @@ impl ZerdeBuilder {
                 WrfParam::ReadOnlyU8Buffer(buffer) => {
                     self.build_read_only_buffer(WRF_PARAM_READ_ONLY_UINT8_BUFFER, buffer);
                 }
-                WrfParam::U8Buffer(buffer) => {
+                WrfParam::MutableU8Buffer(buffer) => {
                     self.build_mutable_buffer(WRF_PARAM_UINT8_BUFFER, buffer);
                 }
                 WrfParam::ReadOnlyF32Buffer(buffer) => {
                     self.build_read_only_buffer(WRF_PARAM_READ_ONLY_FLOAT32_BUFFER, buffer);
                 }
-                WrfParam::F32Buffer(buffer) => {
+                WrfParam::MutableF32Buffer(buffer) => {
                     self.build_mutable_buffer(WRF_PARAM_FLOAT32_BUFFER, buffer);
                 }
             }

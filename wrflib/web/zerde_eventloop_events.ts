@@ -5,7 +5,7 @@
 // You may not use this file except in compliance with the License.
 
 import { createWasmBuffer, getWrfParamType, makeZerdeBuilder } from "./common";
-import { Dependency, Finger, FingerScroll, WasmApp } from "./wrf_wasm_worker";
+import { Dependency, Finger, FingerScroll, WasmApp } from "./main_worker";
 import {
   TextareaEventKeyDown,
   TextareaEventKeyUp,

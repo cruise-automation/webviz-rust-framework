@@ -33,7 +33,7 @@ impl BottomBarExampleApp {
     pub fn draw(&mut self, cx: &mut Cx) {
         self.window.begin_window(cx);
         self.pass.begin_pass(cx, Vec4::color("333"));
-        self.main_view.begin_view(cx, Layout { direction: Direction::Down, ..Layout::default() });
+        self.main_view.begin_view(cx, LayoutSize::FILL);
 
         self.bottom_bar.draw(cx);
 

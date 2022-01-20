@@ -209,19 +209,19 @@ impl PrimitivesExampleApp {
     pub fn draw(&mut self, cx: &mut Cx) {
         self.window.begin_window(cx);
         self.pass.begin_pass(cx, Vec4::color("0000"));
-        self.main_view.begin_view(cx, Layout::default());
+        self.main_view.begin_view(cx, LayoutSize::FILL);
 
         TextIns::draw_str(
             cx,
             "Wrflib",
-            cx.get_turtle_origin() + vec2(320., 20.),
+            cx.get_box_origin() + vec2(320., 20.),
             &TextInsProps { position_anchoring: TEXT_ANCHOR_CENTER_H, ..TextInsProps::DEFAULT },
         );
 
         TextIns::draw_str(
             cx,
             "Canvas",
-            cx.get_turtle_origin() + vec2(940., 20.),
+            cx.get_box_origin() + vec2(940., 20.),
             &TextInsProps { position_anchoring: TEXT_ANCHOR_CENTER_H, ..TextInsProps::DEFAULT },
         );
 

@@ -62,7 +62,7 @@ impl ScrollShadow {
         cx.add_instances_with_scroll_sticky(
             &SHADER,
             &[ScrollShadowIns {
-                base: QuadIns::from_rect(Rect { pos: cx.get_turtle_origin() + rect.pos, size: vec2(rect.size.x, SHADOW_SIZE) })
+                base: QuadIns::from_rect(Rect { pos: cx.get_box_origin() + rect.pos, size: vec2(rect.size.x, SHADOW_SIZE) })
                     .with_draw_depth(draw_depth),
                 shadow_top: 1.0,
             }],
@@ -75,7 +75,7 @@ impl ScrollShadow {
         cx.add_instances_with_scroll_sticky(
             &SHADER,
             &[ScrollShadowIns {
-                base: QuadIns::from_rect(Rect { pos: cx.get_turtle_origin() + rect.pos, size: vec2(SHADOW_SIZE, rect.size.y) })
+                base: QuadIns::from_rect(Rect { pos: cx.get_box_origin() + rect.pos, size: vec2(SHADOW_SIZE, rect.size.y) })
                     .with_draw_depth(draw_depth),
                 shadow_top: 0.0,
             }],

@@ -28,8 +28,8 @@ impl ScrollView {
         Self { scroll_v: Some(s), ..self }
     }
 
-    pub fn begin_view(&mut self, cx: &mut Cx, layout: Layout) {
-        self.view.begin_view(cx, layout)
+    pub fn begin_view(&mut self, cx: &mut Cx, layout_size: LayoutSize) {
+        self.view.begin_view(cx, layout_size);
     }
 
     pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) -> bool {
@@ -142,9 +142,9 @@ impl ScrollView {
     }
 
     pub fn end_view(&mut self, cx: &mut Cx) -> Area {
-        // lets ask the turtle our actual bounds
-        let view_total = cx.get_turtle_bounds();
-        let mut rect_now = cx.get_turtle_rect();
+        // lets ask the box our actual bounds
+        let view_total = cx.get_box_bounds();
+        let mut rect_now = cx.get_box_rect();
         if rect_now.size.y.is_nan() {
             rect_now.size.y = view_total.y;
         }

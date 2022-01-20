@@ -508,7 +508,7 @@ impl TextIns {
             }
             if emit {
                 let height = font_size * height_factor * props.font_scale;
-                let rect = cx.walk_turtle(Walk { width: Width::Fix(width), height: Height::Fix(height) });
+                let rect = cx.add_box(LayoutSize { width: Width::Fix(width), height: Height::Fix(height) });
 
                 if !rect.pos.x.is_nan() && !rect.pos.y.is_nan() {
                     glyphs.extend(Self::generate_2d_glyphs(
@@ -528,7 +528,7 @@ impl TextIns {
                 width = 0.0;
                 buf.truncate(0);
                 if newline {
-                    cx.turtle_new_line_min_height(font_size * line_spacing * props.font_scale);
+                    cx.draw_new_line_min_height(font_size * line_spacing * props.font_scale);
                 }
             }
         }

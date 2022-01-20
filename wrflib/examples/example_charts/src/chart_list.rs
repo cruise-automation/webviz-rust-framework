@@ -78,9 +78,9 @@ impl ChartList {
     }
 
     pub(crate) fn draw(&mut self, cx: &mut Cx) {
-        self.view.begin_view(cx, Layout { direction: Direction::Down, ..Layout::default() });
+        self.view.begin_view(cx, LayoutSize::FILL);
 
-        self.background.draw(cx, cx.get_turtle_rect(), COLOR_DARKSLATEGRAY);
+        self.background.draw(cx, cx.get_box_rect(), COLOR_DARKSLATEGRAY);
         self.draw_item_list(cx);
 
         self.view.end_view(cx);

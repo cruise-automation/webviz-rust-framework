@@ -18,7 +18,6 @@ pub struct DesktopWindow {
     pub caption_view: View, // we have a root view otherwise is_overlay subviews can't attach topmost
     pub main_view: View,    // we have a root view otherwise is_overlay subviews can't attach topmost
     pub inner_view: View,
-    pub inner_layout: Layout,
     //pub caption_bg_color: ColorId,
     pub min_btn: DesktopButton,
     pub max_btn: DesktopButton,
@@ -30,6 +29,8 @@ pub struct DesktopWindow {
     pub caption: String,
 
     pub default_menu: Menu,
+
+    pub start_pos: Option<Vec2>,
 
     // testing
     pub inner_over_chrome: bool,
@@ -54,7 +55,6 @@ impl DesktopWindow {
             main_view: View::default(),
             caption_view: View::default(),
             inner_view: View::default(),
-            inner_layout: Layout::default(),
             min_btn: DesktopButton::default(),
             max_btn: DesktopButton::default(),
             close_btn: DesktopButton::default(),
@@ -66,6 +66,7 @@ impl DesktopWindow {
             caption_bg: Background::default(),
             caption_size: Vec2::default(),
             caption: "Bigedit".to_string(),
+            start_pos: None,
             inner_over_chrome: false,
         }
     }
@@ -154,9 +155,10 @@ impl DesktopWindow {
         self.window.begin_window(cx);
         self.pass.begin_pass(cx, self.clear_color);
 
-        let _ = self.main_view.begin_view(cx, Layout::default());
+        let _ = self.main_view.begin_view(cx, LayoutSize::FILL);
+        self.start_pos = Some(cx.get_draw_pos());
 
-        self.caption_view.begin_view(cx, Layout { walk: Walk::wh(Width::Fill, Height::Compute), ..Layout::default() });
+        self.caption_view.begin_view(cx, LayoutSize::new(Width::Fill, Height::Compute));
 
         let process_chrome = match cx.platform_type {
             PlatformType::Linux { custom_window_chrome } => custom_window_chrome,
@@ -191,7 +193,6 @@ impl DesktopWindow {
 
                     // we need to store our caption rect somewhere.
                     self.caption_bg.end_draw(cx);
-                    cx.turtle_new_line();
                 }
 
                 PlatformType::OSX => {
@@ -207,44 +208,48 @@ impl DesktopWindow {
                     TextIns::draw_walk(cx, &self.caption, &TextInsProps::DEFAULT);
                     cx.end_center_x_and_y_align();
                     self.caption_bg.end_draw(cx);
-                    cx.turtle_new_line();
                 }
                 PlatformType::Web { .. } => {
                     if self.window.is_fullscreen(cx) {
                         // put a bar at the top
-                        let rect = cx.walk_turtle(Walk::wh(Width::Fill, Height::Fix(22.)));
+                        let rect = cx.add_box(LayoutSize::new(Width::Fill, Height::Fix(22.)));
                         self.caption_bg.draw(cx, rect, color);
-                        cx.turtle_new_line();
                     }
                 }
             }
         }
         self.caption_view.end_view(cx);
-        cx.turtle_new_line();
 
         if self.inner_over_chrome {
-            self.inner_view.begin_view(cx, Layout { absolute: true, ..self.inner_layout });
-        } else {
-            self.inner_view.begin_view(cx, self.inner_layout);
+            cx.begin_absolute_box();
         }
+        self.inner_view.begin_view(cx, LayoutSize::FILL);
+        cx.begin_row(Width::Fill, Height::Fill);
     }
 
     pub fn end_draw(&mut self, cx: &mut Cx) {
+        cx.end_row();
         self.inner_view.end_view(cx);
+        if self.inner_over_chrome {
+            cx.end_absolute_box();
+        }
+
+        // This should always exist if begin_draw() was called correctly before that
+        let start_pos = self.start_pos.unwrap();
         // lets draw a VR button top right over the UI.
         // window fullscreen?
 
         // only support fullscreen on web atm
         if !cx.platform_type.is_desktop() && !self.window.is_fullscreen(cx) {
-            cx.reset_turtle_pos();
-            cx.move_turtle(cx.get_width_total() - 50.0, 0.);
+            cx.set_draw_pos(start_pos);
+            cx.move_draw_pos(cx.get_width_total() - 50.0, 0.);
             self.fullscreen_btn.draw(cx, DesktopButtonType::Fullscreen);
         }
 
         if self.window.xr_can_present(cx) {
             // show a switch-to-VRMode button
-            cx.reset_turtle_pos();
-            cx.move_turtle(cx.get_width_total() - 100.0, 0.);
+            cx.set_draw_pos(start_pos);
+            cx.move_draw_pos(cx.get_width_total() - 100.0, 0.);
             self.xr_btn.draw(cx, DesktopButtonType::XRMode);
         }
 

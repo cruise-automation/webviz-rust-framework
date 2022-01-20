@@ -160,7 +160,8 @@ impl TabControl {
     }
 
     pub fn begin_tabs(&mut self, cx: &mut Cx) {
-        self.tabs_view.begin_view(cx, Layout { walk: Walk::wh(Width::Fill, Height::Compute), ..Layout::default() });
+        self.tabs_view.begin_view(cx, LayoutSize::new(Width::Fill, Height::Compute));
+        cx.begin_row(Width::Fill, Height::Compute);
         self._tab_now_selected = None;
         self._tab_id_alloc = 0;
     }
@@ -197,7 +198,9 @@ impl TabControl {
 
         self.tabs.truncate(self._tab_id_alloc);
         if let Some((fe, id)) = &self._dragging_tab {
-            self.drag_tab_view.begin_view(cx, Layout::abs_origin_zero());
+            cx.begin_absolute_box();
+            self.drag_tab_view.begin_view(cx, LayoutSize::FILL);
+
             self.drag_tab.abs_origin = Some(Vec2 { x: fe.abs.x - fe.rel_start.x, y: fe.abs.y - fe.rel_start.y });
             let origin_tab = &mut self.tabs[*id];
             self.drag_tab.label = origin_tab.label.clone();
@@ -205,8 +208,11 @@ impl TabControl {
             self.drag_tab.draw_tab(cx);
 
             self.drag_tab_view.end_view(cx);
+            cx.end_absolute_box();
         }
+        cx.end_row();
         self.tabs_view.end_view(cx);
+
         if self._tab_now_selected != self._tab_last_selected {
             // lets scroll the thing into view
             if let Some(tab_id) = self._tab_now_selected {
@@ -220,8 +226,8 @@ impl TabControl {
     }
 
     pub fn begin_tab_page(&mut self, cx: &mut Cx) {
-        cx.turtle_new_line();
-        self.page_view.begin_view(cx, Layout::default());
+        cx.draw_new_line();
+        self.page_view.begin_view(cx, LayoutSize::FILL);
     }
 
     pub fn end_tab_page(&mut self, cx: &mut Cx) {

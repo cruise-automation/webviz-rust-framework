@@ -119,12 +119,14 @@ impl Keyboard {
     }
 
     pub fn draw(&mut self, cx: &mut Cx) {
-        self.view.begin_view(cx, Layout::default());
+        self.view.begin_view(cx, LayoutSize::FILL);
+        cx.begin_row(Width::Fill, Height::Fill);
 
         for (index, button) in self.buttons.iter_mut().enumerate() {
             button.draw(cx, &KEYS[index].name());
         }
 
+        cx.end_row();
         self.view.end_view(cx);
     }
 }

@@ -55,7 +55,7 @@ impl BareExampleApp {
     pub fn draw(&mut self, cx: &mut Cx) {
         self.window.begin_window(cx);
         self.pass.begin_pass(cx, Vec4::color("300"));
-        self.main_view.begin_view(cx, Layout::default());
+        self.main_view.begin_view(cx, LayoutSize::FILL);
         cx.profile_start(1);
         let data: Vec<CounterQuad> = (0..1000000)
             .map(|i| {

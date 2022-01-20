@@ -250,7 +250,7 @@ impl Viewport3D {
         let depth_texture_handle = self.depth_texture.get_depth(cx);
         self.pass.set_depth_texture(cx, depth_texture_handle, ClearDepth::ClearWith(1.0));
 
-        self.view_3d.begin_view(cx, Layout::default());
+        self.view_3d.begin_view(cx, LayoutSize::FILL);
     }
 
     pub fn end_draw(&mut self, cx: &mut Cx) -> PassMatrixMode {
@@ -263,11 +263,11 @@ impl Viewport3D {
     }
 
     fn draw_viewport_2d(&mut self, cx: &mut Cx) {
-        self.view_2d.begin_view(cx, Layout::default());
+        self.view_2d.begin_view(cx, LayoutSize::FILL);
         // blit the texture to a view rect
         self.measured_size = vec2(cx.get_width_total(), cx.get_height_total());
         let color_texture_handle = self.color_texture.get_color(cx);
-        let area = ImageIns::draw(cx, Rect { pos: cx.get_turtle_origin(), size: self.measured_size }, color_texture_handle);
+        let area = ImageIns::draw(cx, Rect { pos: cx.get_box_origin(), size: self.measured_size }, color_texture_handle);
         self.component_base.register_component_area(cx, area);
 
         self.view_2d.end_view(cx);

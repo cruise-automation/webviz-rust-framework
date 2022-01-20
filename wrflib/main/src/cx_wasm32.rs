@@ -606,8 +606,8 @@ impl CxDesktopVsWasmCommon for Cx {
         self.call_js("_wrflibReturnParams", params);
     }
 
-    /// See [`CxDesktopVsWasmCommon::register_call_rust_in_same_thread_sync_fn`] for documentation.
-    fn register_call_rust_in_same_thread_sync_fn(&mut self, func: CallRustInSameThreadSyncFn) {
+    /// See [`CxDesktopVsWasmCommon::on_call_rust_in_same_thread_sync`] for documentation.
+    fn on_call_rust_in_same_thread_sync(&mut self, func: CallRustInSameThreadSyncFn) {
         *self.platform.call_rust_in_same_thread_sync_fn.write().unwrap() = Some(func);
     }
 }

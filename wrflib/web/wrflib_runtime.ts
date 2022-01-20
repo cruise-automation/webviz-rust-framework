@@ -8,27 +8,27 @@
 // doing runtime detection of which modules to load. No other file besides this one should conditionally
 // branch based on environments, such that cef/wasm runtimes can work without including unnecessary code.
 
-import * as wasm from "./wrf_wasm_runtime";
-import * as cef from "./wrf_cef_runtime";
+import * as wasm from "./wasm_runtime";
+import * as cef from "./cef_runtime";
 import { jsRuntime } from "./type_of_runtime";
-import "./wrf.css";
+import "./wrflib.css";
 
 const {
   initialize,
-  wrfNewWorkerPort,
+  newWorkerPort,
   registerCallJsCallbacks,
   unregisterCallJsCallbacks,
   callRust,
   serializeWrfArrayForPostMessage,
   deserializeWrfArrayFromPostMessage,
   callRustInSameThreadSync,
-  createBuffer,
+  createMutableBuffer,
   createReadOnlyBuffer,
 } = jsRuntime === "cef" ? cef : wasm;
 
 export {
   initialize,
-  wrfNewWorkerPort,
+  newWorkerPort,
   registerCallJsCallbacks,
   unregisterCallJsCallbacks,
   callRust,
@@ -36,6 +36,6 @@ export {
   deserializeWrfArrayFromPostMessage,
   callRustInSameThreadSync,
   jsRuntime,
-  createBuffer,
+  createMutableBuffer,
   createReadOnlyBuffer,
 };

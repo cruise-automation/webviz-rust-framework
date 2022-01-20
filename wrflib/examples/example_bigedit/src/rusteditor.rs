@@ -63,7 +63,8 @@ impl RustEditor {
     }
 
     pub fn draw(&mut self, cx: &mut Cx, mtb: &mut MakepadTextBuffer, search_index: Option<&mut SearchIndex>) {
-        self.view.begin_view(cx, Layout::default());
+        self.view.begin_view(cx, LayoutSize::FILL);
+        cx.begin_row(Width::Fill, Height::Fill);
 
         self.splitter.begin_draw(cx);
         Self::update_token_chunks(mtb, search_index);
@@ -77,13 +78,13 @@ impl RustEditor {
         self.splitter.mid_draw(cx);
 
         cx.begin_column(Width::Fill, Height::Fill);
-        let height_scale = self.dummy_fold_caption.begin_fold_caption(cx);
-        self.dummy_fold_caption.end_fold_caption(cx, "dummy fold caption");
+        let height_scale = self.dummy_fold_caption.draw_fold_caption(cx, "dummy fold caption");
         self.dummy_color_picker.draw(cx, self.dummy_color, height_scale);
         cx.end_column();
 
         self.splitter.end_draw(cx);
 
+        cx.end_row();
         self.view.end_view(cx);
     }
 

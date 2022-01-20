@@ -1,8 +1,8 @@
 # Introduction
 
-**Wrflib** is an open-source library for speeding up web applications using Rust and WebAssembly. It lets you write high-performance code in Rust, alongside your existing Javascript code, and using simple APIs.
+**Wrflib** is an open-source library for speeding up web applications using Rust and WebAssembly. It lets you write high-performance code in Rust, alongside your existing JavaScript code, using simple APIs.
 
-The goal of Wrflib is to make it easy to build performance-intensive applications in the browser. While it is possible to make Javascript run fast, over time it may become hard to manage lots of optimizations. In Rust you tend to need way fewer optimizations to get to a similar or even higher levels of performance, allowing you to focus on actually building stuff.
+The goal of Wrflib is to make it easy to build performance-intensive applications in the browser. While it is possible to make JavaScript run fast, over time it may become hard to manage lots of optimizations. In Rust you tend to need way fewer optimizations to get to similar or even higher levels of performance, allowing you to focus on actually building stuff.
 
 The idea is to start with your existing web-based codebase, and incrementally move pieces of code over to Wrflib:
 * You might start with a small computation;
@@ -10,7 +10,7 @@ The idea is to start with your existing web-based codebase, and incrementally mo
 * then move over some UI elements;
 * and so on.
 
-Over time, you could port your entire codebase over to Rust, or you might keep Javascript and Rust code side-by-side.
+Over time, you could port your entire codebase over to Rust, or you might keep JavaScript and Rust code side-by-side.
 
 ## Structure
 
@@ -20,7 +20,7 @@ Wrflib roughly consists of these parts:
 3. **Rendering.** Low-level GPU-based 2d and 3d rendering APIs, and eventing.
 4. **UI.** UI components, layout engine, animation.
 
-Current development is mostly focused on 1-3, and at this point we recommend to keep using Javascript/CSS for UI elements. But in the future we aim to support building entire applications fully within Wrflib.
+Current development is mostly focused on 1-3, and at this point we recommend to keep using JavaScript/CSS for UI elements. But in the future we aim to support building entire applications fully within Wrflib.
 
 The focus of Wrflib is on WebAssembly, but it also runs natively on various systems. This is useful while developing and testing components in isolation, comparable to using [Storybook](https://storybook.js.org/).
 
@@ -30,7 +30,7 @@ Wrflib runs on the following platforms:
 3. **Windows / DirectX 11.** Not well supported; some APIs missing; but should run.
 4. **Linux / OpenGL.** Not well supported; some APIs missing; but should run.
 
-There is also a highly experimental feature where we embed a [Chromium](https://en.wikipedia.org/wiki/Chromium_(web_browser)) instance in a desktop build. This is similar to running Rust code alongside Javascript in a browser using WebAssembly, except that your Rust code runs completely natively instead of in WebAssembly. Rendering is also done natively instead of using WebGL. This is generally more performant, and makes it easier to attach debuggers and profilers.
+There is also a highly experimental feature where we embed a [Chromium](https://en.wikipedia.org/wiki/Chromium_(web_browser)) instance in a desktop build. This is similar to running Rust code alongside JavaScript in a browser using WebAssembly, except that your Rust code runs completely natively instead of in WebAssembly. Rendering is also done natively instead of using WebGL. This is generally more performant, and makes it easier to attach debuggers and profilers.
 
 ## License
 

@@ -6,7 +6,7 @@
 
 //! Vector graphics helper functions, mostly for working with fonts.
 //!
-//! For internal Wrf use, unless you know what you're doing.
+//! For internal Wrflib use, unless you know what you're doing.
 
 pub mod font;
 pub mod geometry;

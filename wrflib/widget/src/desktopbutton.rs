@@ -202,7 +202,7 @@ impl DesktopButton {
             DesktopButtonType::Fullscreen => (50., 36.),
         };
 
-        let rect = cx.walk_turtle(Walk::wh(Width::Fix(w), Height::Fix(h)));
+        let rect = cx.add_box(LayoutSize::new(Width::Fix(w), Height::Fix(h)));
 
         self.bg_area = cx.add_instances(
             &SHADER,

@@ -217,7 +217,7 @@ impl Splitter {
     }
 
     pub fn begin_draw(&mut self, cx: &mut Cx) {
-        let rect = cx.get_turtle_rect();
+        let rect = cx.get_box_rect();
         self._calc_pos = match self.align {
             SplitterAlign::First => self.pos,
             SplitterAlign::Last => match self.axis {
@@ -242,33 +242,27 @@ impl Splitter {
 
     pub fn mid_draw(&mut self, cx: &mut Cx) {
         cx.end_row();
-        let rect = cx.get_turtle_rect();
-        let origin = cx.get_turtle_origin();
+        let rect = cx.get_box_rect();
+        let origin = cx.get_box_origin();
 
         match self.axis {
             Axis::Horizontal => {
-                cx.set_turtle_pos(Vec2 { x: origin.x, y: origin.y + self._calc_pos });
-                self.split_view.begin_view(
-                    cx,
-                    Layout { walk: Walk::wh(Width::Fix(rect.size.x), Height::Fix(self.split_size)), ..Layout::default() },
-                );
+                cx.set_draw_pos(Vec2 { x: origin.x, y: origin.y + self._calc_pos });
+                self.split_view.begin_view(cx, LayoutSize::new(Width::Fix(rect.size.x), Height::Fix(self.split_size)));
                 self.bg.draw(
                     cx,
-                    Rect { pos: vec2(0., 0.), size: vec2(rect.size.x, self.split_size) }.translate(cx.get_turtle_origin()),
+                    Rect { pos: vec2(0., 0.), size: vec2(rect.size.x, self.split_size) }.translate(cx.get_box_origin()),
                     Vec4::default(),
                 );
                 self.split_view.end_view(cx);
-                cx.set_turtle_pos(Vec2 { x: origin.x, y: origin.y + self._calc_pos + self.split_size });
+                cx.set_draw_pos(Vec2 { x: origin.x, y: origin.y + self._calc_pos + self.split_size });
             }
             Axis::Vertical => {
-                cx.set_turtle_pos(Vec2 { x: origin.x + self._calc_pos, y: origin.y });
-                self.split_view.begin_view(
-                    cx,
-                    Layout { walk: Walk::wh(Width::Fix(self.split_size), Height::Fix(rect.size.y)), ..Layout::default() },
-                );
+                cx.set_draw_pos(Vec2 { x: origin.x + self._calc_pos, y: origin.y });
+                self.split_view.begin_view(cx, LayoutSize::new(Width::Fix(self.split_size), Height::Fix(rect.size.y)));
                 self.bg.draw(
                     cx,
-                    Rect { pos: vec2(0., 0.), size: vec2(self.split_size, rect.size.y) }.translate(cx.get_turtle_origin()),
+                    Rect { pos: vec2(0., 0.), size: vec2(self.split_size, rect.size.y) }.translate(cx.get_box_origin()),
                     Vec4::default(),
                 );
                 self.split_view.end_view(cx);
@@ -280,7 +274,7 @@ impl Splitter {
     pub fn end_draw(&mut self, cx: &mut Cx) {
         cx.end_row();
         // draw the splitter in the middle of the turtle
-        let rect = cx.get_turtle_rect();
+        let rect = cx.get_box_rect();
 
         self.animator.draw(cx, ANIM_DEFAULT);
         self.animate(cx);

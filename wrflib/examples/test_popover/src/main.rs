@@ -40,9 +40,9 @@ impl PopoverExampleApp {
     pub fn draw(&mut self, cx: &mut Cx) {
         self.desktop_window.begin_draw(cx, Some(&self.menu));
 
-        // Popover currently only supports drawing above the current turtle position,
+        // Popover currently only supports drawing above the current box position,
         // so make some space above it.
-        cx.move_turtle(0., 200.);
+        cx.move_draw_pos(0., 200.);
 
         if let Some(popover) = &mut self.popover {
             popover.begin_draw(cx, Width::Compute, Height::Compute, COLOR_BLACK);

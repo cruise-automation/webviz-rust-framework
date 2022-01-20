@@ -1,21 +1,19 @@
-# Wrf JS API
+# Wrflib JS API
 
 | API                                         | browser top-level | browser WebWorker | native top-level | native WebWorker |
 | ------------------------------------------- | :---------------: | :---------------: | :--------------: | :--------------: |
-| wrf/self.initialize                         |       ✅          |        —          |       ✅         |       —         |
-| wrf/self.initWrfUserWorkerRuntime           |       —          |        ✅          |       —         |       ❌         |
-| wrf/self.wrfInitialized                     |       ❌          |        ✅          |       ❌         |       ❌         |
-| wrf/self.registerCallJsCallbacks            |       ✅          |        —          |       ✅         |       —         |
-| wrf/self.unregisterCallJsCallbacks          |       ✅          |        —          |       ✅         |       —         |
-| wrf/self.callRust                           |       ✅          |        ✅          |       ✅         |       ❌         |
-| wrf/self.createBuffer                       |       ✅          |        ✅          |       ✅         |       ❌         |
-| wrf/self.createReadOnlyBuffer               |       ✅          |        ✅          |       ✅         |       ❌         |
-| wrf/self.callRustInSameThreadSync           |       —          |        ✅          |       ✅         |       ❌         |
-| wrf/self.wrfNewWorkerPort                   |       ✅          |        ✅          |       ❌         |       ❌         |
-| wrf/self.serializeWrfArrayForPostMessage    |       ✅          |        ✅          |       ❌         |       ❌         |
-| wrf/self.deserializeWrfArrayFromPostMessage |       ✅          |        ✅          |       ❌         |       ❌         |
-| wrf/self.isWrfBuffer                        |       ❌          |        ✅          |       ❌         |       ❌         |
-| wrf/self.jsRuntime                          |       ✅          |        ❌          |       ✅         |       ❌         |
+| wrflib.initialize                           |       ✅          |        —          |       ✅         |       —         |
+| wrflib.initializeWorker                     |        —          |        ✅          |       —         |       ❌         |
+| wrflib.registerCallJsCallbacks              |       ✅          |        —          |       ✅         |       —         |
+| wrflib.unregisterCallJsCallbacks            |       ✅          |        —          |       ✅         |       —         |
+| wrflib.callRust                             |       ✅          |        ✅          |       ✅         |       ❌         |
+| wrflib.createReadOnlyBuffer                 |       ✅          |        ✅          |       ✅         |       ❌         |
+| wrflib.createMutableBuffer                  |       ✅          |        ✅          |       ✅         |       ❌         |
+| wrflib.callRustInSameThreadSync             |       —          |        ✅          |       ✅         |       ❌         |
+| wrflib.newWorkerPort                     |       ✅          |        ✅          |       ❌         |       ❌         |
+| wrflib.serializeWrfArrayForPostMessage      |       ✅          |        ✅          |       ❌         |       ❌         |
+| wrflib.deserializeWrfArrayFromPostMessage   |       ✅          |        ✅          |       ❌         |       ❌         |
+| wrflib.jsRuntime                            |       ✅          |        ❌          |       ✅         |       ❌         |
 
 ```
 ✅ = implemented

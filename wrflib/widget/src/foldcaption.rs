@@ -207,7 +207,7 @@ impl FoldCaption {
         })
     }
 
-    pub fn begin_fold_caption(&mut self, cx: &mut Cx) -> f32 {
+    pub fn draw_fold_caption(&mut self, cx: &mut Cx, label: &str) -> f32 {
         let open_value = self.open_state.get_value();
 
         self.bg_area = cx.add_instances(&SHADER, &[FoldCaptionIns { open: open_value, ..Default::default() }]);
@@ -215,22 +215,16 @@ impl FoldCaption {
         cx.begin_padding_box(Padding::all(1.0));
         cx.begin_row(Width::Fill, Height::Compute); // fold
         cx.begin_padding_box(Padding { l: 14.0, t: 8.0, r: 14.0, b: 8.0 }); // fold content
-
-        if self.open_state.do_time_step(0.6) {
-            cx.request_draw();
+        {
+            if self.open_state.do_time_step(0.6) {
+                cx.request_draw();
+            }
+            cx.begin_right_box();
+            let draw_str_props =
+                TextInsProps { wrapping: Wrapping::Ellipsis(cx.get_width_left() - 10.), ..TextInsProps::DEFAULT };
+            TextIns::draw_walk(cx, label, &draw_str_props);
+            cx.end_right_box();
         }
-
-        open_value
-    }
-
-    pub fn end_fold_caption(&mut self, cx: &mut Cx, label: &str) {
-        cx.reset_turtle_pos();
-
-        cx.begin_right_box();
-        let draw_str_props = TextInsProps { wrapping: Wrapping::Ellipsis(cx.get_width_left() - 10.), ..TextInsProps::DEFAULT };
-        TextIns::draw_walk(cx, label, &draw_str_props);
-        cx.end_right_box();
-
         cx.end_padding_box(); // fold content
         let rect = cx.end_row(); // fold
         cx.end_padding_box();
@@ -242,5 +236,7 @@ impl FoldCaption {
 
         self.animator.draw(cx, ANIM_DEFAULT);
         self.animate(cx);
+
+        open_value
     }
 }

@@ -123,7 +123,7 @@ impl CodeIconIns {
     pub fn draw(cx: &mut Cx, icon_type: CodeIconType) {
         cx.begin_padding_box(Padding { l: 0., t: 0.5, r: 4., b: 0. });
 
-        let rect = cx.walk_turtle(Walk { width: Width::Fix(14.0), height: Height::Fix(14.0) });
+        let rect = cx.add_box(LayoutSize { width: Width::Fix(14.0), height: Height::Fix(14.0) });
 
         cx.add_instances(&SHADER, &[CodeIconIns { base: QuadIns::from_rect(rect), icon_type: icon_type.shader_float() }]);
         cx.end_padding_box();

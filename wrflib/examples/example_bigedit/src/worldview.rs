@@ -77,7 +77,7 @@ impl WorldView {
     }
 
     pub fn draw_world_select(&mut self, cx: &mut Cx) {
-        self.select_view.begin_view(cx, Layout::default());
+        self.select_view.begin_view(cx, LayoutSize::FILL);
         self.bg.begin_draw(cx, Width::Fill, Height::Fill, COLOR_BG);
 
         for (index, button) in self.buttons.iter_mut().enumerate() {
@@ -111,7 +111,8 @@ impl WorldView {
     }
 
     pub fn draw_world_view_3d(&mut self, cx: &mut Cx) {
-        self.view.begin_view(cx, Layout::abs_origin_zero());
+        cx.begin_absolute_box();
+        self.view.begin_view(cx, LayoutSize::FILL);
 
         match &self.world_type {
             WorldType::TreeWorld => {
@@ -123,5 +124,6 @@ impl WorldView {
         }
 
         self.view.end_view(cx);
+        cx.end_absolute_box();
     }
 }

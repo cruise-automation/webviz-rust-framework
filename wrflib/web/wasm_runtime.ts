@@ -26,6 +26,7 @@ import {
   FileHandle,
   MutableBufferData,
   RustWrfParam,
+  Initialize,
 } from "./types";
 import { WebGLRenderer } from "./webgl_renderer";
 import {
@@ -40,6 +41,12 @@ import {
   TaskWorkerEvent,
   AsyncWorkerEvent,
 } from "./rpc_types";
+import {
+  addLoadingIndicator,
+  removeLoadingIndicator,
+} from "./loading_indicator";
+import { addDefaultStyles } from "./default_styles";
+import { inWorker } from "./type_of_runtime";
 
 declare global {
   interface Document {
@@ -90,7 +97,7 @@ export const unregisterCallJsCallbacks = (fnNames: string[]): void => {
 
 let rpc: Rpc<WasmWorkerRpc>;
 
-export const wrfNewWorkerPort = (): MessagePort => {
+export const newWorkerPort = (): MessagePort => {
   const channel = new MessageChannel();
   rpc.send(WorkerEvent.BindMainWorkerPort, channel.port1, [channel.port1]);
   return channel.port2;
@@ -167,7 +174,7 @@ export const callRust: CallRust = async (name, params = []) => {
   );
 };
 
-export const createBuffer: CreateBuffer = async (data) => {
+export const createMutableBuffer: CreateBuffer = async (data) => {
   const bufferLen = data.byteLength;
   const bufferPtr = await rpc.send(WorkerEvent.CreateBuffer, data, [
     data.buffer,
@@ -228,25 +235,25 @@ export const callRustInSameThreadSync: CallRustInSameThreadSync = (
   );
 };
 
-export const initialize = (
-  initParams: { filename: string } | { targetName: string }
-): Promise<void> =>
-  new Promise<void>((resolve) => {
-    overwriteTypedArraysWithWrfArrays();
+let alreadyCalledInitialize = false;
+export const initialize: Initialize = (initParams) => {
+  if (alreadyCalledInitialize) {
+    throw new Error("Only call wrflib.initialize() once");
+  }
+  alreadyCalledInitialize = true;
 
-    rpc = new Rpc(new Worker(new URL("./wrf_wasm_worker.ts", import.meta.url)));
+  if (inWorker) {
+    throw new Error(
+      "wrflib.initialize() can only be called on the browser's main thread"
+    );
+  }
 
-    let wasmFilename: string;
-    if ("filename" in initParams) {
-      wasmFilename = initParams.filename;
-    } else {
-      // @ts-ignore
-      const env = new URL(window.document.location).searchParams.get("debug")
-        ? "debug"
-        : "release";
-      wasmFilename = `target/wasm32-unknown-unknown/${env}/${initParams.targetName}.wasm`;
-    }
-    const wasmPath = new URL(wasmFilename, document.baseURI).href;
+  overwriteTypedArraysWithWrfArrays();
+
+  return new Promise<void>((resolve) => {
+    rpc = new Rpc(new Worker(new URL("./main_worker.ts", import.meta.url)));
+
+    const wasmPath = new URL(initParams.filename, document.baseURI).href;
 
     // Safari (as of version 15.2) needs the WebAssembly Module to be compiled on the browser's
     // main thread. This also allows us to start compiling while still waiting for the DOM to load.
@@ -260,6 +267,11 @@ export const initialize = (
       const isMobileSafari = self.navigator.platform.match(/iPhone|iPad/i);
       const isAndroid = self.navigator.userAgent.match(/Android/i);
 
+      if (initParams.defaultStyles) {
+        addDefaultStyles();
+        addLoadingIndicator();
+      }
+
       let rpcInitialized = false;
 
       rpc.receive(WorkerEvent.ShowIncompatibleBrowserNotification, () => {
@@ -270,10 +282,10 @@ export const initialize = (
           "Sorry, we need browser support for WebGL to run<br/>Please update your browser to a more modern one<br/>Update to at least iOS 10, Safari 10, latest Chrome, Edge or Firefox<br/>Go and update and come back, your browser will be better, faster and more secure!<br/>If you are using chrome on OSX on a 2011/2012 mac please enable your GPU at: Override software rendering list:Enable (the top item) in: <a href='about://flags'>about://flags</a>. Or switch to Firefox or Safari.";
       });
 
+      // TODO(JP): See if we can instead do this when we resolve the `initialize` Promise.
       rpc.receive(WorkerEvent.RemoveLoadingIndicators, () => {
-        const loaders = document.getElementsByClassName("cx_webgl_loader");
-        for (let i = 0; i < loaders.length; i++) {
-          assertNotNull(loaders[i].parentNode).removeChild(loaders[i]);
+        if (initParams.defaultStyles) {
+          removeLoadingIndicator();
         }
       });
 
@@ -376,20 +388,13 @@ export const initialize = (
       });
 
       const canvas: HTMLCanvasElement = document.createElement("canvas");
-      canvas.className = "cx_webgl";
+      canvas.className = "wrflib_canvas";
       document.body.appendChild(canvas);
-
-      const loadingIndicator = document.createElement("div");
-      loadingIndicator.className = "cx_webgl_loader";
-      loadingIndicator.innerHTML =
-        '<span>⚡</span><div style="color: rgba(255, 202, 0, 0.5);">Loading…</div>';
-      document.body.appendChild(loadingIndicator);
 
       document.addEventListener("contextmenu", (event) => {
         if (
           event.target instanceof Element &&
-          (!document.getElementById("js_root")?.contains(event.target) ||
-            Array.from(event.target.classList).includes("wrflibPanel"))
+          !document.getElementById("wrflib_js_root")?.contains(event.target)
         ) {
           event.preventDefault();
         }
@@ -684,3 +689,4 @@ export const initialize = (
       document.addEventListener("DOMContentLoaded", loader);
     }
   });
+};

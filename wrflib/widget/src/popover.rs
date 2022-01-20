@@ -13,7 +13,7 @@ use wrflib::*;
 /// <https://uxdesign.cc/pop-up-popover-or-popper-a-quick-look-into-ui-terms-cb4114fca2a>.
 ///
 /// TODO(JP): This currently only supports showing a popover _above_ the current
-/// [`Turtle`] position. To make this more useful we should add different ways
+/// box position. To make this more useful we should add different ways
 /// of positioning this.
 ///
 /// TODO(JP): This currently assumes you draw this on top of everything. That is
@@ -64,14 +64,14 @@ impl Popover {
     pub fn begin_draw(&mut self, cx: &mut Cx, width: Width, height: Height, color: Vec4) {
         // TODO(JP): This feels like a bit of a hack; using [`Layout::align`] like this. It might be
         // nicer to have an API that is like "move everything over by this dx/dy".
-        let popover_y_bottom = cx.get_turtle_pos().y;
+        let popover_y_bottom = cx.get_draw_pos().y;
         cx.begin_absolute_box();
         cx.begin_column(Width::Fill, Height::Fix(popover_y_bottom));
         cx.begin_bottom_box();
         self.background.begin_draw(cx, width, height, color);
     }
 
-    /// End the [`Turtle`] from [`Popover::begin_draw`], using its final [`Rect`] to
+    /// Ends the corresponding [`Popover::begin_draw`], using its final [`Rect`] to
     /// draw and position the [`Popover::background`].
     pub fn end_draw(&mut self, cx: &mut Cx) {
         self.background.end_draw(cx);

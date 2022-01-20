@@ -11,9 +11,5 @@ edition = "2018"
 publish = false
 
 [dependencies]
-
-[dependencies.wrflib]
-path="../../main"
-
-[dependencies.wrflib_widget]
-path="../../widget"
+wrflib = { path="../../main" }
+wrflib_widget = { path="../../widget" }

@@ -218,7 +218,7 @@ impl LogList {
             counter += 1;
         }
 
-        self.list.walk_turtle_to_end(cx, row_height);
+        self.list.walk_box_to_end(cx, row_height);
 
         self.item_draw.draw_status_line(cx, counter, bm);
         counter += 1;
@@ -382,14 +382,13 @@ impl LogItemDraw {
     }
 
     fn draw_filler(&mut self, cx: &mut Cx, counter: usize) {
-        let view_total = cx.get_turtle_bounds();
         self.item_bg.begin_draw(
             cx,
             Width::Fill,
-            Height::Fix(ITEM_HEIGHT),
+            // Draw filler node of fixed height, until hitting the visibile boundaries, to prevent unneccesary scrolling
+            Height::FillUntil(ITEM_HEIGHT),
             if counter & 1 == 0 { LIST_ANIMS_COLOR_BG_EVEN } else { LIST_ANIMS_COLOR_BG_ODD },
         );
         self.item_bg.end_draw(cx);
-        cx.set_turtle_bounds(view_total); // do this so it doesnt impact the turtle
     }
 }

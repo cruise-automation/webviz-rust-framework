@@ -53,7 +53,7 @@ impl BottomBar {
     }
 
     pub fn draw(&mut self, cx: &mut Cx) {
-        cx.begin_column(Width::Fill, Height::Fill);
+        cx.begin_column(Width::Fill, Height::Fill); // outer_box
         {
             cx.begin_bottom_box();
             cx.begin_row(Width::Fill, Height::Compute); // bottom bar itself
@@ -71,6 +71,6 @@ impl BottomBar {
             cx.end_row(); // bottom bar itself
             cx.end_bottom_box();
         }
-        cx.end_column(); // outer_turtle;
+        cx.end_column(); // outer_box;
     }
 }

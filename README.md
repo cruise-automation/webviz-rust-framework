@@ -1,6 +1,6 @@
-# 🐢⚡ Webviz Rust Framework (Wrf)
+# 🐢⚡ Webviz Rust Framework (Wrflib)
 
-Wrf is a fast, cross-platform (web+native), GPU-based application framework, written in Rust.
+Wrflib is a fast, cross-platform (web+native), GPU-based application framework, written in Rust.
 
 We're a small team at [Cruise](https://getcruise.com/) building an internal application and this framework at the same time. It's in early stages of development, so don't expect too much yet!
 
@@ -18,6 +18,6 @@ Originally we forked the [Makepad Framework](https://github.com/makepad/makepad)
 
 ## License
 
-Wrf is primarily distributed under the terms of both the MIT license and the Apache License (version 2.0).
+Wrflib is primarily distributed under the terms of both the MIT license and the Apache License (version 2.0).
 
 See [LICENSE-APACHE](LICENSE-APACHE) and [LICENSE-MIT](LICENSE-MIT) for details.

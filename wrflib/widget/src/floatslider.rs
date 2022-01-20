@@ -266,7 +266,7 @@ impl FloatSlider {
             self.norm_value = (scaled_value - min) / (max - min);
         }
 
-        let rect = cx.walk_turtle(Walk { width: Width::Fill, height: Height::Fix(35.0 * height_scale) });
+        let rect = cx.add_box(LayoutSize { width: Width::Fill, height: Height::Fix(35.0 * height_scale) });
 
         let background_ranges = match custom_background_ranges {
             Some(ranges) => ranges,

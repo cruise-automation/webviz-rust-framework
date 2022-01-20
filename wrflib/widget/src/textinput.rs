@@ -97,12 +97,12 @@ impl TextInput {
 
         // Overriding view layout for text inputs to prevent it from consuming all available space.
         // TODO(Dmitry): get rid of this special handling
-        if self.text_editor.begin_text_editor(cx, text_buffer, Some(Walk::wh(Width::Compute, Height::Compute))).is_err() {
+        if self.text_editor.begin_text_editor(cx, text_buffer, Some(LayoutSize::new(Width::Compute, Height::Compute))).is_err() {
             cx.end_padding_box();
             return;
         }
         if text_buffer.is_empty() {
-            let pos = cx.get_turtle_pos();
+            let pos = cx.get_draw_pos();
 
             // TODO(Shobhit): We should move this into TextEditor.
             TextIns::draw_walk(
@@ -111,7 +111,7 @@ impl TextInput {
                 &TextInsProps { color: COLOR_EMPTY_MESSAGE, text_style: TEXT_STYLE_MONO, ..TextInsProps::DEFAULT },
             );
 
-            cx.set_turtle_pos(pos);
+            cx.set_draw_pos(pos);
         }
 
         for (index, token_chunk) in text_buffer.token_chunks.iter_mut().enumerate() {

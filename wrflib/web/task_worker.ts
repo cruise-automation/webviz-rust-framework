@@ -17,7 +17,7 @@ import { ZerdeParser } from "./zerde";
 
 /// <reference lib="WebWorker" />
 
-// This "task worker" is a special worker that helps convert asynchronous Javascript APIs to synchronous,
+// This "task worker" is a special worker that helps convert asynchronous JavaScript APIs to synchronous,
 // blocking APIs.
 //
 // Consider the following example: (TODO(JP): this particular example is not implemented yet but it's the easiest example..)
@@ -27,10 +27,10 @@ import { ZerdeParser } from "./zerde";
 //   });
 //   handler.join(); // blocks until the thread is done
 //
-// In a naive implementation, `thread::spawn` would simply call `new Worker` in Javascript. However,
-// the `handler.join()` call makes the thread block. This prevents Javascript from actually creating
+// In a naive implementation, `thread::spawn` would simply call `new Worker` in JavaScript. However,
+// the `handler.join()` call makes the thread block. This prevents JavaScript from actually creating
 // the worker, because `new Worker` is an asynchronous API which only actually spawns a new worker when
-// control is given back to the Javascript event loop. So this would block forever!
+// control is given back to the JavaScript event loop. So this would block forever!
 //
 // We solve this by having this task worker wait for messages on a `SharedArrayBuffer`, using
 // `Atomics.wait`. This way instead of calling `new Worker` in the other thread, we can append a
@@ -40,7 +40,7 @@ import { ZerdeParser } from "./zerde";
 //
 //  let reader = request("url").unwrap(); // blocks until we have a valid HTTP connection
 //
-// This would map to a `fetch` call in Javascript. However, that returns a Promise, and there is no way
+// This would map to a `fetch` call in JavaScript. However, that returns a Promise, and there is no way
 // to directly block on that Promise! Again, we can use the task worker to help, although the full flow
 // is quite a bit more complicated:
 //
@@ -49,11 +49,11 @@ import { ZerdeParser } from "./zerde";
 //   a notification when the task worker is done) and notifies the task worker using `Atomics.notify`.
 // * User thread uses `Atomics.wait` to wait for information back from the task worker.
 // * Task worker gets woken up, parses the messages, calls `fetch`, and increments `async_tasks`.
-// * Task worker doesn't use `Atomics.wait` to block, but instead it relinquishes control to Javascript,
-//   so that the Javascript event loop can run, and call the Promise callback when done.
+// * Task worker doesn't use `Atomics.wait` to block, but instead it relinquishes control to JavaScript,
+//   so that the JavaScript event loop can run, and call the Promise callback when done.
 // * In order to not miss any other messages (from other threads), the task worker uses `setTimeout`
 //   to poll for new messages.
-// * The Javascript event loop calls the Promise callback, which decrements `async_tasks`, and returns
+// * The JavaScript event loop calls the Promise callback, which decrements `async_tasks`, and returns
 //   information back to the user thread using the pointer that was supplied in the original message,
 //   and calls Atomics.notify to wake up the user thread.
 // * If there aren't any other in-flight tasks (`async_tasks` is 0), the task worker blocks again to
@@ -76,7 +76,7 @@ const rpc = new Rpc<Worker<TaskWorkerRpc>>(self);
 rpc.receive(TaskWorkerEvent.Init, ({ taskWorkerSab, wasmMemory }) => {
   const taskWorkerSabi32 = new Int32Array(taskWorkerSab);
 
-  // Number of async tasks that require the Javascript even loop to have control. If zero, we'll
+  // Number of async tasks that require the JavaScript even loop to have control. If zero, we'll
   // use Atomics.wait to wait for the next message, otherwise we'll use setTimeout to poll for new
   // messages.
   let asyncTasks = 0;
@@ -211,7 +211,7 @@ rpc.receive(TaskWorkerEvent.Init, ({ taskWorkerSab, wasmMemory }) => {
     stream.currentTwMessage = undefined;
   }
 
-  // Parse a message, which is formatted using `ZerdeBuilder` in Rust, so we use `ZerdeParser` in Javascript
+  // Parse a message, which is formatted using `ZerdeBuilder` in Rust, so we use `ZerdeParser` in JavaScript
   // to decode it.
   function handleTwMessage(zerdeParser: ZerdeParser) {
     const messageType = zerdeParser.parseU32();
@@ -320,7 +320,7 @@ rpc.receive(TaskWorkerEvent.Init, ({ taskWorkerSab, wasmMemory }) => {
 
       if (asyncTasks > 0) {
         // We can't block if we have any async tasks currently running, since we need
-        // the Javascript event loop to be in control. So we queue up a new call to
+        // the JavaScript event loop to be in control. So we queue up a new call to
         // this function (which will be handled by the event loop!) and bail.
         setTimeout(process, 1);
         break;

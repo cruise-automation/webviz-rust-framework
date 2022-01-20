@@ -146,7 +146,7 @@ impl TabClose {
     }
 
     pub fn draw(&mut self, cx: &mut Cx) {
-        let rect = cx.walk_turtle(Walk::wh(Width::Fix(25.0), Height::Fix(25.0)));
+        let rect = cx.add_box(LayoutSize::new(Width::Fix(25.0), Height::Fix(25.0)));
 
         self.bg_area = cx
             .add_instances(&SHADER, &[TabCloseIns { base: QuadIns::from_rect(rect).with_draw_depth(1.3), ..Default::default() }]);

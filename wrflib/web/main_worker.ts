@@ -19,7 +19,6 @@ import {
 import {
   FileHandle,
   WasmExports,
-  PostMessageTypedArray,
   SizingData,
   WrfArray,
   MutableBufferData,
@@ -34,6 +33,7 @@ import {
   Worker,
   WasmWorkerRpc,
   WebWorkerRpc,
+  WorkerCallRustParams,
   WorkerEvent,
   MainWorkerChannelEvent,
 } from "./rpc_types";
@@ -180,10 +180,7 @@ export class WasmApp {
     const callRust = ({
       name,
       params,
-    }: {
-      name: string;
-      params: (string | PostMessageTypedArray | WrfArray)[];
-    }): Promise<RustWrfParam[]> => {
+    }: WorkerCallRustParams): Promise<RustWrfParam[]> => {
       const callbackId = this.callRustNewCallbackId++;
       const promise = new Promise<RustWrfParam[]>((resolve, _reject) => {
         this.callRustPendingCallbacks[callbackId] = (data: RustWrfParam[]) => {

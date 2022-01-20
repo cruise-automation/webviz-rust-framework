@@ -4,6 +4,11 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
+export type Initialize = (initParams: {
+  filename: string;
+  defaultStyles?: boolean;
+}) => Promise<void>;
+
 export type UniformType =
   | "float"
   | "vec2"
@@ -114,7 +119,13 @@ export type WrfArray = Uint8Array | Float32Array;
 export type WrfParam = WrfArray | string;
 export type RustWrfParam = BufferData | string;
 
+// TODO(JP): We currently have a different interface for `createMutableBuffer`
+// and `createReadOnlyBuffer` between the main thread and workers, because
+// we currently don't run a Wasm instance in the main thread. However, we
+// should be able to fix that by using spinlocks on the main thread (allocations
+// should typically already use this!).
 export type CreateBuffer = <T extends WrfArray>(data: T) => Promise<T>;
+export type CreateBufferWorkerSync = <T extends WrfArray>(data: T) => T;
 
 export type CallJsCallback = (params: WrfParam[]) => void;
 

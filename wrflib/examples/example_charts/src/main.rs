@@ -72,16 +72,16 @@ impl ChartsExampleApp {
     pub fn draw(&mut self, cx: &mut Cx) {
         self.window.begin_window(cx);
         self.pass.begin_pass(cx, COLOR_WHITE);
-        self.main_view.begin_view(cx, Layout::default());
+        self.main_view.begin_view(cx, LayoutSize::FILL);
 
         cx.begin_row(Width::Fill, Height::Fill);
-
-        self.splitter.begin_draw(cx);
-        self.chart_list.draw(cx);
-        self.splitter.mid_draw(cx);
-        self.chart.draw(cx);
-        self.splitter.end_draw(cx);
-
+        {
+            self.splitter.begin_draw(cx);
+            self.chart_list.draw(cx);
+            self.splitter.mid_draw(cx);
+            self.chart.draw(cx);
+            self.splitter.end_draw(cx);
+        }
         cx.end_row();
 
         self.main_view.end_view(cx);

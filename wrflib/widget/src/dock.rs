@@ -696,7 +696,9 @@ where
     pub fn draw(&mut self, cx: &mut Cx) {
         // lets draw our hover layer if need be
         if let Some(fe) = &self._drag_move {
-            self.drop_quad_view.begin_view(cx, Layout::abs_origin_zero());
+            cx.begin_absolute_box();
+            self.drop_quad_view.begin_view(cx, LayoutSize::FILL);
+
             //let mut found_drop_zone = false;
             for (_id, tab_control) in self.tab_controls.enumerate() {
                 let cdr = tab_control.get_content_drop_rect(cx);
@@ -706,13 +708,14 @@ where
                     let (_kind, rect) = Self::get_drop_kind(fe.abs, self.drop_size, tvr, cdr, tab_rects);
 
                     //found_drop_zone = true;
-                    self.drop_quad.draw(cx, rect.translate(cx.get_turtle_origin()), vec4(0.67, 0.67, 0.67, 0.8));
+                    self.drop_quad.draw(cx, rect.translate(cx.get_box_origin()), vec4(0.67, 0.67, 0.67, 0.8));
                 }
             }
             //if !found_drop_zone {
             //    self._tweening_quad = None;
             //  }
             self.drop_quad_view.end_view(cx);
+            cx.end_absolute_box();
         }
     }
 

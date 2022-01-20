@@ -110,13 +110,13 @@ impl ListLogic {
     }
 
     pub fn begin_list(&mut self, cx: &mut Cx, view: &mut ScrollView, tail_list: bool, row_height: f32) {
-        view.begin_view(cx, Layout { direction: Direction::Down, ..Layout::default() });
+        view.begin_view(cx, LayoutSize::FILL);
         self.set_visible_range_and_scroll(cx, view, tail_list, row_height);
     }
 
-    pub fn walk_turtle_to_end(&mut self, cx: &mut Cx, row_height: f32) {
+    pub fn walk_box_to_end(&mut self, cx: &mut Cx, row_height: f32) {
         let left = (self.list_items.len() - self.end_item) as f32 * row_height;
-        cx.walk_turtle(Walk::wh(Width::Fill, Height::Fix(left)));
+        cx.add_box(LayoutSize::new(Width::Fill, Height::Fix(left)));
     }
 
     pub fn end_list(&mut self, cx: &mut Cx, view: &mut ScrollView) {
@@ -127,7 +127,7 @@ impl ListLogic {
     }
 
     pub fn set_visible_range_and_scroll(&mut self, cx: &mut Cx, view: &mut ScrollView, tail_list: bool, row_height: f32) {
-        let view_rect = cx.get_turtle_rect();
+        let view_rect = cx.get_box_rect();
 
         // the maximum scroll position given the amount of log items
         let max_scroll_y = ((self.list_items.len() + 1) as f32 * row_height - view_rect.size.y).max(0.);
@@ -173,8 +173,8 @@ impl ListLogic {
         } else {
             self.set_scroll_pos = None;
         }
-        // lets jump the turtle forward by scrollpos.y
-        cx.move_turtle(0., start_scroll);
+        // lets move the draw position forward by scrollpos.y
+        cx.move_draw_pos(0., start_scroll);
     }
 
     pub fn get_next_single_selection(&self) -> ListSelect {

@@ -265,7 +265,7 @@ impl BuildManager {
     fn add_fake_log_messages(&mut self) {
         let create_fake_loc_message = |body: &str| LocMessage {
             // Some real path to test location navigation
-            path: "main/wrflib/wrflib/examples/bigedit/src/treeworld.rs".to_string(),
+            path: "main/wrflib/wrflib/examples/example_bigedit/src/treeworld.rs".to_string(),
             line: 10,
             column: 5,
             body: body.to_string(),

@@ -87,7 +87,7 @@ const arcAllocated = async (callRust: CallRust, buffer: WrfBuffer) => {
 };
 
 const arcDeallocated = async (arcPtr: number) => {
-  // From here on out we don't refer to `buffer` any more, so it should get
+  // From here on out we don't refer to `buffer` anymore, so it should get
   // deallocated, if the garbage collector is any good.
   expect(
     await checkConditionTimeout(() => {
@@ -100,7 +100,7 @@ const arcDeallocated = async (arcPtr: number) => {
 
 const vecDeallocated = async (bufferPtr: number) => {
   // Even though we have the buffer, it might have already been unregistered
-  // when passed to Rust. We shouldn't read/write to it any more. If this is the
+  // when passed to Rust. We shouldn't read/write to it anymore. If this is the
   // case, let's just bail.
   if (!allocatedVecs[bufferPtr]) return;
 

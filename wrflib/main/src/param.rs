@@ -24,38 +24,66 @@ pub enum WrfParam {
     ReadOnlyU8Buffer(Arc<Vec<u8>>),
     ReadOnlyF32Buffer(Arc<Vec<f32>>),
     /// Buffers to transfer ownership of memory from JS to Rust
-    U8Buffer(Vec<u8>),
-    F32Buffer(Vec<f32>),
+    MutableU8Buffer(Vec<u8>),
+    MutableF32Buffer(Vec<f32>),
 }
 
 impl WrfParam {
-    pub fn as_string(&self) -> &str {
+    /// Borrow contents of `WrfParam::String` as `&str`.
+    pub fn as_str(&self) -> &str {
         match self {
             WrfParam::String(v) => v,
             _ => panic!("WrfParam is not a String"),
         }
     }
-    pub fn as_read_only_u8_buffer(&self) -> &Arc<Vec<u8>> {
+    /// Borrow contents of `WrfParam::MutableU8Buffer` or `WrfParam::ReadOnlyU8Buffer` as `&[u8]`.
+    pub fn as_u8_slice(&self) -> &[u8] {
         match self {
+            WrfParam::MutableU8Buffer(v) => v,
             WrfParam::ReadOnlyU8Buffer(v) => v,
+            _ => panic!("{:?} is not a U8Buffer or ReadOnlyU8Buffer", self),
+        }
+    }
+    /// Borrow contents of `WrfParam::MutableF32Buffer` or `WrfParam::ReadOnlyF32Buffer` as `&[f32]`.
+    pub fn as_f32_slice(&self) -> &[f32] {
+        match self {
+            WrfParam::MutableF32Buffer(v) => v,
+            WrfParam::ReadOnlyF32Buffer(v) => v,
+            _ => panic!("{:?} is not a F32Buffer or ReadOnlyF32Buffer", self),
+        }
+    }
+    /// Get contents of `WrfParam::ReadOnlyU8Buffer`, without having to consume it.
+    pub fn as_arc_vec_u8(&self) -> Arc<Vec<u8>> {
+        match self {
+            WrfParam::ReadOnlyU8Buffer(v) => Arc::clone(v),
             _ => panic!("{:?} is not a ReadOnlyU8Buffer", self),
         }
     }
-    pub fn as_u8_buffer(&self) -> &Vec<u8> {
+    /// Get contents of `WrfParam::ReadOnlyU8Buffer`, without having to consume it.
+    pub fn as_arc_vec_f32(&self) -> Arc<Vec<f32>> {
         match self {
-            WrfParam::U8Buffer(v) => v,
-            _ => panic!("{:?} is not a U8Buffer", self),
-        }
-    }
-    pub fn as_read_only_f32_buffer(&self) -> &Arc<Vec<f32>> {
-        match self {
-            WrfParam::ReadOnlyF32Buffer(v) => v,
+            WrfParam::ReadOnlyF32Buffer(v) => Arc::clone(v),
             _ => panic!("{:?} is not a ReadOnlyF32Buffer", self),
         }
     }
-    pub fn as_f32_buffer(&self) -> &Vec<f32> {
+    /// Get contents of `WrfParam::String`, consuming it.
+    pub fn into_string(self) -> String {
         match self {
-            WrfParam::F32Buffer(v) => v,
+            WrfParam::String(v) => v,
+            _ => panic!("WrfParam is not a String"),
+        }
+    }
+    /// Get contents of `WrfParam::MutableU8Buffer`, consuming it.
+    pub fn into_vec_u8(self) -> Vec<u8> {
+        match self {
+            WrfParam::MutableU8Buffer(v) => v,
+            _ => panic!("{:?} is not a U8Buffer", self),
+        }
+    }
+    /// Get contents of `WrfParam::MutableF32Buffer`, consuming it.
+    pub fn into_vec_f32(self) -> Vec<f32> {
+        match self {
+            WrfParam::MutableF32Buffer(v) => v,
             _ => panic!("{:?} is not a F32Buffer", self),
         }
     }
@@ -72,12 +100,12 @@ impl IntoParam for String {
 }
 impl IntoParam for Vec<u8> {
     fn into_param(self) -> WrfParam {
-        WrfParam::U8Buffer(self)
+        WrfParam::MutableU8Buffer(self)
     }
 }
 impl IntoParam for Vec<f32> {
     fn into_param(self) -> WrfParam {
-        WrfParam::F32Buffer(self)
+        WrfParam::MutableF32Buffer(self)
     }
 }
 impl IntoParam for Arc<Vec<u8>> {

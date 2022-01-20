@@ -9,10 +9,10 @@ name = "wrflib"
 version = "0.0.1"
 edition = "2018"
 license = "MIT OR Apache-2.0"
-homepage = "https://github.com/janpaul123/wrflib"
-repository = "https://github.com/janpaul123/wrflib"
+homepage = "https://github.com/cruise-automation/webviz-rust-framework"
+repository = "https://github.com/cruise-automation/webviz-rust-framework"
 readme = "README.md"
-description = "🐢⚡ Wrf is a fast, cross-platform (web+native), GPU-based application framework, written in Rust."
+description = "🐢⚡ Wrflib is a fast, cross-platform (web+native), GPU-based application framework, written in Rust."
 
 [features]
 tls=["ureq/tls"] # TLS (for HTTPS) doesn't currently work with cross-compilation, so we allow disabling it.

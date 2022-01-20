@@ -383,7 +383,7 @@ impl CxAfterDraw {
                 ClearColor::InitWith(Vec4::default())
             };
             self.atlas_pass.add_color_texture(cx, self.atlas_texture_handle, clear);
-            let _ = self.atlas_view.begin_view(cx, Layout::default());
+            let _ = self.atlas_view.begin_view(cx, LayoutSize::FILL);
             let mut atlas_todo = Vec::new();
             std::mem::swap(&mut cx.fonts_data.write().unwrap().fonts_atlas.atlas_todo, &mut atlas_todo);
 

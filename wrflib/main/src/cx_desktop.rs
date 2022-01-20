@@ -121,10 +121,10 @@ impl CxDesktopVsWasmCommon for Cx {
     #[cfg(not(feature = "cef"))]
     fn return_to_js(&mut self, _callback_id: u32, _params: Vec<WrfParam>) {}
 
-    /// See [`CxDesktopVsWasmCommon::register_call_rust_in_same_thread_sync_fn`] for documentation.
+    /// See [`CxDesktopVsWasmCommon::on_call_rust_in_same_thread_sync`] for documentation.
     #[cfg(feature = "cef")]
-    fn register_call_rust_in_same_thread_sync_fn(&mut self, func: CallRustInSameThreadSyncFn) {
-        self.cef_browser.register_call_rust_in_same_thread_sync_fn(func);
+    fn on_call_rust_in_same_thread_sync(&mut self, func: CallRustInSameThreadSyncFn) {
+        self.cef_browser.on_call_rust_in_same_thread_sync(func);
     }
 }
 
