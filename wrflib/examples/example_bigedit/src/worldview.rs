@@ -47,6 +47,7 @@ const VIEWPORT_PROPS: Viewport3DProps = Viewport3DProps {
     camera_target: Vec3 { x: 0.0, y: 0.5, z: -1.5 },
     initial_camera_position: Coordinates::Spherical(SphericalAngles { phi: PI / 2., theta: 0., radius: 1.5 + 1.1 }),
     panning_enabled: false,
+    ..Viewport3DProps::DEFAULT
 };
 
 impl Default for WorldView {

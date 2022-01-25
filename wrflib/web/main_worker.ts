@@ -47,10 +47,6 @@ const isFirefox =
 
 type Timer = { id: number; repeats: number; sysId: number };
 
-export type Dependency = { vecPtr: number; name: string; vecLen: number };
-
-type Resource = { name: string; buffer: ArrayBuffer };
-
 export type Finger = {
   x: number;
   y: number;
@@ -80,13 +76,12 @@ export class WasmApp {
   private sizingData: SizingData;
   private baseUri: string;
   private timers: Timer[];
-  private resources: Promise<Resource>[];
   private hasRequestedAnimationFrame: boolean;
   private websockets: Record<string, WebSocketWithSendStack | null>;
   private fileHandles: FileHandle[];
   private zerdeEventloopEvents: ZerdeEventloopEvents;
   private appPtr: BigInt;
-  private doWasmBlock: boolean;
+  private doWasmBlock!: boolean;
   private xrCanPresent = false;
   private xrIsPresenting = false;
   private zerdeParser!: ZerdeParser;
@@ -126,7 +121,6 @@ export class WasmApp {
     this.sizingData = sizingData;
 
     this.timers = [];
-    this.resources = [];
     this.hasRequestedAnimationFrame = false;
     this.websockets = {};
     this.fileHandles = fileHandles;
@@ -259,35 +253,12 @@ export class WasmApp {
     // create initial zerdeEventloopEvents
     this.zerdeEventloopEvents = new ZerdeEventloopEvents(this);
 
-    // fetch dependencies
-    this.zerdeEventloopEvents.fetchDeps();
-
-    this.doWasmIo();
-
-    this.doWasmBlock = true;
-
-    // ok now, we wait for our resources to load.
-    Promise.all(this.resources).then(this.doDepResults.bind(this));
+    // Introduce a frame delay before initializing the application.
+    // This ensures WasmApp is initialized correctly before using it.
+    setTimeout(() => this.initApp(), 0);
   }
 
-  private doDepResults(results: Resource[]): void {
-    const deps: Dependency[] = [];
-    // copy our reslts into wasm pointers
-    for (let i = 0; i < results.length; i++) {
-      const result = results[i];
-      // allocate pointer, do +8 because of the u64 length at the head of the buffer
-      const vecLen = result.buffer.byteLength;
-      const vecPtr = this.zerdeEventloopEvents.createWasmBuffer(
-        new Uint8Array(result.buffer)
-      );
-      deps.push({
-        name: result.name,
-        vecPtr,
-        vecLen,
-      });
-    }
-    // pass wasm the deps
-    this.zerdeEventloopEvents.depsLoaded(deps);
+  private initApp(): void {
     // initialize the application
     this.zerdeEventloopEvents.init({
       width: this.sizingData.width,
@@ -297,7 +268,6 @@ export class WasmApp {
       canFullscreen: this.sizingData.canFullscreen,
       xrIsPresenting: false,
     });
-    this.doWasmBlock = false;
     this.doWasmIo();
 
     rpc.send(WorkerEvent.RemoveLoadingIndicators);
@@ -326,14 +296,6 @@ export class WasmApp {
     }
 
     this.exports.deallocWasmMessage(BigInt(zerdeParserPtr));
-  }
-
-  // TODO(JP): Should use sychronous file loading for this.
-  private loadDeps(deps: string[]): void {
-    for (let i = 0; i < deps.length; i++) {
-      const filePath = deps[i];
-      this.resources.push(this.fetchPath(filePath));
-    }
   }
 
   private setDocumentTitle(title: string): void {
@@ -842,28 +804,6 @@ export class WasmApp {
     // ignore for now
   }
 
-  // TODO(JP): Should use sychronous file loading for this.
-  private fetchPath(filePath: string): Promise<Resource> {
-    return new Promise((resolve, reject) => {
-      const req = new XMLHttpRequest();
-      req.addEventListener("error", function () {
-        reject(filePath);
-      });
-      req.responseType = "arraybuffer";
-      req.addEventListener("load", function () {
-        if (req.status !== 200) {
-          reject(req.status);
-        }
-        resolve({
-          name: filePath,
-          buffer: req.response,
-        });
-      });
-      req.open("GET", new URL(filePath, this.baseUri).href);
-      req.send();
-    });
-  }
-
   sendEventFromAnyThread(eventPtr: BigInt): void {
     // Prevent an infinite loop when calling this from an event handler.
     setTimeout(() => {
@@ -899,64 +839,55 @@ export class WasmApp {
     function log2(self) {
       console.log(self.zerdeParser.parseString());
     },
-    // load_deps
-    function loadDeps3(self) {
-      const deps: string[] = [];
-      const numDeps = self.zerdeParser.parseU32();
-      for (let i = 0; i < numDeps; i++) {
-        deps.push(self.zerdeParser.parseString());
-      }
-      self.loadDeps(deps);
-    },
     // request_animation_frame
-    function requestAnimationFrame4(self) {
+    function requestAnimationFrame3(self) {
       self.requestAnimationFrame();
     },
     // set_document_title
-    function setDocumentTitle5(self) {
+    function setDocumentTitle4(self) {
       self.setDocumentTitle(self.zerdeParser.parseString());
     },
     // set_mouse_cursor
-    function setMouseCursor6(self) {
+    function setMouseCursor5(self) {
       self.setMouseCursor(self.zerdeParser.parseU32());
     },
     // show_text_ime
-    function showTextIme7(self) {
+    function showTextIme6(self) {
       const x = self.zerdeParser.parseF32();
       const y = self.zerdeParser.parseF32();
       rpc.send(WorkerEvent.ShowTextIME, { x, y });
     },
     // hide_text_ime
-    function hideTextIme8(_self) {
+    function hideTextIme7(_self) {
       // TODO(JP): doesn't seem to do anything, is that intentional?
     },
     // text_copy_response
-    function textCopyResponse9(self) {
+    function textCopyResponse8(self) {
       const textCopyResponse = self.zerdeParser.parseString();
       rpc.send(WorkerEvent.TextCopyResponse, textCopyResponse);
     },
     // start_timer
-    function startTimer10(self) {
+    function startTimer9(self) {
       const repeats = self.zerdeParser.parseU32();
       const id = self.zerdeParser.parseF64();
       const interval = self.zerdeParser.parseF64();
       self.startTimer(id, interval, repeats);
     },
     // stop_timer
-    function stopTimer11(self) {
+    function stopTimer10(self) {
       const id = self.zerdeParser.parseF64();
       self.stopTimer(id);
     },
     // xr_start_presenting
-    function xrStartPresenting12(self) {
+    function xrStartPresenting11(self) {
       self.xrStartPresenting();
     },
     // xr_stop_presenting
-    function xrStopPresenting13(self) {
+    function xrStopPresenting12(self) {
       self.xrStopPresenting();
     },
     // http_send
-    function httpSend14(self) {
+    function httpSend13(self) {
       const port = self.zerdeParser.parseU32();
       const signalId = self.zerdeParser.parseU32();
       const verb = self.zerdeParser.parseString();
@@ -977,25 +908,25 @@ export class WasmApp {
       );
     },
     // fullscreen
-    function fullscreen15(_self) {
+    function fullscreen14(_self) {
       rpc.send(WorkerEvent.Fullscreen);
     },
     // normalscreen
-    function normalscreen16(_self) {
+    function normalscreen15(_self) {
       rpc.send(WorkerEvent.Normalscreen);
     },
     // websocket_send
-    function websocketSend17(self) {
+    function websocketSend16(self) {
       const url = self.zerdeParser.parseString();
       const data = self.zerdeParser.parseU8Slice();
       self.websocketSend(url, data);
     },
     // enable_global_file_drop_target
-    function enableGlobalFileDropTarget18(self) {
+    function enableGlobalFileDropTarget17(self) {
       self.enableGlobalFileDropTarget();
     },
     // call_js
-    function callJs19(self) {
+    function callJs18(self) {
       const fnName = self.zerdeParser.parseString();
       const params = self.zerdeParser.parseWrfParams();
       if (fnName === "_wrflibReturnParams") {

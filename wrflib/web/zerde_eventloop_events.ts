@@ -5,7 +5,7 @@
 // You may not use this file except in compliance with the License.
 
 import { createWasmBuffer, getWrfParamType, makeZerdeBuilder } from "./common";
-import { Dependency, Finger, FingerScroll, WasmApp } from "./main_worker";
+import { Finger, FingerScroll, WasmApp } from "./main_worker";
 import {
   TextareaEventKeyDown,
   TextareaEventKeyUp,
@@ -19,6 +19,30 @@ import {
 } from "./types";
 import { ZerdeBuilder } from "./zerde";
 import { zerdeKeyboardHandlers } from "./zerde_keyboard_handlers";
+
+// These constants must be kept in sync with the ones in main/src/cx_wasm32.rs
+const MSG_TYPE_END = 0;
+const MSG_TYPE_INIT = 1;
+const MSG_TYPE_RESIZE = 4;
+const MSG_TYPE_ANIMATION_FRAME = 5;
+const MSG_TYPE_FINGER_DOWN = 6;
+const MSG_TYPE_FINGER_UP = 7;
+const MSG_TYPE_FINGER_MOVE = 8;
+const MSG_TYPE_FINGER_HOVER = 9;
+const MSG_TYPE_FINGER_SCROLL = 10;
+const MSG_TYPE_FINGER_OUT = 11;
+const MSG_TYPE_TIMER_FIRED = 18;
+const MSG_TYPE_WINDOW_FOCUS = 19;
+const MSG_TYPE_PAINT_DIRTY = 21;
+const MSG_TYPE_HTTP_SEND_RESPONSE = 22;
+const MSG_TYPE_WEBSOCKET_MESSAGE = 23;
+const MSG_TYPE_WEBSOCKET_ERROR = 24;
+const MSG_TYPE_APP_OPEN_FILES = 25;
+const MSG_TYPE_SEND_EVENT_FROM_ANY_THREAD = 26;
+const MSG_TYPE_DRAG_ENTER = 27;
+const MSG_TYPE_DRAG_LEAVE = 28;
+const MSG_TYPE_DRAG_OVER = 29;
+const MSG_TYPE_CALL_RUST = 30;
 
 // A set of events. Each event starts with a u32 representing the event type, with 0 indicating the end. And
 // it is prefixed by a timestamp.
@@ -36,26 +60,6 @@ export class ZerdeEventloopEvents {
     return this._wasmApp;
   }
 
-  fetchDeps(): void {
-    let port: number;
-    if (!location.port) {
-      if (location.protocol == "https:") {
-        port = 443;
-      } else {
-        port = 80;
-      }
-    } else {
-      port = parseInt(location.port);
-    }
-    this._zerdeBuilder.sendU32(1);
-    this._zerdeBuilder.sendU32(port);
-    this._zerdeBuilder.sendString(location.protocol);
-    this._zerdeBuilder.sendString(location.hostname);
-    this._zerdeBuilder.sendString(location.pathname);
-    this._zerdeBuilder.sendString(location.search);
-    this._zerdeBuilder.sendString(location.hash);
-  }
-
   createWasmBuffer(data: WrfArray): number {
     return createWasmBuffer(this._wasmApp.memory, this._wasmApp.exports, data);
   }
@@ -70,16 +74,6 @@ export class ZerdeEventloopEvents {
     );
   }
 
-  depsLoaded(deps: Dependency[]): void {
-    this._zerdeBuilder.sendU32(2);
-    this._zerdeBuilder.sendU32(deps.length);
-    for (const dep of deps) {
-      this._zerdeBuilder.sendString(dep.name);
-      this._zerdeBuilder.sendU32(dep.vecPtr);
-      this._zerdeBuilder.sendU32(dep.vecLen);
-    }
-  }
-
   init(info: {
     width: number;
     height: number;
@@ -88,7 +82,7 @@ export class ZerdeEventloopEvents {
     canFullscreen: boolean;
     xrIsPresenting: false;
   }): void {
-    this._zerdeBuilder.sendU32(3);
+    this._zerdeBuilder.sendU32(MSG_TYPE_INIT);
     this._zerdeBuilder.sendF32(info.width);
     this._zerdeBuilder.sendF32(info.height);
     this._zerdeBuilder.sendF32(info.dpiFactor);
@@ -104,7 +98,7 @@ export class ZerdeEventloopEvents {
     isFullscreen: boolean;
     xrIsPresenting: boolean;
   }): void {
-    this._zerdeBuilder.sendU32(4);
+    this._zerdeBuilder.sendU32(MSG_TYPE_RESIZE);
     this._zerdeBuilder.sendF32(info.width);
     this._zerdeBuilder.sendF32(info.height);
     this._zerdeBuilder.sendF32(info.dpiFactor);
@@ -114,11 +108,11 @@ export class ZerdeEventloopEvents {
   }
 
   animationFrame(): void {
-    this._zerdeBuilder.sendU32(5);
+    this._zerdeBuilder.sendU32(MSG_TYPE_ANIMATION_FRAME);
   }
 
   fingerDown(finger: Finger): void {
-    this._zerdeBuilder.sendU32(6);
+    this._zerdeBuilder.sendU32(MSG_TYPE_FINGER_DOWN);
     this._zerdeBuilder.sendF32(finger.x);
     this._zerdeBuilder.sendF32(finger.y);
     this._zerdeBuilder.sendU32(finger.button);
@@ -129,7 +123,7 @@ export class ZerdeEventloopEvents {
   }
 
   fingerUp(finger: Finger): void {
-    this._zerdeBuilder.sendU32(7);
+    this._zerdeBuilder.sendU32(MSG_TYPE_FINGER_UP);
     this._zerdeBuilder.sendF32(finger.x);
     this._zerdeBuilder.sendF32(finger.y);
     this._zerdeBuilder.sendU32(finger.button);
@@ -140,7 +134,7 @@ export class ZerdeEventloopEvents {
   }
 
   fingerMove(finger: Finger): void {
-    this._zerdeBuilder.sendU32(8);
+    this._zerdeBuilder.sendU32(MSG_TYPE_FINGER_MOVE);
     this._zerdeBuilder.sendF32(finger.x);
     this._zerdeBuilder.sendF32(finger.y);
     this._zerdeBuilder.sendU32(finger.digit);
@@ -150,7 +144,7 @@ export class ZerdeEventloopEvents {
   }
 
   fingerHover(finger: Finger): void {
-    this._zerdeBuilder.sendU32(9);
+    this._zerdeBuilder.sendU32(MSG_TYPE_FINGER_HOVER);
     this._zerdeBuilder.sendF32(finger.x);
     this._zerdeBuilder.sendF32(finger.y);
     this._zerdeBuilder.sendU32(finger.modifiers);
@@ -158,7 +152,7 @@ export class ZerdeEventloopEvents {
   }
 
   fingerScroll(finger: FingerScroll): void {
-    this._zerdeBuilder.sendU32(10);
+    this._zerdeBuilder.sendU32(MSG_TYPE_FINGER_SCROLL);
     this._zerdeBuilder.sendF32(finger.x);
     this._zerdeBuilder.sendF32(finger.y);
     this._zerdeBuilder.sendF32(finger.scrollX);
@@ -169,7 +163,7 @@ export class ZerdeEventloopEvents {
   }
 
   fingerOut(finger: Finger): void {
-    this._zerdeBuilder.sendU32(11);
+    this._zerdeBuilder.sendU32(MSG_TYPE_FINGER_OUT);
     this._zerdeBuilder.sendF32(finger.x);
     this._zerdeBuilder.sendF32(finger.y);
     this._zerdeBuilder.sendU32(finger.modifiers);
@@ -193,13 +187,13 @@ export class ZerdeEventloopEvents {
   }
 
   timerFired(id: number): void {
-    this._zerdeBuilder.sendU32(18);
+    this._zerdeBuilder.sendU32(MSG_TYPE_TIMER_FIRED);
     this._zerdeBuilder.sendF64(id);
   }
 
   windowFocus(isFocus: boolean): void {
     // TODO CALL THIS
-    this._zerdeBuilder.sendU32(19);
+    this._zerdeBuilder.sendU32(MSG_TYPE_WINDOW_FOCUS);
     this._zerdeBuilder.sendU32(isFocus ? 1 : 0);
   }
 
@@ -264,37 +258,37 @@ export class ZerdeEventloopEvents {
   }
 
   paintDirty(_time: unknown, _frameData: unknown): void {
-    this._zerdeBuilder.sendU32(21);
+    this._zerdeBuilder.sendU32(MSG_TYPE_PAINT_DIRTY);
   }
 
   httpSendResponse(signalId: number, success: 1 | 2): void {
-    this._zerdeBuilder.sendU32(22);
+    this._zerdeBuilder.sendU32(MSG_TYPE_HTTP_SEND_RESPONSE);
     this._zerdeBuilder.sendU32(signalId);
     this._zerdeBuilder.sendU32(success);
   }
 
   sendEventFromAnyThread(eventPtr: BigInt): void {
-    this._zerdeBuilder.sendU32(26);
+    this._zerdeBuilder.sendU32(MSG_TYPE_SEND_EVENT_FROM_ANY_THREAD);
     this._zerdeBuilder.sendU64(eventPtr);
   }
 
   websocketMessage(url: string, data: ArrayBuffer): void {
     const vecLen = data.byteLength;
     const vecPtr = this.createWasmBuffer(new Uint8Array(data));
-    this._zerdeBuilder.sendU32(23);
+    this._zerdeBuilder.sendU32(MSG_TYPE_WEBSOCKET_MESSAGE);
     this._zerdeBuilder.sendU32(vecPtr);
     this._zerdeBuilder.sendU32(vecLen);
     this._zerdeBuilder.sendString(url);
   }
 
   websocketError(url: string, error: string): void {
-    this._zerdeBuilder.sendU32(24);
+    this._zerdeBuilder.sendU32(MSG_TYPE_WEBSOCKET_ERROR);
     this._zerdeBuilder.sendString(url);
     this._zerdeBuilder.sendString(error);
   }
 
   appOpenFiles(fileHandles: FileHandle[]): void {
-    this._zerdeBuilder.sendU32(25);
+    this._zerdeBuilder.sendU32(MSG_TYPE_APP_OPEN_FILES);
     this._zerdeBuilder.sendU32(fileHandles.length);
     for (const fileHandle of fileHandles) {
       this._zerdeBuilder.sendU32(fileHandle.id);
@@ -304,15 +298,15 @@ export class ZerdeEventloopEvents {
   }
 
   dragenter(): void {
-    this._zerdeBuilder.sendU32(27);
+    this._zerdeBuilder.sendU32(MSG_TYPE_DRAG_ENTER);
   }
 
   dragleave(): void {
-    this._zerdeBuilder.sendU32(28);
+    this._zerdeBuilder.sendU32(MSG_TYPE_DRAG_LEAVE);
   }
 
   dragover(x: number, y: number): void {
-    this._zerdeBuilder.sendU32(29);
+    this._zerdeBuilder.sendU32(MSG_TYPE_DRAG_OVER);
     this._zerdeBuilder.sendU32(x);
     this._zerdeBuilder.sendU32(y);
   }
@@ -322,7 +316,7 @@ export class ZerdeEventloopEvents {
     params: (string | WrfArray | PostMessageTypedArray)[],
     callbackId: number
   ): void {
-    this._zerdeBuilder.sendU32(30);
+    this._zerdeBuilder.sendU32(MSG_TYPE_CALL_RUST);
     this._zerdeBuilder.sendString(name);
     this._zerdeBuilder.sendU32(params.length);
     for (const param of params) {
@@ -353,7 +347,7 @@ export class ZerdeEventloopEvents {
   }
 
   end(): number {
-    this._zerdeBuilder.sendU32(0);
+    this._zerdeBuilder.sendU32(MSG_TYPE_END);
 
     const { buffer, byteOffset } = this._zerdeBuilder.getData();
 

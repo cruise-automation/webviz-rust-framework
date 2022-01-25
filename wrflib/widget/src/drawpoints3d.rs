@@ -117,10 +117,11 @@ impl DrawPoints3d {
     pub fn draw(cx: &mut Cx, data: &[DrawPoints3dInstance], options: DrawPoints3dOptions) -> Area {
         let area = cx.add_instances(&SHADER, data);
 
+        let rect = cx.get_box_rect();
         area.write_user_uniforms(
             cx,
             DrawPoints3dUniforms {
-                rect_size: cx.get_turtle_rect().size,
+                rect_size: rect.size,
                 use_screen_space: if options.use_screen_space { 1. } else { 0. },
                 point_style: match options.point_style {
                     DrawPoints3dStyle::Quad => POINT_STYLE_QUAD,

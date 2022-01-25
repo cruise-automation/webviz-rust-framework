@@ -66,7 +66,7 @@ wrflib
         console.log("log fn called", params[0]);
         const div = document.createElement("div");
         div.innerText = "log fn called: " + params[0];
-        assertNotNull(document.getElementById("wrflib_js_root")).append(div);
+        assertNotNull(document.getElementById("root")).append(div);
       },
       sendWorker(params) {
         const toSend = params[0] as Uint8Array;
@@ -386,7 +386,7 @@ wrflib
     };
 
     const makeButtons = () => {
-      const jsRoot = assertNotNull(document.getElementById("wrflib_js_root"));
+      const jsRoot = assertNotNull(document.getElementById("root"));
 
       const runAllButton = document.createElement("button");
       runAllButton.innerText = "Run All Tests 3x";

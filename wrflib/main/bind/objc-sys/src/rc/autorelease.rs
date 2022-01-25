@@ -4,7 +4,7 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
-use runtime::{objc_autoreleasePoolPop, objc_autoreleasePoolPush};
+use crate::runtime::{objc_autoreleasePoolPop, objc_autoreleasePoolPush};
 use std::os::raw::c_void;
 
 // we use a struct to ensure that objc_autoreleasePoolPop during unwinding.

@@ -43,17 +43,20 @@ pub struct QuadIns {
 }
 
 impl QuadIns {
+    #[must_use]
     pub fn from_rect(rect: Rect) -> Self {
         debug_assert!(!rect.size.x.is_nan());
         debug_assert!(!rect.size.y.is_nan());
         Self { rect_pos: rect.pos, rect_size: rect.size, ..Default::default() }
     }
 
+    #[must_use]
     pub fn with_draw_depth(mut self, draw_depth: f32) -> Self {
         self.draw_depth = draw_depth;
         self
     }
 
+    #[must_use]
     pub fn rect(&self) -> Rect {
         Rect { pos: self.rect_pos, size: self.rect_size }
     }

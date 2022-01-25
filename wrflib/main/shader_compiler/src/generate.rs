@@ -193,7 +193,7 @@ impl<'a> BlockGenerator<'a> {
     }
 
     fn write_var_decl(&mut self, is_inout: bool, is_packed: bool, ident: Ident, ty: &Ty) {
-        self.backend_writer.write_var_decl(&mut self.string, is_inout, is_packed, ident, ty);
+        self.backend_writer.write_var_decl(self.string, is_inout, is_packed, ident, ty);
     }
 }
 
@@ -364,7 +364,7 @@ impl<'a> ExprGenerator<'a> {
         let ident = ident_path.to_struct_fn_ident();
 
         //TODO add built-in check
-        self.backend_writer.write_call_ident(&mut self.string, ident, arg_exprs);
+        self.backend_writer.write_call_ident(self.string, ident, arg_exprs);
 
         write!(self.string, "(").unwrap();
         let mut sep = "";
@@ -376,7 +376,7 @@ impl<'a> ExprGenerator<'a> {
             sep = ", ";
         }
 
-        self.backend_writer.write_call_expr_hidden_args(&mut self.string, ident_path, self.shader, sep);
+        self.backend_writer.write_call_expr_hidden_args(self.string, ident_path, self.shader, sep);
 
         write!(self.string, ")").unwrap();
     }
@@ -405,7 +405,7 @@ impl<'a> ExprGenerator<'a> {
     fn generate_var_expr(&mut self, span: Span, kind: &Cell<Option<VarKind>>, ident_path: IdentPath, ty: &Option<Ty>) {
         //self.backend_write.generate_var_expr(&mut self.string, span, kind, &self.shader, decl)
         if let Some(decl) = self.decl {
-            self.backend_writer.generate_var_expr(&mut self.string, span, ident_path, kind, self.shader, decl, ty)
+            self.backend_writer.generate_var_expr(self.string, span, ident_path, kind, self.shader, decl, ty)
         }
     }
 
@@ -414,6 +414,6 @@ impl<'a> ExprGenerator<'a> {
     }
 
     fn write_ty_lit(&mut self, ty_lit: TyLit) {
-        self.backend_writer.write_ty_lit(&mut self.string, ty_lit);
+        self.backend_writer.write_ty_lit(self.string, ty_lit);
     }
 }

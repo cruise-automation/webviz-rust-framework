@@ -24,7 +24,7 @@ impl ExampleQuad {
     }
 }
 
-pub struct LayoutExampleApp {
+struct LayoutExampleApp {
     window: Window,
     pass: Pass,
     main_view: View,
@@ -35,7 +35,7 @@ pub struct LayoutExampleApp {
 }
 
 impl LayoutExampleApp {
-    pub fn new(_cx: &mut Cx) -> Self {
+    fn new(_cx: &mut Cx) -> Self {
         Self {
             window: Window { create_inner_size: Some(Vec2 { x: 800., y: 600. }), ..Window::default() },
             pass: Pass::default(),
@@ -45,12 +45,12 @@ impl LayoutExampleApp {
                 empty_message: "Enter text".to_string(),
                 ..TextInputOptions::default()
             }),
-            slider: FloatSlider::new(),
+            slider: FloatSlider::default(),
             padding_value: 15.,
         }
     }
 
-    pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
+    fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
         self.token_input.handle(cx, event);
         if let FloatSliderEvent::Change { scaled_value } = self.slider.handle(cx, event) {
             self.padding_value = scaled_value;
@@ -152,7 +152,7 @@ impl LayoutExampleApp {
         }
     }
 
-    pub fn draw(&mut self, cx: &mut Cx) {
+    fn draw(&mut self, cx: &mut Cx) {
         self.window.begin_window(cx);
         self.pass.begin_pass(cx, Vec4::color("500"));
         self.main_view.begin_view(cx, LayoutSize::FILL);

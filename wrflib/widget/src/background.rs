@@ -54,9 +54,11 @@ impl Background {
         let bg = self.area.get_first_mut::<BackgroundIns>(cx);
         bg.color = color;
     }
+    #[must_use]
     pub fn with_draw_depth(self, draw_depth: f32) -> Self {
         Self { draw_depth, ..self }
     }
+    #[must_use]
     pub fn with_radius(self, radius: f32) -> Self {
         Self { radius, ..self }
     }
@@ -94,21 +96,13 @@ impl Background {
 
     /// Draw the background.
     pub fn draw(&mut self, cx: &mut Cx, rect: Rect, color: Vec4) {
-        let data = BackgroundIns {
-            quad: QuadIns { rect_pos: rect.pos, rect_size: rect.size, draw_depth: self.draw_depth },
-            color,
-            radius: self.radius,
-        };
+        let data = BackgroundIns { quad: QuadIns::from_rect(rect).with_draw_depth(self.draw_depth), color, radius: self.radius };
         self.area = cx.add_instances(&SHADER, &[data]);
     }
 
     /// Draw the background, but make it sticky with respect to scrolling. Not typically recommended.
     pub fn draw_with_scroll_sticky(&mut self, cx: &mut Cx, rect: Rect, color: Vec4) {
-        let data = BackgroundIns {
-            quad: QuadIns { rect_pos: rect.pos, rect_size: rect.size, draw_depth: self.draw_depth },
-            color,
-            radius: self.radius,
-        };
+        let data = BackgroundIns { quad: QuadIns::from_rect(rect).with_draw_depth(self.draw_depth), color, radius: self.radius };
         self.area = cx.add_instances_with_scroll_sticky(&SHADER, &[data], true, true);
     }
 }

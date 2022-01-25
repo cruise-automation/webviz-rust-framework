@@ -4,15 +4,15 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
-use malloc_buf::MallocBuffer;
+use crate::malloc_buf::MallocBuffer;
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::os::raw::{c_char, c_int, c_uint, c_void};
 use std::ptr;
 use std::str;
 
-use encode;
-use {Encode, Encoding};
+use crate::encode;
+use crate::{Encode, Encoding};
 
 #[cfg(not(target_arch = "aarch64"))]
 pub type BOOL = ::std::os::raw::c_schar;
@@ -526,8 +526,8 @@ impl fmt::Debug for Object {
 #[cfg(test)]
 mod tests {
     use super::{Class, Protocol, Sel};
-    use test_utils;
-    use Encode;
+    use crate::test_utils;
+    use crate::Encode;
 
     #[test]
     fn test_ivar() {

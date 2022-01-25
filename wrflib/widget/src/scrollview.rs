@@ -16,14 +16,21 @@ pub struct ScrollView {
 }
 
 impl ScrollView {
+    #[must_use]
     pub fn new_standard_hv() -> Self {
-        Self { scroll_h: Some(ScrollBar::new()), scroll_v: Some(ScrollBar::new().with_smoothing(0.15)), ..Self::default() }
+        Self {
+            scroll_h: Some(ScrollBar::default()),
+            scroll_v: Some(ScrollBar::default().with_smoothing(0.15)),
+            ..Self::default()
+        }
     }
 
+    #[must_use]
     pub fn with_scroll_h(self, s: ScrollBar) -> Self {
         Self { scroll_h: Some(s), ..self }
     }
 
+    #[must_use]
     pub fn with_scroll_v(self, s: ScrollBar) -> Self {
         Self { scroll_v: Some(s), ..self }
     }

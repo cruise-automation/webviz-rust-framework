@@ -37,7 +37,7 @@ impl TextInput {
                 folding_depth: 3,
                 line_number_width: 0.,
                 top_padding: 0.,
-                ..TextEditor::new()
+                ..TextEditor::default()
             },
             empty_message: opt.empty_message,
             text_buffer: TextBuffer::from_utf8(""),
@@ -97,10 +97,7 @@ impl TextInput {
 
         // Overriding view layout for text inputs to prevent it from consuming all available space.
         // TODO(Dmitry): get rid of this special handling
-        if self.text_editor.begin_text_editor(cx, text_buffer, Some(LayoutSize::new(Width::Compute, Height::Compute))).is_err() {
-            cx.end_padding_box();
-            return;
-        }
+        self.text_editor.begin_text_editor(cx, text_buffer, Some(LayoutSize::new(Width::Compute, Height::Compute)));
         if text_buffer.is_empty() {
             let pos = cx.get_draw_pos();
 
@@ -131,7 +128,7 @@ impl TextInputTokenizer {
         &mut self,
         state: &mut TokenizerState<'a>,
         chunk: &mut Vec<char>,
-        _token_chunks: &Vec<TokenChunk>,
+        _token_chunks: &[TokenChunk],
     ) -> TokenType {
         let start = chunk.len();
         loop {

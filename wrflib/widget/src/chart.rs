@@ -31,7 +31,7 @@ impl ChartTooltip {
     }
 
     fn draw(&mut self, cx: &mut Cx, config: &ChartConfig) {
-        let bounds = cx.get_turtle_rect();
+        let bounds = cx.get_box_rect();
 
         // Simple coloring for the tooltip: set the text color to be the same as the
         // chart's background, while using the invert of that color as the background
@@ -59,14 +59,13 @@ impl ChartTooltip {
         // so the pointer is visible. Also, since the tooltip is mostly on top
         // of the current element, the pointer is inverted by default but the
         // tip of the arrow must always point to the current element
-        let arrow_pointer_direction;
-        if pos.y < self.target_pos.y {
+        let arrow_pointer_direction = if pos.y < self.target_pos.y {
             pos.y -= arrow_pointer_size.y - 1.;
-            arrow_pointer_direction = ArrowPointerDirection::Down;
+            ArrowPointerDirection::Down
         } else {
             pos.y += arrow_pointer_size.y - 1.;
-            arrow_pointer_direction = ArrowPointerDirection::Up;
-        }
+            ArrowPointerDirection::Up
+        };
 
         // The pointer is always drawn at the current element's position.
         ArrowPointerIns::draw(cx, self.target_pos, background_color, arrow_pointer_direction, arrow_pointer_size);
@@ -109,11 +108,11 @@ pub enum ChartData<'a> {
 }
 
 impl<'a> ChartData<'a> {
-    pub fn from_values(data: &'a Vec<f32>) -> ChartData<'a> {
+    pub fn from_values(data: &'a [f32]) -> ChartData<'a> {
         ChartData::Values(data)
     }
 
-    pub fn from_pairs(data: &'a Vec<Vec2>) -> ChartData<'a> {
+    pub fn from_pairs(data: &'a [Vec2]) -> ChartData<'a> {
         ChartData::Pairs(data)
     }
 
@@ -122,6 +121,14 @@ impl<'a> ChartData<'a> {
             ChartData::Values(data) => data.len(),
             ChartData::Pairs(data) => data.len(),
             ChartData::Empty => 0,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            ChartData::Values(data) => data.is_empty(),
+            ChartData::Pairs(data) => data.is_empty(),
+            ChartData::Empty => true,
         }
     }
 
@@ -824,7 +831,7 @@ impl Chart {
     fn draw_chart(&mut self, cx: &mut Cx, config: &ChartConfig) {
         self.chart_view.begin_view(cx, LayoutSize::FILL);
 
-        let rect = cx.get_turtle_rect();
+        let rect = cx.get_box_rect();
 
         let current_dpi = cx.current_dpi_factor;
 

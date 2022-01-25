@@ -142,7 +142,7 @@ pub struct TextOp {
     pub lines: Vec<Vec<char>>,
 }
 
-fn calc_char_count(lines: &Vec<Vec<char>>) -> usize {
+fn calc_char_count(lines: &[Vec<char>]) -> usize {
     let mut char_count = 0;
     for line in lines {
         char_count += line.len()
@@ -404,7 +404,7 @@ impl TextBuffer {
     }
 
     pub fn load_from_utf8(&mut self, utf8: &str) {
-        self.is_crlf = !!utf8.contains("\r\n");
+        self.is_crlf = utf8.contains("\r\n");
         self.lines = TextBuffer::split_string_to_lines(utf8);
         self.mutation_id += 1;
     }
@@ -519,7 +519,7 @@ impl TextBuffer {
     }
 
     pub fn split_string_to_lines(string: &str) -> Vec<Vec<char>> {
-        if !!string.contains("\r\n") {
+        if string.contains("\r\n") {
             return string.split("\r\n").map(|s| s.chars().collect()).collect();
         } else {
             return string.split('\n').map(|s| s.chars().collect()).collect();

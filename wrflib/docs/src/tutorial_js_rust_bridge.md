@@ -40,7 +40,7 @@ This is a contrived example which does not need performance optimization, but im
 
 There are a few ways to make this better, in order:
 * Moving to a promise-based approach with a loading state, so other interactions aren't blocked — this achieves *concurrency*.
-* Moving this computation into a WebWorker — this achieves *parallelism* and better utilizes multi-core machines.
+* Moving this computation into a Web Worker — this achieves *parallelism* and better utilizes multi-core machines.
 * Translating this computation to a *compiled language* (like Rust or C++) and attaching to a browser using WebAssembly — this lets us utilize the performance characteristics of other languages, which are usually better than JavaScript.
 
 Wrflib provides a communication framework to do this last option with a bit more ease than other options today. Let's walk through how.
@@ -79,7 +79,7 @@ register_call_rust!(call_rust);
 [package]
 name = "tutorial_js_rust_bridge"
 version = "0.0.1"
-edition = "2018"
+edition = "2021"
 publish = false
 
 [dependencies]
@@ -234,7 +234,7 @@ In Rust, our function can now return a vector of results. Note that each result 
 ## Conclusion
 
 We now have a web application which uses Wrflib to offload computations to Rust! To reiterate, this solution:
- - Has built-in parallelism, since Wrflib computations happen in WebWorkers.
+ - Has built-in parallelism, since Wrflib computations happen in Web Workers.
  - Offers Rust's trademark memory safety and performance.
 
 This solution works well, but still has one big disadvantage regarding performance: copying data. In the above example, our provided Uint8Array will be copied every time this function is called into the WebAssembly memory.

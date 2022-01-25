@@ -29,9 +29,9 @@ impl RustEditor {
                 pos: 125.0,
                 align: SplitterAlign::Last,
                 _hit_state_margin: Some(Margin { l: 3., t: 0., r: 7., b: 0. }),
-                ..Splitter::new()
+                ..Splitter::default()
             },
-            text_editor: TextEditor::new(),
+            text_editor: TextEditor::default(),
             dummy_fold_caption: FoldCaption::default(),
             dummy_color_picker: ColorPicker::default(),
             dummy_color: vec4(0.5, 0.3, 0.2, 0.8),
@@ -68,12 +68,11 @@ impl RustEditor {
 
         self.splitter.begin_draw(cx);
         Self::update_token_chunks(mtb, search_index);
-        if self.text_editor.begin_text_editor(cx, &mtb.text_buffer, None).is_ok() {
-            for (index, token_chunk) in mtb.text_buffer.token_chunks.iter_mut().enumerate() {
-                self.text_editor.draw_chunk(cx, index, &mtb.text_buffer.flat_text, token_chunk, &mtb.text_buffer.markers);
-            }
-            self.text_editor.end_text_editor(cx, &mtb.text_buffer);
+        self.text_editor.begin_text_editor(cx, &mtb.text_buffer, None);
+        for (index, token_chunk) in mtb.text_buffer.token_chunks.iter_mut().enumerate() {
+            self.text_editor.draw_chunk(cx, index, &mtb.text_buffer.flat_text, token_chunk, &mtb.text_buffer.markers);
         }
+        self.text_editor.end_text_editor(cx, &mtb.text_buffer);
 
         self.splitter.mid_draw(cx);
 

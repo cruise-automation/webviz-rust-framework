@@ -219,7 +219,6 @@ impl<T: RenderHandler> RenderHandlerWrapper<T> {
     ) {
         let client = Self::from_ptr(client);
         let browser = Browser::from(browser, false);
-        let operation = DragOperationsMask::from(operation);
 
         client.internal.update_drag_cursor(&browser, operation);
     }

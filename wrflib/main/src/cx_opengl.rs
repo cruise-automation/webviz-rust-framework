@@ -209,12 +209,10 @@ impl Cx {
             opengl_window.opening_repaint_count += 1;
             init_repaint = true;
         }
-        let window;
-        let view_rect;
 
         opengl_window.xlib_window.hide_child_windows();
 
-        window = opengl_window.xlib_window.window.unwrap();
+        let window = opengl_window.xlib_window.window.unwrap();
 
         let pass_size = self.passes[pass_id].pass_size;
         self.passes[pass_id].set_matrix(Vec2::default(), pass_size);
@@ -226,7 +224,7 @@ impl Cx {
             glx_sys::glXMakeCurrent(opengl_cx.display, window, opengl_cx.context);
             gl::Viewport(0, 0, pix_width as i32, pix_height as i32);
         }
-        view_rect = Rect::default();
+        let view_rect = Rect::default();
 
         //self.passes[pass_id].uniform_camera_view(&Mat4::identity());
         self.passes[pass_id].set_dpi_factor(dpi_factor);
@@ -556,9 +554,7 @@ impl Cx {
         let mut name0 = String::new();
         name0.push_str(name);
         name0.push('\0');
-        unsafe {
-            OpenglUniform { loc: gl::GetUniformLocation(program, name0.as_ptr() as *const _), name: name.to_string(), size }
-        }
+        unsafe { OpenglUniform { loc: gl::GetUniformLocation(program, name0.as_ptr() as *const _), size } }
     }
 
     pub(crate) fn opengl_compile_shaders(&mut self, opengl_cx: &OpenglCx) {
@@ -637,8 +633,6 @@ impl Cx {
                     program,
                     geometries,
                     instances,
-                    vertex,
-                    fragment,
                     pass_uniforms: Self::opengl_get_uniforms(program, &shader.mapping.pass_uniforms),
                     view_uniforms: Self::opengl_get_uniforms(program, &shader.mapping.view_uniforms),
                     draw_uniforms: Self::opengl_get_uniforms(program, &shader.mapping.draw_uniforms),
@@ -941,8 +935,6 @@ impl OpenglCx {
 #[derive(Clone)]
 pub(crate) struct CxPlatformShader {
     pub(crate) program: u32,
-    pub(crate) vertex: String,
-    pub(crate) fragment: String,
     pub(crate) geometries: Vec<OpenglAttribute>,
     pub(crate) instances: Vec<OpenglAttribute>,
     pub(crate) pass_uniforms: Vec<OpenglUniform>,
@@ -1011,7 +1003,6 @@ pub(crate) struct OpenglAttribute {
 #[derive(Debug, Default, Clone)]
 pub(crate) struct OpenglUniform {
     pub(crate) loc: i32,
-    pub(crate) name: String,
     pub(crate) size: usize,
 }
 

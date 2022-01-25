@@ -16,6 +16,35 @@ use std::mem;
 use std::ptr;
 use std::sync::{Arc, RwLock};
 
+// These constants must be kept in sync with the ones in web/zerde_eventloop_events.ts
+const MSG_TYPE_END: u32 = 0;
+const MSG_TYPE_INIT: u32 = 1;
+const MSG_TYPE_RESIZE: u32 = 4;
+const MSG_TYPE_ANIMATION_FRAME: u32 = 5;
+const MSG_TYPE_FINGER_DOWN: u32 = 6;
+const MSG_TYPE_FINGER_UP: u32 = 7;
+const MSG_TYPE_FINGER_MOVE: u32 = 8;
+const MSG_TYPE_FINGER_HOVER: u32 = 9;
+const MSG_TYPE_FINGER_SCROLL: u32 = 10;
+const MSG_TYPE_FINGER_OUT: u32 = 11;
+const MSG_TYPE_KEY_DOWN: u32 = 12;
+const MSG_TYPE_KEY_UP: u32 = 13;
+const MSG_TYPE_TEXT_INPUT: u32 = 14;
+const MSG_TYPE_TEXT_COPY: u32 = 17;
+const MSG_TYPE_TIMER_FIRED: u32 = 18;
+const MSG_TYPE_WINDOW_FOCUS: u32 = 19;
+const MSG_TYPE_XR_UPDATE: u32 = 20;
+const MSG_TYPE_PAINT_DIRTY: u32 = 21;
+const MSG_TYPE_HTTP_SEND_RESPONSE: u32 = 22;
+const MSG_TYPE_WEBSOCKET_MESSAGE: u32 = 23;
+const MSG_TYPE_WEBSOCKET_ERROR: u32 = 24;
+const MSG_TYPE_APP_OPEN_FILES: u32 = 25;
+const MSG_TYPE_SEND_EVENT_FROM_ANY_THREAD: u32 = 26;
+const MSG_TYPE_DRAG_ENTER: u32 = 27;
+const MSG_TYPE_DRAG_LEAVE: u32 = 28;
+const MSG_TYPE_DRAG_OVER: u32 = 29;
+const MSG_TYPE_CALL_RUST: u32 = 30;
+
 impl Cx {
     /// Initialize global error handlers.
     pub fn init_error_handlers() {
@@ -57,59 +86,10 @@ impl Cx {
         loop {
             let msg_type = zerde_parser.parse_u32();
             match msg_type {
-                0 => {
-                    // end
+                MSG_TYPE_END => {
                     break;
                 }
-                1 => {
-                    // fetch_deps
-                    self.platform_type = PlatformType::Web {
-                        port: zerde_parser.parse_u32() as u16,
-                        protocol: zerde_parser.parse_string(),
-                        hostname: zerde_parser.parse_string(),
-                        pathname: zerde_parser.parse_string(),
-                        search: zerde_parser.parse_string(),
-                        hash: zerde_parser.parse_string(),
-                    };
-                    // send the UI our deps
-                    // TODO(Paras): Use byte arrays instead (like in desktop targets) and remove
-                    // the entire load_deps flow. We tried this once, but gave up in the short term
-                    // due to race conditions in WASM that are only solved by some time delay between
-                    // app init and font loading.
-                    let mut load_deps = Vec::<String>::new();
-
-                    for filename in FONT_FILENAMES {
-                        load_deps.push(filename.to_string());
-                    }
-                    // other textures, things
-                    self.platform.zerde_eventloop_msgs.load_deps(load_deps);
-                }
-                2 => {
-                    // deps_loaded
-                    let len = zerde_parser.parse_u32();
-                    let mut write_fonts_data = self.fonts_data.write().unwrap();
-                    write_fonts_data.fonts.resize(FONT_FILENAMES.len(), CxFont::default());
-                    for _ in 0..len {
-                        let dep_path = zerde_parser.parse_string();
-                        let vec_rec = zerde_parser.parse_vec_ptr();
-                        // check if its a font
-                        for (font_id, filename) in FONT_FILENAMES.iter().enumerate() {
-                            let filename_str = filename.to_string();
-                            if filename_str == dep_path {
-                                let mut cxfont = &mut write_fonts_data.fonts[font_id];
-                                // load it
-                                if cxfont.load_from_ttf_bytes(&vec_rec).is_err() {
-                                    println!("Error loading font {} ", dep_path);
-                                } else {
-                                    cxfont.file = filename_str;
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
-                3 => {
-                    // init
+                MSG_TYPE_INIT => {
                     self.platform.window_geom = WindowGeom {
                         is_fullscreen: false,
                         is_topmost: false,
@@ -128,12 +108,13 @@ impl Cx {
                         self.windows[0].window_geom = self.platform.window_geom.clone();
                     }
 
+                    self.load_fonts();
+
                     self.wasm_event_handler(Event::Construct);
 
                     self.request_draw();
                 }
-                4 => {
-                    // resize
+                MSG_TYPE_RESIZE => {
                     let old_geom = self.platform.window_geom.clone();
                     self.platform.window_geom = WindowGeom {
                         is_topmost: false,
@@ -163,15 +144,13 @@ impl Cx {
                     // do our initial redraw and repaint
                     self.request_draw();
                 }
-                5 => {
-                    // animation_frame
+                MSG_TYPE_ANIMATION_FRAME => {
                     is_animation_frame = true;
                     if self.requested_next_frame {
                         self.call_next_frame_event();
                     }
                 }
-                6 => {
-                    // finger_down
+                MSG_TYPE_FINGER_DOWN => {
                     let abs = Vec2 { x: zerde_parser.parse_f32(), y: zerde_parser.parse_f32() };
                     let button = zerde_parser.parse_u32() as usize;
                     let digit = zerde_parser.parse_u32() as usize;
@@ -193,8 +172,7 @@ impl Cx {
                         tap_count: 0,
                     }));
                 }
-                7 => {
-                    // finger_up
+                MSG_TYPE_FINGER_UP => {
                     let abs = Vec2 { x: zerde_parser.parse_f32(), y: zerde_parser.parse_f32() };
                     let button = zerde_parser.parse_u32() as usize;
                     let digit = zerde_parser.parse_u32() as usize;
@@ -217,8 +195,7 @@ impl Cx {
                         time,
                     }));
                 }
-                8 => {
-                    // finger_move
+                MSG_TYPE_FINGER_MOVE => {
                     let abs = Vec2 { x: zerde_parser.parse_f32(), y: zerde_parser.parse_f32() };
                     let digit = zerde_parser.parse_u32() as usize;
                     let is_touch = zerde_parser.parse_u32() > 0;
@@ -238,8 +215,7 @@ impl Cx {
                         time,
                     }));
                 }
-                9 => {
-                    // finger_hover
+                MSG_TYPE_FINGER_HOVER => {
                     let abs = Vec2 { x: zerde_parser.parse_f32(), y: zerde_parser.parse_f32() };
                     let modifiers = unpack_key_modifier(zerde_parser.parse_u32());
                     let time = zerde_parser.parse_f64();
@@ -256,8 +232,7 @@ impl Cx {
                         time,
                     }));
                 }
-                10 => {
-                    // finger_scroll
+                MSG_TYPE_FINGER_SCROLL => {
                     let abs = Vec2 { x: zerde_parser.parse_f32(), y: zerde_parser.parse_f32() };
                     let scroll = Vec2 { x: zerde_parser.parse_f32(), y: zerde_parser.parse_f32() };
                     let is_wheel = zerde_parser.parse_u32() != 0;
@@ -277,8 +252,7 @@ impl Cx {
                         time,
                     }));
                 }
-                11 => {
-                    // finger_out
+                MSG_TYPE_FINGER_OUT => {
                     let abs = Vec2 { x: zerde_parser.parse_f32(), y: zerde_parser.parse_f32() };
                     let modifiers = unpack_key_modifier(zerde_parser.parse_u32());
                     let time = zerde_parser.parse_f64();
@@ -295,18 +269,15 @@ impl Cx {
                         time,
                     }));
                 }
-                12 | 13 | 14 | 17 => {
-                    // key_down | key_up | text_input | text_copy
+                MSG_TYPE_KEY_DOWN | MSG_TYPE_KEY_UP | MSG_TYPE_TEXT_INPUT | MSG_TYPE_TEXT_COPY => {
                     let event = parse_keyboard_event_from_js(msg_type, &mut zerde_parser);
                     self.wasm_event_handler(event);
                 }
-                18 => {
-                    // timer_fired
+                MSG_TYPE_TIMER_FIRED => {
                     let timer_id = zerde_parser.parse_f64() as u64;
                     self.wasm_event_handler(Event::Timer(TimerEvent { timer_id }));
                 }
-                19 => {
-                    // window_focus
+                MSG_TYPE_WINDOW_FOCUS => {
                     let focus = zerde_parser.parse_u32();
                     if focus == 0 {
                         self.wasm_event_handler(Event::AppFocusLost);
@@ -314,7 +285,7 @@ impl Cx {
                         self.wasm_event_handler(Event::AppFocus);
                     }
                 }
-                20 => {
+                MSG_TYPE_XR_UPDATE => {
                     // xr_update, TODO(JP): bring this back some day?
                     // let inputs_len = zerde_parser.parse_u32();
                     // let time = zerde_parser.parse_f64();
@@ -368,12 +339,11 @@ impl Cx {
                     // self.platform.xr_last_left_input = left_input;
                     // self.platform.xr_last_right_input = right_input;
                 }
-                21 => {
+                MSG_TYPE_PAINT_DIRTY => {
                     // paint_dirty, only set the passes of the main window to dirty
                     self.passes[self.windows[0].main_pass_id.unwrap()].paint_dirty = true;
                 }
-                22 => {
-                    //http_send_response
+                MSG_TYPE_HTTP_SEND_RESPONSE => {
                     let signal_id = zerde_parser.parse_u32();
                     let success = zerde_parser.parse_u32();
                     let mut new_set = BTreeSet::new();
@@ -383,20 +353,17 @@ impl Cx {
                     });
                     self.signals.insert(Signal { signal_id: signal_id as usize }, new_set);
                 }
-                23 => {
-                    // websocket_message
+                MSG_TYPE_WEBSOCKET_MESSAGE => {
                     let data = zerde_parser.parse_vec_ptr();
                     let url = zerde_parser.parse_string();
                     self.wasm_event_handler(Event::WebSocketMessage(WebSocketMessageEvent { url, result: Ok(data) }));
                 }
-                24 => {
-                    // websocket_error
+                MSG_TYPE_WEBSOCKET_ERROR => {
                     let url = zerde_parser.parse_string();
                     let err = zerde_parser.parse_string();
                     self.wasm_event_handler(Event::WebSocketMessage(WebSocketMessageEvent { url, result: Err(err) }));
                 }
-                25 => {
-                    // app_open_files
+                MSG_TYPE_APP_OPEN_FILES => {
                     let len = zerde_parser.parse_u32();
                     let user_files: Vec<UserFile> = (0..len)
                         .map(|_| {
@@ -409,29 +376,24 @@ impl Cx {
                         .collect();
                     self.wasm_event_handler(Event::AppOpenFiles(AppOpenFilesEvent { user_files }));
                 }
-                26 => {
-                    // send_event_from_any_thread
+                MSG_TYPE_SEND_EVENT_FROM_ANY_THREAD => {
                     let event_ptr = zerde_parser.parse_u64();
                     let event_box = unsafe { Box::from_raw(event_ptr as *mut Event) };
                     self.wasm_event_handler(*event_box);
                 }
-                27 => {
-                    // dragenter
+                MSG_TYPE_DRAG_ENTER => {
                     self.wasm_event_handler(Event::FileDragBegin);
                 }
-                28 => {
-                    // dragleave
+                MSG_TYPE_DRAG_LEAVE => {
                     self.wasm_event_handler(Event::FileDragCancel);
                 }
-                29 => {
-                    // dragover
+                MSG_TYPE_DRAG_OVER => {
                     let x = zerde_parser.parse_u32() as f32;
                     let y = zerde_parser.parse_u32() as f32;
 
                     self.wasm_event_handler(Event::FileDragUpdate(FileDragUpdateEvent { abs: Vec2 { x, y } }));
                 }
-                30 => {
-                    // call_rust
+                MSG_TYPE_CALL_RUST => {
                     let name = zerde_parser.parse_string();
                     let params = zerde_parser.parse_wrf_params();
                     let callback_id = zerde_parser.parse_u32();
@@ -712,6 +674,9 @@ pub(crate) struct ZerdeEventloopMsgs {
     builder: ZerdeBuilder,
 }
 
+/// Send messages from wasm to JS.
+/// It's important that the id of each message type matches the index of
+/// its corresponding function in `sendFnTable` (main_worker.ts)
 impl ZerdeEventloopMsgs {
     pub(crate) fn new() -> Self {
         Self { builder: ZerdeBuilder::new() }
@@ -735,61 +700,53 @@ impl ZerdeEventloopMsgs {
         self.builder.send_string(msg);
     }
 
-    pub(crate) fn load_deps(&mut self, deps: Vec<String>) {
-        self.builder.send_u32(3);
-        self.builder.send_u32(deps.len() as u32);
-        for dep in deps {
-            self.builder.send_string(&dep);
-        }
-    }
-
     pub(crate) fn request_animation_frame(&mut self) {
-        self.builder.send_u32(4);
+        self.builder.send_u32(3);
     }
 
     pub(crate) fn set_document_title(&mut self, title: &str) {
-        self.builder.send_u32(5);
+        self.builder.send_u32(4);
         self.builder.send_string(title);
     }
 
     pub(crate) fn set_mouse_cursor(&mut self, mouse_cursor: MouseCursor) {
-        self.builder.send_u32(6);
+        self.builder.send_u32(5);
         self.builder.send_u32(mouse_cursor as u32);
     }
 
     pub(crate) fn show_text_ime(&mut self, x: f32, y: f32) {
-        self.builder.send_u32(7);
+        self.builder.send_u32(6);
         self.builder.send_f32(x);
         self.builder.send_f32(y);
     }
 
     pub(crate) fn hide_text_ime(&mut self) {
-        self.builder.send_u32(8);
+        self.builder.send_u32(7);
     }
 
     pub(crate) fn text_copy_response(&mut self, response: &str) {
-        self.builder.send_u32(9);
+        self.builder.send_u32(8);
         self.builder.send_string(response);
     }
 
     pub(crate) fn start_timer(&mut self, id: u64, interval: f64, repeats: bool) {
-        self.builder.send_u32(10);
+        self.builder.send_u32(9);
         self.builder.send_u32(if repeats { 1 } else { 0 });
         self.builder.send_f64(id as f64);
         self.builder.send_f64(interval);
     }
 
     pub(crate) fn stop_timer(&mut self, id: u64) {
-        self.builder.send_u32(11);
+        self.builder.send_u32(10);
         self.builder.send_f64(id as f64);
     }
 
     pub(crate) fn xr_start_presenting(&mut self) {
-        self.builder.send_u32(12);
+        self.builder.send_u32(11);
     }
 
     pub(crate) fn xr_stop_presenting(&mut self) {
-        self.builder.send_u32(13);
+        self.builder.send_u32(12);
     }
 
     pub(crate) fn http_send(
@@ -803,7 +760,7 @@ impl ZerdeEventloopMsgs {
         body: &[u8],
         signal: Signal,
     ) {
-        self.builder.send_u32(14);
+        self.builder.send_u32(13);
         self.builder.send_u32(port as u32);
         self.builder.send_u32(signal.signal_id as u32);
         self.builder.send_string(verb);
@@ -815,25 +772,25 @@ impl ZerdeEventloopMsgs {
     }
 
     pub(crate) fn fullscreen(&mut self) {
-        self.builder.send_u32(15);
+        self.builder.send_u32(14);
     }
 
     pub(crate) fn normalscreen(&mut self) {
-        self.builder.send_u32(16);
+        self.builder.send_u32(15);
     }
 
     pub(crate) fn websocket_send(&mut self, url: &str, data: &[u8]) {
-        self.builder.send_u32(17);
+        self.builder.send_u32(16);
         self.builder.send_string(url);
         self.builder.send_u8slice(data);
     }
 
     pub(crate) fn enable_global_file_drop_target(&mut self) {
-        self.builder.send_u32(18);
+        self.builder.send_u32(17);
     }
 
     pub(crate) fn call_js(&mut self, name: &str, params: Vec<WrfParam>) {
-        self.builder.send_u32(19);
+        self.builder.send_u32(18);
         self.builder.send_string(name);
 
         self.builder.build_wrf_params(params);

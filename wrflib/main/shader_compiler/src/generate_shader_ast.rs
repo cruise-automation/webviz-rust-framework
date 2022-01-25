@@ -73,7 +73,7 @@ impl ShaderAstGenerator {
                 line,
                 col,
                 parse_error.message,
-                code_fragment.code.chars().skip(pos - 20).take(50).collect::<String>().replace("\n", " "),
+                code_fragment.code.chars().skip(pos - 20).take(50).collect::<String>().replace('\n', " "),
             );
         };
 

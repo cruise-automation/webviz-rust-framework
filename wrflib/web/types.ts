@@ -6,6 +6,7 @@
 
 export type Initialize = (initParams: {
   filename: string;
+  baseUri?: string;
   defaultStyles?: boolean;
 }) => Promise<void>;
 

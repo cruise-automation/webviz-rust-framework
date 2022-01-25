@@ -61,7 +61,6 @@ const ANIM_DEFAULT: Anim = Anim {
         // TextIns::color
         Track::Vec4 { key_frames: &[(1.0, vec4(0.6, 0.6, 0.6, 1.))], ease: Ease::DEFAULT },
     ],
-    ..Anim::DEFAULT
 };
 
 const ANIM_HOVER: Anim = Anim {
@@ -75,7 +74,6 @@ const ANIM_HOVER: Anim = Anim {
         // TextIns::color
         Track::Vec4 { key_frames: &[(1.0, vec4(1., 1., 1., 1.))], ease: Ease::DEFAULT },
     ],
-    ..Anim::DEFAULT
 };
 
 const ANIM_DOWN: Anim = Anim {

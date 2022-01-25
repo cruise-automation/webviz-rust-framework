@@ -44,8 +44,8 @@ pub enum DesktopWindowEvent {
     None,
 }
 
-impl DesktopWindow {
-    pub fn new() -> Self {
+impl Default for DesktopWindow {
+    fn default() -> Self {
         Self {
             window: Window::default(),
             pass: Pass::default(),
@@ -70,10 +70,13 @@ impl DesktopWindow {
             inner_over_chrome: false,
         }
     }
-
+}
+impl DesktopWindow {
+    #[must_use]
     pub fn with_window(self, window: Window) -> Self {
         Self { window, ..self }
     }
+    #[must_use]
     pub fn with_caption(self, caption: &str) -> Self {
         Self { caption: caption.to_string(), ..self }
     }

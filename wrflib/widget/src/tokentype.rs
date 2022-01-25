@@ -10,7 +10,7 @@ pub struct TokenizerState<'a> {
     pub prev: char,
     pub cur: char,
     pub next: char,
-    pub lines: &'a Vec<Vec<char>>,
+    pub lines: &'a [Vec<char>],
     pub line_start: usize,
     pub line_counter: usize,
     pub eof: bool,
@@ -19,7 +19,7 @@ pub struct TokenizerState<'a> {
 }
 
 impl<'a> TokenizerState<'a> {
-    pub fn new(lines: &'a Vec<Vec<char>>) -> Self {
+    pub fn new(lines: &'a [Vec<char>]) -> Self {
         let mut ret = Self {
             lines,
             line_start: 0,
@@ -113,7 +113,7 @@ pub struct TokenChunk {
 }
 
 impl TokenChunk {
-    pub fn scan_last_token(token_chunks: &Vec<TokenChunk>) -> TokenType {
+    pub fn scan_last_token(token_chunks: &[TokenChunk]) -> TokenType {
         let mut prev_tok_index = token_chunks.len();
         while prev_tok_index > 0 {
             let tt = &token_chunks[prev_tok_index - 1].token_type;

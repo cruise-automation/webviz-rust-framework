@@ -132,10 +132,12 @@ const ANIM_SELECTED_FOCUS: Anim = Anim {
 };
 
 impl Tab {
+    #[must_use]
     pub fn new() -> Self {
         Self { label: "Tab".to_string(), is_closeable: true, ..Default::default() }
     }
 
+    #[must_use]
     pub fn with_draw_depth(self, draw_depth: f32) -> Self {
         Self { draw_depth, ..self }
     }
@@ -233,7 +235,7 @@ impl Tab {
         bg.base.rect()
     }
 
-    pub fn begin_tab(&mut self, cx: &mut Cx) -> Result<(), ()> {
+    pub fn begin_tab(&mut self, cx: &mut Cx) {
         if let Some(abs_origin) = self.abs_origin {
             // Set tab position by absolute coordinates
             cx.begin_absolute_box();
@@ -259,8 +261,6 @@ impl Tab {
             cx.end_center_y_align();
             cx.end_row();
         }
-
-        Ok(())
     }
 
     pub fn end_tab(&mut self, cx: &mut Cx) {
@@ -281,9 +281,7 @@ impl Tab {
     }
 
     pub fn draw_tab(&mut self, cx: &mut Cx) {
-        if self.begin_tab(cx).is_err() {
-            return;
-        };
+        self.begin_tab(cx);
         self.end_tab(cx);
     }
 

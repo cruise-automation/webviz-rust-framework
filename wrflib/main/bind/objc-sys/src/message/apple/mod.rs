@@ -7,7 +7,7 @@
 use std::any::Any;
 
 use super::{Message, MessageArguments, MessageError, Super};
-use runtime::{Class, Object, Sel};
+use crate::runtime::{Class, Object, Sel};
 
 #[cfg(target_arch = "x86")]
 #[path = "x86.rs"]

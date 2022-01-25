@@ -57,6 +57,7 @@ impl View {
     /// Creates a new, empty [`View`].
 
     /// See [`View::is_overlay`].
+    #[must_use]
     pub fn with_is_overlay(self, is_overlay: bool) -> Self {
         Self { is_overlay, ..self }
     }

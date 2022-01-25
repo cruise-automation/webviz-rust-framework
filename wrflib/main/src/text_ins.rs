@@ -321,8 +321,7 @@ impl TextIns {
                         subpixel_id,
                     });
 
-                    let file = &write_fonts_data.fonts[font_id].file.clone()[..];
-                    let new_glyph = write_fonts_data.fonts_atlas.alloc_atlas_glyph(file, w, h);
+                    let new_glyph = write_fonts_data.fonts_atlas.alloc_atlas_glyph(w, h);
                     write_fonts_data.fonts[font_id].atlas_pages[atlas_page_id].atlas_glyphs[glyph_id][subpixel_id] =
                         Some(new_glyph);
                 }

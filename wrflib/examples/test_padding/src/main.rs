@@ -25,7 +25,7 @@ impl ExampleQuad {
     }
 }
 
-pub struct PaddingExampleApp {
+struct PaddingExampleApp {
     window: Window,
     pass: Pass,
     main_view: View,
@@ -33,7 +33,7 @@ pub struct PaddingExampleApp {
 }
 
 impl PaddingExampleApp {
-    pub fn new(_cx: &mut Cx) -> Self {
+    fn new(_cx: &mut Cx) -> Self {
         Self {
             window: Window { create_inner_size: Some(Vec2 { x: 800., y: 600. }), ..Window::default() },
             pass: Pass::default(),
@@ -42,9 +42,9 @@ impl PaddingExampleApp {
         }
     }
 
-    pub fn handle(&mut self, _cx: &mut Cx, _event: &mut Event) {}
+    fn handle(&mut self, _cx: &mut Cx, _event: &mut Event) {}
 
-    pub fn draw(&mut self, cx: &mut Cx) {
+    fn draw(&mut self, cx: &mut Cx) {
         self.window.begin_window(cx);
         self.pass.begin_pass(cx, Vec4::color("500"));
         self.main_view.begin_view(cx, LayoutSize::FILL);

@@ -6,7 +6,6 @@
 
 use crate::builtin::Builtin;
 use crate::const_eval::ConstEvaluator;
-use crate::const_gather::ConstGatherer;
 use crate::dep_analyse::DepAnalyser;
 use crate::env::{Env, Sym, VarKind};
 use crate::error::ParseError;
@@ -49,14 +48,8 @@ impl<'a> ShaderAnalyser<'a> {
         for decl in &self.shader.decls {
             match decl {
                 Decl::Fn(decl) => {
-                    FnDefAnalyser {
-                        builtins: self.builtins,
-                        shader: self.shader,
-                        decl,
-                        env: &mut self.env,
-                        is_inside_loop: false,
-                    }
-                    .analyse_fn_def()?;
+                    FnDefAnalyser { builtins: self.builtins, shader: self.shader, decl, env: self.env, is_inside_loop: false }
+                        .analyse_fn_def()?;
                 }
                 _ => {}
             }
@@ -332,10 +325,6 @@ impl<'a> FnDefAnalyser<'a> {
         ConstEvaluator { shader: self.shader }
     }
 
-    fn const_gatherer(&self) -> ConstGatherer {
-        ConstGatherer { shader: self.shader }
-    }
-
     fn dep_analyser(&self) -> DepAnalyser {
         DepAnalyser { shader: self.shader, decl: self.decl, env: self.env }
     }
@@ -453,7 +442,6 @@ impl<'a> FnDefAnalyser<'a> {
     ) -> Result<(), ParseError> {
         self.ty_checker().ty_check_expr_with_expected_ty(span, expr, &Ty::Bool)?;
         self.const_evaluator().try_const_eval_expr(expr);
-        self.const_gatherer().const_gather_expr(expr);
         self.dep_analyser().dep_analyse_expr(expr);
         self.env.push_scope();
         self.analyse_block(block_if_true)?;
@@ -489,7 +477,6 @@ impl<'a> FnDefAnalyser<'a> {
                 return Err(ParseError { span, message: String::from("init expression cannot be void") });
             }
             self.const_evaluator().try_const_eval_expr(expr);
-            self.const_gatherer().const_gather_expr(expr);
             self.dep_analyser().dep_analyse_expr(expr);
             ty
         } else {
@@ -507,7 +494,6 @@ impl<'a> FnDefAnalyser<'a> {
             self.ty_checker().ty_check_expr_with_expected_ty(span, expr, self.decl.return_ty.borrow().as_ref().unwrap())?;
 
             self.const_evaluator().try_const_eval_expr(expr);
-            self.const_gatherer().const_gather_expr(expr);
             self.dep_analyser().dep_analyse_expr(expr);
         } else if self.decl.return_ty.borrow().as_ref().unwrap() != &Ty::Void {
             return Err(ParseError { span, message: String::from("missing return expression") });
@@ -518,7 +504,6 @@ impl<'a> FnDefAnalyser<'a> {
     fn analyse_expr_stmt(&mut self, _span: Span, expr: &Expr) -> Result<(), ParseError> {
         self.ty_checker().ty_check_expr(expr)?;
         self.const_evaluator().try_const_eval_expr(expr);
-        self.const_gatherer().const_gather_expr(expr);
         self.dep_analyser().dep_analyse_expr(expr);
         Ok(())
     }

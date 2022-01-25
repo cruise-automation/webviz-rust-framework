@@ -6,6 +6,7 @@
 
 // Clippy TODO
 #![allow(clippy::all)]
+#![allow(dead_code)]
 
 mod hubui;
 pub use crate::hubui::*;

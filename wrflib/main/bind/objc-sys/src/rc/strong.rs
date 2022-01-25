@@ -9,7 +9,7 @@ use std::mem;
 use std::ops::Deref;
 
 use super::WeakPtr;
-use runtime::{self, Object};
+use crate::runtime::{self, Object};
 
 /// A pointer that strongly references an object, ensuring it won't be deallocated.
 pub struct StrongPtr(*mut Object);

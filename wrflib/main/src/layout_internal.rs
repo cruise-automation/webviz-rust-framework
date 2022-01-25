@@ -85,26 +85,28 @@ pub(crate) struct CxLayoutBox {
     /// Available width for the content of the box, starting from box origin, minus right padding.
     /// This is different from [`CxLayoutBox::width`] which is box outer width.
     /// For example, for Width::Compute boxes width would be [`f32::NAN`] as this needs to be computed,
-    /// but available_width is defined until the bounds of parent
+    /// but available_width is defined until the bounds of parent.
+    /// This is capped at 0 if the content already overflows the bounds.
     pub(crate) available_width: f32,
 
     /// Available height for the content of the box, starting from box origin, minus bottom padding.
     /// This is different from [`CxLayoutBox::height`] which is box outer height.
     /// For example, for Height::Compute boxes height would be [`f32::NAN`] as this needs to be computed,
-    /// but available_height is defined until the bounds of parent
+    /// but available_height is defined until the bounds of parent/
+    /// This is capped at 0 if the content already overflows the bounds.
     pub(crate) available_height: f32,
 }
 
 impl CxLayoutBox {
     /// Returns how much available_width is "left" for current box,
     /// i.e. distance from current box x position until the right bound
-    pub(crate) fn get_available_width_left(&self) -> f32 {
+    pub(crate) fn get_width_left(&self) -> f32 {
         (self.origin.x + self.available_width - self.pos.x).max(0.)
     }
 
     /// Returns how much available_height is "left" for current box
     /// i.e. distance from current box y position until the bottom bound
-    pub(crate) fn get_available_height_left(&self) -> f32 {
+    pub(crate) fn get_height_left(&self) -> f32 {
         (self.origin.y + self.available_height - self.pos.y).max(0.)
     }
 }
@@ -149,8 +151,10 @@ impl Cx {
 
         let pos = Vec2 { x: origin.x + layout.padding.l, y: origin.y + layout.padding.t };
 
-        let available_width = (self.eval_available_width_left(&layout.layout_size.width, abs_size) - layout.padding.r).max(0.);
-        let available_height = (self.eval_available_height_left(&layout.layout_size.height, abs_size) - layout.padding.b).max(0.);
+        let available_width =
+            (self.eval_available_width(&layout.layout_size.width, layout.absolute, abs_size) - layout.padding.r).max(0.);
+        let available_height =
+            (self.eval_available_height(&layout.layout_size.height, layout.absolute, abs_size) - layout.padding.b).max(0.);
 
         // By induction property this values should never be NaN
         assert!(!available_width.is_nan());
@@ -452,9 +456,9 @@ impl Cx {
     fn eval_width(&self, width: &Width) -> f32 {
         match width {
             Width::Compute => std::f32::NAN,
-            Width::Fix(v) => max_zero_keep_nan(*v),
-            Width::Fill => max_zero_keep_nan(self.get_width_left()),
-            Width::FillUntil(v) => min_keep_nan(*v, self.get_width_left()),
+            Width::Fix(v) => v.max(0.),
+            Width::Fill => self.get_width_left(),
+            Width::FillUntil(v) => self.get_width_left().min(*v),
         }
     }
 
@@ -471,36 +475,38 @@ impl Cx {
         match width {
             Width::Compute => panic!("Walking with Width:Compute is not supported"),
             Width::Fix(v) => v.max(0.),
-            Width::Fill => self.get_available_width_left(),
-            Width::FillUntil(v) => self.get_available_width_left().min(*v),
+            Width::Fill => self.get_width_left(),
+            Width::FillUntil(v) => self.get_width_left().min(*v),
         }
     }
 
-    fn eval_available_width_left(&self, width: &Width, abs_size: Vec2) -> f32 {
-        if let Some(parent) = self.layout_boxes.last() {
-            match width {
-                Width::Fix(v) => *v,
-                Width::FillUntil(v) => parent.get_available_width_left().min(*v),
-                Width::Compute | Width::Fill => parent.get_available_width_left(),
-            }
-        } else {
-            abs_size.x
+    fn eval_available_width(&self, width: &Width, absolute: bool, abs_size: Vec2) -> f32 {
+        if absolute {
+            return abs_size.x;
+        }
+
+        // Non-absolute layouts will always have parents
+        let parent = self.layout_boxes.last().unwrap();
+        match width {
+            Width::Fix(v) => *v,
+            Width::FillUntil(v) => parent.get_width_left().min(*v),
+            Width::Compute | Width::Fill => parent.get_width_left(),
         }
     }
 
     fn eval_height(&self, height: &Height) -> f32 {
         match height {
             Height::Compute => std::f32::NAN,
-            Height::Fix(v) => max_zero_keep_nan(*v),
-            Height::Fill => max_zero_keep_nan(self.get_height_left()),
-            Height::FillUntil(v) => min_keep_nan(*v, self.get_height_left()),
+            Height::Fix(v) => v.max(0.),
+            Height::Fill => self.get_height_left(),
+            Height::FillUntil(v) => self.get_height_left().min(*v),
         }
     }
 
     fn eval_absolute_height(&self, height: &Height, abs_size: f32) -> f32 {
         match height {
             Height::Compute => std::f32::NAN,
-            Height::Fix(v) => max_zero_keep_nan(*v),
+            Height::Fix(v) => v.max(0.),
             Height::Fill => max_zero_keep_nan(abs_size),
             Height::FillUntil(v) => min_keep_nan(*v, abs_size),
         }
@@ -510,20 +516,21 @@ impl Cx {
         match height {
             Height::Compute => panic!("Walking with Height:Compute is not supported"),
             Height::Fix(v) => v.max(0.),
-            Height::Fill => self.get_available_height_left(),
-            Height::FillUntil(v) => self.get_available_height_left().min(*v),
+            Height::Fill => self.get_height_left(),
+            Height::FillUntil(v) => self.get_height_left().min(*v),
         }
     }
 
-    fn eval_available_height_left(&self, height: &Height, abs_size: Vec2) -> f32 {
-        if let Some(parent) = self.layout_boxes.last() {
-            match height {
-                Height::Fix(v) => *v,
-                Height::FillUntil(v) => parent.get_available_height_left().min(*v),
-                Height::Compute | Height::Fill => parent.get_available_height_left(),
-            }
-        } else {
-            abs_size.y
+    fn eval_available_height(&self, height: &Height, absolute: bool, abs_size: Vec2) -> f32 {
+        if absolute {
+            return abs_size.y;
+        }
+        // Non-absolute layouts will always have parents
+        let parent = self.layout_boxes.last().unwrap();
+        match height {
+            Height::Fix(v) => *v,
+            Height::FillUntil(v) => parent.get_height_left().min(*v),
+            Height::Compute | Height::Fill => parent.get_height_left(),
         }
     }
 

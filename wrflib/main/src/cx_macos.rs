@@ -37,7 +37,7 @@ impl Cx {
 
         let mut metal_windows: Vec<MetalWindow> = Vec::new();
 
-        self.desktop_load_fonts();
+        self.load_fonts();
 
         self.call_event_handler(&mut Event::Construct);
 
@@ -49,8 +49,8 @@ impl Cx {
             //let mut paint_dirty = false;
             self.last_event_time = cocoa_app.time_now();
 
-            for mut event in events {
-                self.process_pre_event(&mut event);
+            for event in events {
+                self.process_pre_event(event);
 
                 match &event {
                     Event::WindowResizeLoop(wr) => {
@@ -77,7 +77,7 @@ impl Cx {
                             }
                         }
                         // ok lets not redraw all, just this window
-                        self.call_event_handler(&mut event);
+                        self.call_event_handler(event);
                     }
                     Event::WindowClosed(wc) => {
                         // lets remove the window from the set
@@ -96,7 +96,7 @@ impl Cx {
                                 }
                             }
                         }
-                        self.call_event_handler(&mut event);
+                        self.call_event_handler(event);
 
                         #[cfg(feature = "cef-debug")]
                         wrflib_cef::shutdown();
@@ -306,17 +306,17 @@ impl Cx {
                                 self.cef_do_message_loop_work();
                             }
                             _ => {
-                                self.call_event_handler(&mut event);
+                                self.call_event_handler(event);
                             }
                         }
                     }
                     Event::None => {}
                     Event::Signal { .. } => {
-                        self.call_event_handler(&mut event);
+                        self.call_event_handler(event);
                         self.call_signals();
                     }
                     _ => {
-                        self.call_event_handler(&mut event);
+                        self.call_event_handler(event);
                     }
                 }
                 self.process_post_event(event);
@@ -408,7 +408,6 @@ pub(crate) struct CxPlatform {
     pub(crate) set_ime_position: Option<Vec2>,
     pub(crate) start_timer: Vec<(u64, f64, bool)>,
     pub(crate) stop_timer: Vec<u64>,
-    pub(crate) text_clipboard_response: Option<String>,
     pub(crate) desktop: CxDesktop,
 }
 

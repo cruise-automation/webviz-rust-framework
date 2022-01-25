@@ -161,7 +161,7 @@ struct ColorSliders {
 }
 
 impl ColorSliders {
-    pub fn handle_event(&mut self, cx: &mut Cx, event: &mut Event, color: Vec4) -> Option<Vec4> {
+    fn handle_event(&mut self, cx: &mut Cx, event: &mut Event, color: Vec4) -> Option<Vec4> {
         if let FloatSliderEvent::Change { scaled_value } = self.slider_r.handle(cx, event) {
             Some(Vec4 { x: scaled_value, ..color })
         } else if let FloatSliderEvent::Change { scaled_value } = self.slider_g.handle(cx, event) {
@@ -173,7 +173,7 @@ impl ColorSliders {
         }
     }
 
-    pub fn draw_sliders(&mut self, cx: &mut Cx, color: Vec4) {
+    fn draw_sliders(&mut self, cx: &mut Cx, color: Vec4) {
         cx.begin_padding_box(Padding::top(30.));
         cx.begin_column(Width::Fix(100.), Height::Fill);
 
@@ -203,7 +203,7 @@ struct ShaderEditor {
 }
 
 impl ShaderEditor {
-    pub fn new(_cx: &mut Cx) -> Self {
+    fn new(_cx: &mut Cx) -> Self {
         Self {
             component_base: Default::default(),
             window: Window::default(),
@@ -213,20 +213,20 @@ impl ShaderEditor {
             main_view: View::default(),
             primary_color_picker: ColorSliders {
                 label: String::from("Primary Color"),
-                slider_r: FloatSlider::new(),
-                slider_g: FloatSlider::new(),
-                slider_b: FloatSlider::new(),
+                slider_r: FloatSlider::default(),
+                slider_g: FloatSlider::default(),
+                slider_b: FloatSlider::default(),
             },
             secondary_color_picker: ColorSliders {
                 label: String::from("Secondary Color"),
-                slider_r: FloatSlider::new(),
-                slider_g: FloatSlider::new(),
-                slider_b: FloatSlider::new(),
+                slider_r: FloatSlider::default(),
+                slider_g: FloatSlider::default(),
+                slider_b: FloatSlider::default(),
             },
         }
     }
 
-    pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
+    fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
         if let Some(primary_color) = self.primary_color_picker.handle_event(cx, event, self.quad.primary_color) {
             self.quad.primary_color = primary_color;
             cx.request_draw();
@@ -247,7 +247,7 @@ impl ShaderEditor {
         }
     }
 
-    pub fn draw(&mut self, cx: &mut Cx) {
+    fn draw(&mut self, cx: &mut Cx) {
         self.window.begin_window(cx);
         self.pass.begin_pass(cx, Vec4::color("300"));
 

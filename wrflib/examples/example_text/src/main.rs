@@ -22,7 +22,7 @@ const TEXT_BODY: TextInsProps = TextInsProps {
     ..TextInsProps::DEFAULT
 };
 
-pub struct TourExampleApp {
+struct TourExampleApp {
     window: Window,
     pass: Pass,
     main_view: View,
@@ -39,23 +39,23 @@ pub struct TourExampleApp {
 }
 
 impl TourExampleApp {
-    pub fn new(_cx: &mut Cx) -> Self {
+    fn new(_cx: &mut Cx) -> Self {
         Self {
             window: Window { create_inner_size: Some(Vec2 { x: 700., y: 800. }), ..Window::default() },
             pass: Pass::default(),
             main_view: View::default(),
             next_button: Button::default(),
             back_button: Button::default(),
-            slider: FloatSlider::new(),
+            slider: FloatSlider::default(),
             font_size: 14.,
-            slider_r: FloatSlider::new(),
-            slider_g: FloatSlider::new(),
-            slider_b: FloatSlider::new(),
+            slider_r: FloatSlider::default(),
+            slider_g: FloatSlider::default(),
+            slider_b: FloatSlider::default(),
             color: COLOR_WHITE,
         }
     }
 
-    pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
+    fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
         self.next_button.handle(cx, event);
         self.back_button.handle(cx, event);
 
@@ -78,7 +78,7 @@ impl TourExampleApp {
         }
     }
 
-    pub fn draw_variable_text(&mut self, cx: &mut Cx) {
+    fn draw_variable_text(&mut self, cx: &mut Cx) {
         TextIns::draw_walk(cx, "Text", &TEXT_HEADING);
         TextIns::draw_walk(
             cx,
@@ -102,7 +102,7 @@ impl TourExampleApp {
         cx.end_row();
     }
 
-    pub fn draw_color_slider(slider: &mut FloatSlider, color: f32, width: f32, cx: &mut Cx) {
+    fn draw_color_slider(slider: &mut FloatSlider, color: f32, width: f32, cx: &mut Cx) {
         cx.begin_row(Width::Fix(width), Height::Compute);
         let background_ranges = vec![
             FloatSliderBackgroundRange { min_scaled: 0.0, max_scaled: color, color: COLOR_BLUE800, height_pixels: 10. },
@@ -112,7 +112,7 @@ impl TourExampleApp {
         cx.end_row();
     }
 
-    pub fn draw(&mut self, cx: &mut Cx) {
+    fn draw(&mut self, cx: &mut Cx) {
         self.window.begin_window(cx);
         self.pass.begin_pass(cx, Vec4::color("333"));
         self.main_view.begin_view(cx, LayoutSize::FILL);

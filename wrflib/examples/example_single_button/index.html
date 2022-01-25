@@ -15,8 +15,7 @@ You may not use this file except in compliance with the License.
         <meta name="apple-mobile-web-app-capable" content="yes">
         <meta name="mobile-web-app-capable" content="yes">
         <title>Example</title>
-        <base href="../../../" />
-        <script type="text/javascript" src="wrflib/web/dist/wrflib_runtime.js"></script>
+        <script type="text/javascript" src="/wrflib/web/dist/wrflib_runtime.js"></script>
         <script type="text/javascript">
             const env = new URL(window.document.location).searchParams.has("release") ? "release" : "debug";
             wrflib.initialize({ filename: `target/wasm32-unknown-unknown/${env}/example_single_button.wasm`, defaultStyles: true });

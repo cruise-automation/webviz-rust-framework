@@ -50,7 +50,7 @@ struct BuildOpts {
 fn build(opts: BuildOpts) {
     println!("    Running cargo build");
 
-    let mut args = vec!["+nightly-2021-08-03", "build", "--target=wasm32-unknown-unknown", "-Zbuild-std=std,panic_abort"];
+    let mut args = vec!["+nightly-2022-01-18", "build", "--target=wasm32-unknown-unknown", "-Zbuild-std=std,panic_abort"];
     if opts.release {
         args.push("--release");
     }

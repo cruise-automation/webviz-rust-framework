@@ -134,18 +134,18 @@ macro_rules! register_call_rust {
     ( $ call_rust: ident) => {
         struct App {}
         impl App {
-            pub fn new(cx: &mut Cx) -> Self {
+            fn new(cx: &mut Cx) -> Self {
                 cx.on_call_rust(Self::on_call_rust);
                 Self {}
             }
 
-            pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) {}
+            fn handle(&mut self, cx: &mut Cx, event: &mut Event) {}
 
             fn on_call_rust(&mut self, cx: &mut Cx, name: String, params: Vec<WrfParam>) -> Vec<WrfParam> {
                 call_rust(name, params)
             }
 
-            pub fn draw(&mut self, cx: &mut Cx) {}
+            fn draw(&mut self, cx: &mut Cx) {}
         }
 
         main_app!(App);

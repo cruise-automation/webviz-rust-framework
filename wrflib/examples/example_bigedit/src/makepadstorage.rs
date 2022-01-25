@@ -4,6 +4,9 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
+// A bunch of stuff here doesn't get used in the wasm version.
+#![allow(dead_code)]
+
 //use syn::Type;
 use crate::builder;
 use crate::filetree::*;

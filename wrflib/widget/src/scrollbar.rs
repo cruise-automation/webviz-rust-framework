@@ -98,8 +98,8 @@ const ANIM_DOWN: Anim = Anim {
     ..Anim::DEFAULT
 };
 
-impl ScrollBar {
-    pub fn new() -> Self {
+impl Default for ScrollBar {
+    fn default() -> Self {
         Self {
             component_base: Default::default(),
             bar_size: 12.0,
@@ -126,18 +126,23 @@ impl ScrollBar {
             drag_point: None,
         }
     }
+}
 
+impl ScrollBar {
     fn animate(&mut self, cx: &mut Cx) {
         let bg = self.bg_area.get_first_mut::<ScrollBarIns>(cx);
         bg.color = self.animator.get_vec4(0);
     }
 
+    #[must_use]
     pub fn with_bar_size(self, bar_size: f32) -> Self {
         Self { bar_size, ..self }
     }
+    #[must_use]
     pub fn with_smoothing(self, s: f32) -> Self {
         Self { smoothing: Some(s), ..self }
     }
+    #[must_use]
     pub fn with_use_vertical_finger_scroll(self, use_vertical_finger_scroll: bool) -> Self {
         Self { use_vertical_finger_scroll, ..self }
     }

@@ -95,7 +95,7 @@ impl Window {
 
     pub fn set_position(&mut self, cx: &mut Cx, pos: Vec2) {
         if let Some(window_id) = self.window_id {
-            return cx.windows[window_id].window_set_position = Some(pos);
+            cx.windows[window_id].window_set_position = Some(pos)
         }
     }
 
@@ -223,8 +223,11 @@ pub(crate) enum CxWindowState {
         title: String,
         inner_size: Vec2,
         position: Option<Vec2>,
+
+        #[allow(dead_code)] // Not supported in all platforms yet.
         add_drop_target_for_app_open_files: bool,
 
+        #[allow(dead_code)] // Not supported in all platforms yet.
         #[cfg(feature = "cef")]
         cef_url: Option<String>,
 

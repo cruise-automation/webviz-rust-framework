@@ -14,7 +14,7 @@ cd "${0%/*}/../../.."
 wrflib/scripts/ci/common.sh
 
 # TODO(JP): Move to Dockerfile-ci?.
-rustup component add rustfmt --toolchain nightly-2021-08-03-x86_64-unknown-linux-gnu
+rustup component add rustfmt --toolchain nightly-2022-01-18-x86_64-unknown-linux-gnu
 
 cargo fmt --all -- --check # checks formatting for all Rust files
 

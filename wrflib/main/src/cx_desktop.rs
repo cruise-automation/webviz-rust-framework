@@ -11,23 +11,9 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::net::TcpStream;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub(crate) struct CxDesktop {
     pub(crate) repaint_via_scroll_event: bool,
-    pub(crate) user_file_id_to_path: Vec<String>,
-}
-
-impl Default for CxDesktop {
-    fn default() -> CxDesktop {
-        CxDesktop { repaint_via_scroll_event: false, user_file_id_to_path: Vec::new() }
-    }
-}
-
-/// Used just in [`Cx::desktop_load_fonts`] to make a mapping of font filenames
-/// and their byte arrays
-struct FontInfo {
-    pub(crate) filename: String,
-    pub(crate) bytes: &'static [u8],
 }
 
 impl CxDesktopVsWasmCommon for Cx {
@@ -152,27 +138,5 @@ impl Cx {
         self.call_signals();
 
         vsync
-    }
-    /// TODO(Paras): Use this approach in WASM builds and move this out of cx_desktop.
-    pub(crate) fn desktop_load_fonts(&mut self) {
-        let fonts = vec![
-            FontInfo { filename: "wrflib/resources/Ubuntu-R.ttf".into(), bytes: FONT_UBUNTU_BYTES },
-            FontInfo {
-                filename: "wrflib/resources/LiberationMono-Regular.ttf".into(),
-                bytes: FONT_LIBERATION_MONO_REGULAR_BYTES,
-            },
-        ];
-
-        let mut write_fonts_data = self.fonts_data.write().unwrap();
-        write_fonts_data.fonts.resize(fonts.len(), CxFont::default());
-        for (font_id, font) in fonts.iter().enumerate() {
-            let cxfont = &mut write_fonts_data.fonts[font_id];
-
-            if cxfont.load_from_ttf_bytes(font.bytes).is_err() {
-                println!("Error loading font {} ", font.filename);
-            } else {
-                cxfont.file = font.filename.to_string();
-            }
-        }
     }
 }

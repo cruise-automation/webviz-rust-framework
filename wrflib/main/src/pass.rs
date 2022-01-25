@@ -209,6 +209,7 @@ pub(crate) struct CxPass {
     pub(crate) pass_size: Vec2,
     pub(crate) pass_uniforms: PassUniforms,
     pub(crate) zbias_step: f32,
+    #[allow(dead_code)] // Not used in all platforms currently.
     pub(crate) platform: CxPlatformPass,
 }
 

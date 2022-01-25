@@ -69,8 +69,8 @@ impl Cx {
             height: self.get_height_left(),
             abs_size: parent.abs_size,
             box_type: CxBoxType::CenterYAlign,
-            available_width: parent.get_available_width_left(),
-            available_height: parent.get_available_height_left(),
+            available_width: parent.get_width_left(),
+            available_height: parent.get_height_left(),
         };
         self.layout_boxes.push(layout_box);
     }
@@ -105,8 +105,8 @@ impl Cx {
             height: self.get_height_left(),
             abs_size: parent.abs_size,
             box_type: CxBoxType::CenterXYAlign,
-            available_width: parent.get_available_width_left(),
-            available_height: parent.get_available_height_left(),
+            available_width: parent.get_width_left(),
+            available_height: parent.get_height_left(),
         };
         self.layout_boxes.push(layout_box);
     }
@@ -140,8 +140,8 @@ impl Cx {
             height: parent.height,
             abs_size: parent.abs_size,
             box_type: CxBoxType::BottomBox,
-            available_width: parent.get_available_width_left(),
-            available_height: parent.get_available_height_left(),
+            available_width: parent.get_width_left(),
+            available_height: parent.get_height_left(),
         };
         self.layout_boxes.push(layout_box);
     }
@@ -181,8 +181,8 @@ impl Cx {
             height: self.get_height_left(),
             abs_size: parent.abs_size,
             box_type: CxBoxType::CenterXAlign,
-            available_width: parent.get_available_width_left(),
-            available_height: parent.get_available_height_left(),
+            available_width: parent.get_width_left(),
+            available_height: parent.get_height_left(),
         };
         self.layout_boxes.push(layout_box);
     }
@@ -216,8 +216,8 @@ impl Cx {
             height: parent.height,
             abs_size: parent.abs_size,
             box_type: CxBoxType::RightBox,
-            available_width: parent.get_available_width_left(),
-            available_height: parent.get_available_height_left(),
+            available_width: parent.get_width_left(),
+            available_height: parent.get_height_left(),
         };
         self.layout_boxes.push(layout_box);
     }
@@ -298,7 +298,8 @@ impl Cx {
 
     /// Returns the full rect corresponding to current box.
     /// It uses all available_width/height plus padding.
-    /// Unlike [`Cx::get_turtle_rect`] for `Compute` widths and heights this will never contain `NaN`-s.
+    /// Note that these are the inherent dimensions of the [`CxLayoutBox`], not
+    /// what the [`CxLayoutBox`] has walked so far. See [`Cx::get_box_bounds`] for that.
     pub fn get_box_rect(&self) -> Rect {
         if let Some(layout_box) = self.layout_boxes.last() {
             return Rect {
@@ -312,33 +313,12 @@ impl Cx {
         Rect::default()
     }
 
-    /// Get the [`Rect`] that contains the current [`CxLayoutBox::origin`], [`CxLayoutBox::width], and
-    /// [`CxLayoutBox::height`]. Note that these are the inherent dimensions of the [`CxLayoutBox`], not
-    /// what the [`CxLayoutBox`] has walked so far. See [`Cx::get_box_bounds`] for that.
-    ///
-    /// TODO(JP): When using [`Width::Compute`] or [`Height::Compute`], this [`Rect`] may include
-    /// [`f32::NAN`]s, which is unexpected.
-    /// TODO(Dmitry): Can we replace this with get_box_rect as they are doing similar things?
-    pub fn get_turtle_rect(&self) -> Rect {
-        if let Some(layout_box) = self.layout_boxes.last() {
-            return Rect { pos: layout_box.origin, size: vec2(layout_box.width, layout_box.height) };
-        };
-        Rect::default()
-    }
-
     /// Get some notion of the width that is "left" for the current [`CxLayoutBox`].
     ///
     /// See also [`Cx::get_width_total`].
     pub fn get_width_left(&self) -> f32 {
         if let Some(layout_box) = self.layout_boxes.last() {
-            return max_zero_keep_nan(layout_box.width - (layout_box.pos.x - layout_box.origin.x));
-        }
-        0.
-    }
-
-    pub fn get_available_width_left(&self) -> f32 {
-        if let Some(layout_box) = self.layout_boxes.last() {
-            layout_box.get_available_width_left()
+            layout_box.get_width_left()
         } else {
             0.
         }
@@ -347,7 +327,7 @@ impl Cx {
     /// Get some notion of the total width of the current box. If the width
     /// is well defined, then we return it. If it's computed, then we return the
     /// bound (including padding) of how much we've drawn so far. And if we haven't
-    /// drawn anything, we return NaN.
+    /// drawn anything, we return 0.
     pub fn get_width_total(&self) -> f32 {
         if let Some(layout_box) = self.layout_boxes.last() {
             let nan_val = max_zero_keep_nan(layout_box.width);
@@ -355,6 +335,8 @@ impl Cx {
                 // if we are a computed width, if some value is known, use that
                 if layout_box.bound_right_bottom.x != std::f32::NEG_INFINITY {
                     return layout_box.bound_right_bottom.x - layout_box.origin.x + layout_box.layout.padding.r;
+                } else {
+                    return 0.;
                 }
             }
             return nan_val;
@@ -367,14 +349,7 @@ impl Cx {
     /// See also [`Cx::get_height_total`].
     pub fn get_height_left(&self) -> f32 {
         if let Some(layout_box) = self.layout_boxes.last() {
-            return max_zero_keep_nan(layout_box.height - (layout_box.pos.y - layout_box.origin.y));
-        }
-        0.
-    }
-
-    pub fn get_available_height_left(&self) -> f32 {
-        if let Some(layout_box) = self.layout_boxes.last() {
-            layout_box.get_available_height_left()
+            layout_box.get_height_left()
         } else {
             0.
         }
@@ -383,7 +358,7 @@ impl Cx {
     /// Get some notion of the total height of the current box. If the height
     /// is well defined, then we return it. If it's computed, then we return the
     /// bound (including padding) of how much we've drawn so far. And if we haven't
-    /// drawn anything, we return NaN.
+    /// drawn anything, we return 0.
     pub fn get_height_total(&self) -> f32 {
         if let Some(layout_box) = self.layout_boxes.last() {
             let nan_val = max_zero_keep_nan(layout_box.height);
@@ -391,6 +366,8 @@ impl Cx {
                 // if we are a computed height, if some value is known, use that
                 if layout_box.bound_right_bottom.y != std::f32::NEG_INFINITY {
                     return layout_box.bound_right_bottom.y - layout_box.origin.y + layout_box.layout.padding.b;
+                } else {
+                    return 0.;
                 }
             }
             return nan_val;
@@ -399,7 +376,7 @@ impl Cx {
     }
 
     /// Get the bounds of what the box has *actually* moved (not just its
-    /// inherent width/height as given by [`Cx::get_turtle_rect`]), including any padding that the
+    /// inherent width/height as given by [`Cx::get_box_rect`]), including any padding that the
     /// layout of the current box specifies.
     pub fn get_box_bounds(&self) -> Vec2 {
         if let Some(layout_box) = self.layout_boxes.last() {

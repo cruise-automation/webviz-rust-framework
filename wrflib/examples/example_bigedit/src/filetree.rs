@@ -106,7 +106,7 @@ impl FileTree {
 
             drag_bg: Background::default().with_radius(2.),
 
-            view: ScrollView::default().with_scroll_v(ScrollBar::new().with_smoothing(0.15)),
+            view: ScrollView::default().with_scroll_v(ScrollBar::default().with_smoothing(0.15)),
 
             drag_view: View::default().with_is_overlay(true),
 

@@ -36,7 +36,7 @@ impl ItemDisplay {
                 folding_depth: 3,
                 line_number_width: 10.,
                 top_padding: 10.,
-                ..TextEditor::new()
+                ..TextEditor::default()
             },
             text_buffer: TextBuffer { ..TextBuffer::default() },
             display: ItemDisplayType::Empty,
@@ -182,12 +182,11 @@ impl ItemDisplay {
             ItemDisplayType::PlainText { .. } | ItemDisplayType::Message { .. } => {
                 let text_buffer = &mut self.text_buffer;
 
-                if self.text_disp.begin_text_editor(cx, text_buffer, None).is_ok() {
-                    for (index, token_chunk) in text_buffer.token_chunks.iter_mut().enumerate() {
-                        self.text_disp.draw_chunk(cx, index, &text_buffer.flat_text, token_chunk, &text_buffer.markers);
-                    }
-                    self.text_disp.end_text_editor(cx, text_buffer);
+                self.text_disp.begin_text_editor(cx, text_buffer, None);
+                for (index, token_chunk) in text_buffer.token_chunks.iter_mut().enumerate() {
+                    self.text_disp.draw_chunk(cx, index, &text_buffer.flat_text, token_chunk, &text_buffer.markers);
                 }
+                self.text_disp.end_text_editor(cx, text_buffer);
             }
         }
     }

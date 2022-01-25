@@ -80,7 +80,7 @@ impl<'a> DeTokParser for DeTokParserImpl<'a> {
     }
 
     fn error_enum(&mut self, ident: Ident, what: &str) -> ParseError {
-        self.error(format!("Error missing {} for enum {}", ident.to_string(), what))
+        self.error(format!("Error missing {} for enum {}", ident, what))
     }
 
     fn parse_ident(&mut self) -> Result<Ident, ParseError> {

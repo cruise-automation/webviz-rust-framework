@@ -39,9 +39,7 @@ pub fn request(url: &str, method: &str, body: &[u8], headers: &[(&str, &str)]) -
                     Ok(Box::new(response.into_reader()))
                 }
             }
-            Err(error) => {
-                Err(std::io::Error::new(std::io::ErrorKind::Other, format!("Error opening stream: {}", error.to_string())))
-            }
+            Err(error) => Err(std::io::Error::new(std::io::ErrorKind::Other, format!("Error opening stream: {}", error))),
         }
     }
 

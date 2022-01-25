@@ -1,6 +1,8 @@
 # Web Workers
 Wrflib can also be used inside of your own Web Workers. This comes with both some extra features, as well as some caveats.
 
+First, include the Web Worker entry point (`wrflib_runtime.js`).
+
 Note that when using CEF we don't support any of these functions yet.
 
 ## wrflib.newWorkerPort & wrflib.initializeWorker
@@ -45,7 +47,7 @@ To register a callback, you have to use `cx.on_call_rust_in_same_thread_sync()`.
 
 ```rust,noplayground
 impl ExampleApp {
-    pub fn new(cx: &mut Cx) -> Self {
+    fn new(cx: &mut Cx) -> Self {
         cx.on_call_rust_in_same_thread_sync(Self::on_call_rust_in_same_thread_sync);
         Self {}
     }

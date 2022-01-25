@@ -40,27 +40,24 @@ impl Cx {
 pub type CommandId = LocationHash;
 
 impl CommandId {
-    pub fn set_enabled(&self, cx: &mut Cx, enabled: bool) -> Self {
+    pub fn set_enabled(&self, cx: &mut Cx, enabled: bool) {
         let mut s = if let Some(s) = cx.command_settings.get(self) { *s } else { CxCommandSetting::default() };
         s.enabled = enabled;
         cx.command_settings.insert(*self, s);
-        *self
     }
 
-    pub fn set_key(&self, cx: &mut Cx, key_code: KeyCode) -> Self {
+    pub fn set_key(&self, cx: &mut Cx, key_code: KeyCode) {
         let mut s = if let Some(s) = cx.command_settings.get(self) { *s } else { CxCommandSetting::default() };
         s.shift = false;
         s.key_code = key_code;
         cx.command_settings.insert(*self, s);
-        *self
     }
 
-    pub fn set_key_shift(&self, cx: &mut Cx, key_code: KeyCode) -> Self {
+    pub fn set_key_shift(&self, cx: &mut Cx, key_code: KeyCode) {
         let mut s = if let Some(s) = cx.command_settings.get(self) { *s } else { CxCommandSetting::default() };
         s.shift = true;
         s.key_code = key_code;
         cx.command_settings.insert(*self, s);
-        *self
     }
 }
 

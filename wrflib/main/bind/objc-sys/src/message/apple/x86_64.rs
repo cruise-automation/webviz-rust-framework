@@ -6,7 +6,7 @@
 
 use std::mem;
 
-use runtime::Imp;
+use crate::runtime::Imp;
 
 extern "C" {
     fn objc_msgSend();

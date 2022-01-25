@@ -274,7 +274,7 @@ impl SearchResultDraw {
                 draw_line_numbers: false,
                 line_number_width: 10.,
                 top_padding: 0.,
-                ..TextEditor::new()
+                ..TextEditor::default()
             },
             item_bg: Background::default(),
         }

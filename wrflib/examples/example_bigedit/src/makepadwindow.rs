@@ -50,7 +50,7 @@ pub struct WrfWindow {
 impl WrfWindow {
     pub fn new(cx: &mut Cx) -> Self {
         Self {
-            desktop_window: DesktopWindow::new().with_caption("Bigedit"),
+            desktop_window: DesktopWindow::default().with_caption("Bigedit"),
 
             file_editors: FileEditors { editors: HashMap::new() },
             home_page: HomePage::new(cx),
@@ -60,7 +60,7 @@ impl WrfWindow {
             search_results: SearchResults::new(),
             file_panel: FilePanel::new(),
             world_view: WorldView::default(),
-            dock: Dock::new(),
+            dock: Dock::default(),
             dock_items: DockItem::Splitter {
                 axis: Axis::Vertical,
                 align: SplitterAlign::First,
@@ -392,17 +392,15 @@ impl WrfWindow {
             match tab.item {
                 Panel::FileTree => {
                     let tab = tab_control.get_draw_tab(cx, &tab.title, selected, tab.closeable);
-                    if tab.begin_tab(cx).is_ok() {
-                        file_panel.draw_tab(cx);
-                        tab.end_tab(cx);
-                    };
+                    tab.begin_tab(cx);
+                    file_panel.draw_tab(cx);
+                    tab.end_tab(cx);
                 }
                 Panel::SearchResults => {
                     let tab = tab_control.get_draw_tab(cx, &tab.title, selected, tab.closeable);
-                    if tab.begin_tab(cx).is_ok() {
-                        search_results.draw_search_result_tab(cx, &build_manager.search_index);
-                        tab.end_tab(cx);
-                    };
+                    tab.begin_tab(cx);
+                    search_results.draw_search_result_tab(cx, &build_manager.search_index);
+                    tab.end_tab(cx);
                 }
                 _ => tab_control.draw_tab(cx, &tab.title, selected, tab.closeable),
             }

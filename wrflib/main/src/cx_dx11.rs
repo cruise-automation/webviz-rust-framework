@@ -66,7 +66,7 @@ impl Cx {
 
                 if draw_call.instance_dirty {
                     draw_call.instance_dirty = false;
-                    if draw_call.instances.len() == 0 {
+                    if draw_call.instances.is_empty() {
                         continue;
                     }
                     // update the instance buffer data
@@ -83,7 +83,7 @@ impl Cx {
 
                 if draw_call.uniforms_dirty {
                     draw_call.uniforms_dirty = false;
-                    if draw_call.user_uniforms.len() != 0 {
+                    if !draw_call.user_uniforms.is_empty() {
                         draw_call.platform.user_uniforms.update_with_f32_constant_data(d3d11_cx, &mut draw_call.user_uniforms);
                     }
                 }
@@ -190,12 +190,12 @@ impl Cx {
             match color_texture.clear_color {
                 ClearColor::InitWith(color) => {
                     if is_initial {
-                        d3d11_cx.clear_render_target_view(&render_target, color);
+                        d3d11_cx.clear_render_target_view(render_target, color);
                         //self.clear_color);
                     }
                 }
                 ClearColor::ClearWith(color) => {
-                    d3d11_cx.clear_render_target_view(&render_target, color); //self.clear_color);
+                    d3d11_cx.clear_render_target_view(render_target, color); //self.clear_color);
                 }
             }
         }
@@ -241,7 +241,7 @@ impl Cx {
         d3d11_cx.set_raster_state(self.passes[pass_id].platform.raster_state.as_ref().unwrap());
         d3d11_cx.set_blend_state(self.passes[pass_id].platform.blend_state.as_ref().unwrap());
         let cxpass = &mut self.passes[pass_id];
-        cxpass.platform.pass_uniforms.update_with_f32_constant_data(&d3d11_cx, cxpass.pass_uniforms.as_slice());
+        cxpass.platform.pass_uniforms.update_with_f32_constant_data(d3d11_cx, cxpass.pass_uniforms.as_slice());
     }
 
     pub(crate) fn draw_pass_to_window(
@@ -263,7 +263,7 @@ impl Cx {
             view_id,
             Vec2::default(),
             (Vec2 { x: -50000., y: -50000. }, Vec2 { x: 50000., y: 50000. }),
-            &d3d11_cx,
+            d3d11_cx,
             &mut zbias,
             zbias_step,
         );
@@ -282,7 +282,7 @@ impl Cx {
             view_id,
             Vec2::default(),
             (Vec2 { x: -50000., y: -50000. }, Vec2 { x: 50000., y: 50000. }),
-            &d3d11_cx,
+            d3d11_cx,
             &mut zbias,
             zbias_step,
         );
@@ -292,7 +292,7 @@ impl Cx {
         for shader_id in self.shader_recompile_ids.drain(..) {
             let shader = unsafe { self.shaders.get_unchecked_mut(shader_id) };
             let shader_ast = shader.shader_ast.as_ref().unwrap();
-            let hlsl = generate_hlsl::generate_shader(&shader_ast);
+            let hlsl = generate_hlsl::generate_shader(shader_ast);
             let debug = shader_ast.debug;
             if debug {
                 println!("--------------- Shader {} --------------- \n{}\n", &shader.name, hlsl);
@@ -302,14 +302,14 @@ impl Cx {
 
             fn split_source(src: &str) -> String {
                 let mut r = String::new();
-                let split = src.split("\n");
+                let split = src.split('\n');
                 for (line, chunk) in split.enumerate() {
                     r.push_str(&(line + 1).to_string());
-                    r.push_str(":");
+                    r.push(':');
                     r.push_str(chunk);
-                    r.push_str("\n");
+                    r.push('\n');
                 }
-                return r;
+                r
             }
 
             if let Err(msg) = vs_blob {
@@ -649,7 +649,7 @@ impl D3d11Cx {
             if let Some(uni) = user_uni.buffer.as_ref() {
                 uni.as_raw() as *const std::ffi::c_void
             } else {
-                0 as *const std::ffi::c_void
+                std::ptr::null::<std::ffi::c_void>()
             },
         ];
         unsafe { self.context.VSSetConstantBuffers(0, 6, buffers.as_ptr() as *const *mut _) };
@@ -1030,7 +1030,7 @@ impl D3d11Cx {
         } else {
             panic!("update_render_target failed");
         }
-        return true;
+        true
     }
 
     pub(crate) fn update_depth_stencil(&self, cxtexture: &mut CxTexture, dpi_factor: f32, size: Vec2) -> bool {
@@ -1082,7 +1082,7 @@ impl D3d11Cx {
         } else {
             panic!("update_render_target failed");
         }
-        return true;
+        true
     }
 
     pub(crate) fn update_platform_texture_image_rgba(

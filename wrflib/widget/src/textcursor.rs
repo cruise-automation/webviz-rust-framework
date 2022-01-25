@@ -128,11 +128,13 @@ pub struct TextCursorSet {
     pub last_clamp_range: Option<(usize, usize)>,
 }
 
-impl TextCursorSet {
-    pub fn new() -> Self {
+impl Default for TextCursorSet {
+    fn default() -> Self {
         Self { set: vec![TextCursor { head: 0, tail: 0, max: 0 }], last_cursor: 0, insert_undo_group: 0, last_clamp_range: None }
     }
+}
 
+impl TextCursorSet {
     pub fn get_all_as_string(&self, text_buffer: &TextBuffer) -> String {
         let mut ret = String::new();
         for cursor in &self.set {
@@ -1174,8 +1176,8 @@ pub struct CursorRect {
     pub z: f32,
 }
 
-impl DrawCursors {
-    pub fn new() -> Self {
+impl Default for DrawCursors {
+    fn default() -> Self {
         Self {
             start: 0,
             end: 0,
@@ -1191,12 +1193,14 @@ impl DrawCursors {
             last_cursor: None,
         }
     }
+}
 
-    pub fn term(&mut self, cursors: &Vec<TextCursor>) {
+impl DrawCursors {
+    pub fn term(&mut self, cursors: &[TextCursor]) {
         self.next_index = cursors.len();
     }
 
-    pub fn set_next(&mut self, cursors: &Vec<TextCursor>) -> bool {
+    pub fn set_next(&mut self, cursors: &[TextCursor]) -> bool {
         if self.next_index < cursors.len() {
             self.emit_selection();
             let cursor = &cursors[self.next_index];
@@ -1279,7 +1283,7 @@ impl DrawCursors {
         }
     }
 
-    pub fn mark_text_select_only(&mut self, cursors: &Vec<TextCursor>, offset: usize, x: f32, y: f32, w: f32, h: f32) {
+    pub fn mark_text_select_only(&mut self, cursors: &[TextCursor], offset: usize, x: f32, y: f32, w: f32, h: f32) {
         // check if we need to skip cursors
         while offset >= self.end {
             // jump to next cursor
@@ -1304,7 +1308,7 @@ impl DrawCursors {
 
     pub fn mark_text_with_cursor(
         &mut self,
-        cursors: &Vec<TextCursor>,
+        cursors: &[TextCursor],
         ch: char,
         offset: usize,
         x: f32,

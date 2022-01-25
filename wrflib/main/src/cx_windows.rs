@@ -34,7 +34,7 @@ impl Cx {
 
         self.platform.d3d11_cx = Some(&d3d11_cx);
 
-        self.desktop_load_fonts();
+        self.load_fonts();
 
         self.call_event_handler(&mut Event::Construct);
 
@@ -46,8 +46,8 @@ impl Cx {
 
             //if let Ok(d3d11_cx) = d3d11_cx.lock(){
             // acquire d3d11_cx exclusive
-            for mut event in events {
-                self.process_pre_event(&mut event);
+            for event in events {
+                self.process_pre_event(event);
                 match &event {
                     Event::WindowResizeLoop(wr) => {
                         for d3d11_window in &mut d3d11_windows {
@@ -73,7 +73,7 @@ impl Cx {
                             }
                         }
                         // ok lets not redraw all, just this window
-                        self.call_event_handler(&mut event);
+                        self.call_event_handler(event);
                     }
                     Event::WindowClosed(wc) => {
                         // do this here because mac
@@ -85,7 +85,7 @@ impl Cx {
                         for index in 0..d3d11_windows.len() {
                             if d3d11_windows[index].window_id == wc.window_id {
                                 d3d11_windows.remove(index);
-                                if d3d11_windows.len() == 0 {
+                                if d3d11_windows.is_empty() {
                                     win32_app.terminate_event_loop();
                                 }
                                 for d3d11_window in &mut d3d11_windows {
@@ -93,7 +93,7 @@ impl Cx {
                                 }
                             }
                         }
-                        self.call_event_handler(&mut event);
+                        self.call_event_handler(event);
                     }
                     Event::SystemEvent(e) => {
                         match e {
@@ -109,7 +109,7 @@ impl Cx {
                                         CxWindowState::Create { inner_size, position, title, .. } => {
                                             // lets create a platformwindow
                                             let d3d11_window =
-                                                D3d11Window::new(index, &d3d11_cx, win32_app, *inner_size, *position, &title);
+                                                D3d11Window::new(index, &d3d11_cx, win32_app, *inner_size, *position, title);
                                             window.window_geom = d3d11_window.window_geom.clone();
                                             d3d11_windows.push(d3d11_window);
                                             for d3d11_window in &mut d3d11_windows {
@@ -123,7 +123,7 @@ impl Cx {
                                             for d3d11_window in &mut d3d11_windows {
                                                 if d3d11_window.window_id == index {
                                                     d3d11_window.win32_window.close_window();
-                                                    if win32_app.event_loop_running == false {
+                                                    if !win32_app.event_loop_running {
                                                         return false;
                                                     }
                                                     break;
@@ -183,9 +183,9 @@ impl Cx {
                                 }
 
                                 // set a cursor
-                                if !self.down_mouse_cursor.is_none() {
+                                if self.down_mouse_cursor.is_some() {
                                     win32_app.set_mouse_cursor(self.down_mouse_cursor.as_ref().unwrap().clone())
-                                } else if !self.hover_mouse_cursor.is_none() {
+                                } else if self.hover_mouse_cursor.is_some() {
                                     win32_app.set_mouse_cursor(self.hover_mouse_cursor.as_ref().unwrap().clone())
                                 } else {
                                     win32_app.set_mouse_cursor(MouseCursor::Default)
@@ -198,12 +198,12 @@ impl Cx {
                                     }
                                 }
 
-                                while self.platform.start_timer.len() > 0 {
+                                while !self.platform.start_timer.is_empty() {
                                     let (timer_id, interval, repeats) = self.platform.start_timer.pop().unwrap();
                                     win32_app.start_timer(timer_id, interval, repeats);
                                 }
 
-                                while self.platform.stop_timer.len() > 0 {
+                                while !self.platform.stop_timer.is_empty() {
                                     let timer_id = self.platform.stop_timer.pop().unwrap();
                                     win32_app.stop_timer(timer_id);
                                 }
@@ -212,7 +212,7 @@ impl Cx {
                                 let mut windows_need_repaint = 0;
                                 self.compute_passes_to_repaint(&mut passes_todo, &mut windows_need_repaint);
 
-                                if passes_todo.len() > 0 {
+                                if !passes_todo.is_empty() {
                                     self.hlsl_compile_shaders(&d3d11_cx);
                                     for pass_id in &passes_todo {
                                         match self.passes[*pass_id].dep_of.clone() {
@@ -256,27 +256,23 @@ impl Cx {
                                 }
                             }
                             _ => {
-                                self.call_event_handler(&mut event);
+                                self.call_event_handler(event);
                             }
                         }
                     }
                     Event::None => {}
                     Event::Signal { .. } => {
-                        self.call_event_handler(&mut event);
+                        self.call_event_handler(event);
                         self.call_signals();
                     }
                     _ => {
-                        self.call_event_handler(&mut event);
+                        self.call_event_handler(event);
                     }
                 }
                 self.process_post_event(event);
             }
 
-            if self.requested_draw || self.requested_next_frame {
-                false
-            } else {
-                true
-            }
+            !(self.requested_draw || self.requested_next_frame)
         })
     }
 

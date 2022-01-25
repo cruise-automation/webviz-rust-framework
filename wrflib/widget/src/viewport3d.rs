@@ -65,6 +65,8 @@ pub struct Viewport3DProps {
     /// Represents if users can use the left mouse to pan the camera.
     pub panning_enabled: bool,
     pub camera_target: Vec3,
+    /// Represents if panning should move camera vertically.
+    pub vertical_panning_enabled: bool,
 }
 
 impl Viewport3DProps {
@@ -74,6 +76,7 @@ impl Viewport3DProps {
         initial_camera_position: Coordinates::Spherical(SphericalAngles { phi: EPSILON, theta: -PI / 2., radius: 50. }),
         camera_target: Vec3::all(0.),
         panning_enabled: true,
+        vertical_panning_enabled: true,
     };
 }
 
@@ -175,13 +178,15 @@ impl Viewport3D {
                     // intersecting with the camera target.
                     let mouse_offset = (fe.rel - fe.rel_start) / self.measured_size.y * self.camera_position.radius * pan_speed;
 
+                    let vertical_offset =
+                        if self.props.vertical_panning_enabled { self.camera_position.phi.to_degrees() } else { 0. };
+
                     // We need to calculate the value of camera target offset.
-                    // For that we create a rotation matrix that disregards x and y axis rotations,
-                    // and only uses PHI of the spherical coordinate value camera_phi_theta (the rotation),
+                    // For that we create a rotation matrix from the camera_position (the rotation),
                     // thereafter we translate it on x/y based on relative offset calculated mouse movements.
                     // Finally, so that we don't forget about the previous camera target offsets,
                     // we add camera_target_offset_start so that we don't start from beginning in every interaction.
-                    self.camera_target_offset = Mat4::rotation(0., self.camera_position.theta.to_degrees(), 0.)
+                    self.camera_target_offset = Mat4::rotation(vertical_offset, self.camera_position.theta.to_degrees(), 0.)
                         .transform_vec4(vec4(-mouse_offset.x, 0., -mouse_offset.y, 1.0))
                         .to_vec3()
                         + camera_target_offset_start;

@@ -11,11 +11,11 @@
 
 mod malloc_buf;
 
-pub use encode::{Encode, EncodeArguments, Encoding};
-pub use message::{Message, MessageArguments, MessageError};
+pub use crate::encode::{Encode, EncodeArguments, Encoding};
+pub use crate::message::{Message, MessageArguments, MessageError};
 
-pub use message::send_message as __send_message;
-pub use message::send_super_message as __send_super_message;
+pub use crate::message::send_message as __send_message;
+pub use crate::message::send_super_message as __send_super_message;
 
 #[macro_use]
 mod macros;

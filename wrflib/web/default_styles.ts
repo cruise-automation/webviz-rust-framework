@@ -22,6 +22,7 @@ export function addDefaultStyles(): void {
     right: 0;
     top: 0;
     bottom: 0;
+    pointer-events: none;
   }`;
   document.body.appendChild(style);
 }

@@ -7,7 +7,7 @@
 use wrflib::*;
 use wrflib_widget::*;
 
-pub struct PopoverExampleApp {
+struct PopoverExampleApp {
     desktop_window: DesktopWindow,
     menu: Menu,
     button: Button,
@@ -15,16 +15,16 @@ pub struct PopoverExampleApp {
 }
 
 impl PopoverExampleApp {
-    pub fn new(_cx: &mut Cx) -> Self {
+    fn new(_cx: &mut Cx) -> Self {
         Self {
-            desktop_window: DesktopWindow::new(),
+            desktop_window: DesktopWindow::default(),
             button: Button::default(),
             menu: Menu::main(vec![Menu::sub("Example", vec![Menu::line(), Menu::item("Quit Example", Cx::COMMAND_QUIT)])]),
             popover: None,
         }
     }
 
-    pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
+    fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
         if let Some(popover) = &mut self.popover {
             popover.handle(cx, event);
         }
@@ -37,7 +37,7 @@ impl PopoverExampleApp {
         }
     }
 
-    pub fn draw(&mut self, cx: &mut Cx) {
+    fn draw(&mut self, cx: &mut Cx) {
         self.desktop_window.begin_draw(cx, Some(&self.menu));
 
         // Popover currently only supports drawing above the current box position,

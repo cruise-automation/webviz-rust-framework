@@ -10,7 +10,7 @@ mod single_button;
 use single_button::*;
 
 #[derive(Default)]
-pub struct SingleButtonExampleApp {
+struct SingleButtonExampleApp {
     window: Window,
     pass: Pass,
     main_view: View,
@@ -18,15 +18,15 @@ pub struct SingleButtonExampleApp {
 }
 
 impl SingleButtonExampleApp {
-    pub fn new(_cx: &mut Cx) -> Self {
+    fn new(_cx: &mut Cx) -> Self {
         Self::default()
     }
 
-    pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
+    fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
         self.single_button.handle(cx, event);
     }
 
-    pub fn draw(&mut self, cx: &mut Cx) {
+    fn draw(&mut self, cx: &mut Cx) {
         self.window.begin_window(cx);
         self.pass.begin_pass(cx, Vec4::color("300"));
         self.main_view.begin_view(cx, LayoutSize::FILL);

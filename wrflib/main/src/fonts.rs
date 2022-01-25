@@ -16,24 +16,17 @@ use wrflib_vector::internal_iter::*;
 use wrflib_vector::path::PathIterator;
 use wrflib_vector::trapezoidator::Trapezoidator;
 
-// TODO(Paras): Make this code generic across platforms, so that WASM also can
-// use FONT_UBUNTU_BYTES/FONT_LIBERATION_MONO_REGULAR_BYTES instead of loading this
-// asynchronously.
-#[cfg(target_arch = "wasm32")]
-pub(crate) const FONT_FILENAMES: [&'static str; 2] =
-    ["wrflib/resources/Ubuntu-R.ttf", "wrflib/resources/LiberationMono-Regular.ttf"];
 /// The default [Ubuntu font](https://design.ubuntu.com/font/).
-pub const FONT_UBUNTU_R: Font = Font { font_id: 0 };
-#[cfg(not(target_arch = "wasm32"))]
-pub const FONT_UBUNTU_BYTES: &[u8; 353824] = include_bytes!("../../resources/Ubuntu-R.ttf");
+const FONT_UBUNTU_REGULAR: Font = Font { font_id: 0 };
 /// The monospace [Liberation mono font](https://en.wikipedia.org/wiki/Liberation_fonts).
-pub const FONT_LIBERATION_MONO_REGULAR: Font = Font { font_id: 1 };
-#[cfg(not(target_arch = "wasm32"))]
-pub const FONT_LIBERATION_MONO_REGULAR_BYTES: &[u8; 108168] = include_bytes!("../../resources/LiberationMono-Regular.ttf");
+const FONT_LIBERATION_MONO_REGULAR: Font = Font { font_id: 1 };
+/// Actual font data; should match the font_ids above.
+const FONTS_BYTES: &[&[u8]] =
+    &[include_bytes!("../resources/Ubuntu-R.ttf"), include_bytes!("../resources/LiberationMono-Regular.ttf")];
 
 /// The default [`TextStyle`].
 pub const TEXT_STYLE_NORMAL: TextStyle = TextStyle {
-    font: FONT_UBUNTU_R,
+    font: FONT_UBUNTU_REGULAR,
     font_size: 8.0,
     brightness: 1.0,
     curve: 0.6,
@@ -86,6 +79,15 @@ impl Default for TextStyle {
 }
 
 impl Cx {
+    pub(crate) fn load_fonts(&mut self) {
+        let mut write_fonts_data = self.fonts_data.write().unwrap();
+        write_fonts_data.fonts = Iterator::map(FONTS_BYTES.iter(), |bytes| {
+            let font = wrflib_vector::ttf_parser::parse_ttf(bytes).expect("Error loading font");
+            CxFont { font_loaded: Some(font), atlas_pages: vec![] }
+        })
+        .collect();
+    }
+
     pub fn reset_font_atlas_and_redraw(&mut self) {
         {
             // Use a block here to constraint the lifetime of locks
@@ -403,7 +405,6 @@ impl CxAfterDraw {
 
 #[derive(Default, Debug, Clone)]
 pub(crate) struct CxFont {
-    pub(crate) file: String,
     pub(crate) font_loaded: Option<wrflib_vector::font::VectorFont>,
     pub(crate) atlas_pages: Vec<CxFontAtlasPage>,
 }
@@ -467,7 +468,7 @@ pub fn get_font_atlas_page_id(
 
     let glyphs_len = match &fonts_data_read_lock.fonts[font_id].font_loaded {
         Some(font) => font.glyphs.len(),
-        _ => panic!("Font not loaded {}", fonts_data_read_lock.fonts[font_id].file),
+        _ => panic!("Font not loaded {}", font_id),
     };
     drop(fonts_data_read_lock);
 
@@ -489,14 +490,14 @@ pub fn get_font_atlas_page_id(
 }
 
 impl CxFontsAtlas {
-    pub fn alloc_atlas_glyph(&mut self, path: &str, w: f32, h: f32) -> CxFontAtlasGlyph {
+    pub fn alloc_atlas_glyph(&mut self, w: f32, h: f32) -> CxFontAtlasGlyph {
         if w + self.alloc_xpos >= self.texture_size.x {
             self.alloc_xpos = 0.0;
             self.alloc_ypos += self.alloc_hmax + 1.0;
             self.alloc_hmax = 0.0;
         }
         if h + self.alloc_ypos >= self.texture_size.y {
-            println!("FONT ATLAS FULL {}, TODO FIX THIS", path);
+            println!("FONT ATLAS FULL, TODO FIX THIS");
         }
         if h > self.alloc_hmax {
             self.alloc_hmax = h;
@@ -512,14 +513,6 @@ impl CxFontsAtlas {
         }
 
         CxFontAtlasGlyph { tx1, ty1, tx2: tx1 + (w / self.texture_size.x), ty2: ty1 + (h / self.texture_size.y) }
-    }
-}
-
-impl CxFont {
-    pub(crate) fn load_from_ttf_bytes(&mut self, bytes: &[u8]) -> wrflib_vector::ttf_parser::Result<()> {
-        let font = wrflib_vector::ttf_parser::parse_ttf(bytes)?;
-        self.font_loaded = Some(font);
-        Ok(())
     }
 }
 

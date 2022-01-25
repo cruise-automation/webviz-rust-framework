@@ -39,7 +39,7 @@ static SHADER: Shader = Shader {
 };
 
 #[derive(Default)]
-pub struct GeometryExampleApp {
+struct GeometryExampleApp {
     window: Window,
     pass: Pass,
     main_view: View,
@@ -52,11 +52,11 @@ const VIEWPORT_PROPS: Viewport3DProps =
     Viewport3DProps { initial_camera_position: Coordinates::Cartesian(vec3(5., 0., 5.)), ..Viewport3DProps::DEFAULT };
 
 impl GeometryExampleApp {
-    pub fn new(_cx: &mut Cx) -> Self {
+    fn new(_cx: &mut Cx) -> Self {
         Self::default()
     }
 
-    pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
+    fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
         self.viewport_3d.handle(cx, event);
 
         match event {
@@ -74,7 +74,7 @@ impl GeometryExampleApp {
         }
     }
 
-    pub fn draw(&mut self, cx: &mut Cx) {
+    fn draw(&mut self, cx: &mut Cx) {
         self.window.begin_window(cx);
         self.pass.begin_pass(cx, Vec4::color("300"));
         self.main_view.begin_view(cx, LayoutSize::FILL);

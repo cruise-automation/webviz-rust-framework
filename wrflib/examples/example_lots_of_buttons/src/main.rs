@@ -7,7 +7,7 @@
 use wrflib::*;
 use wrflib_widget::*;
 
-pub struct WidgetExampleApp {
+struct WidgetExampleApp {
     desktop_window: DesktopWindow,
     menu: Menu,
     button: Button,
@@ -15,16 +15,16 @@ pub struct WidgetExampleApp {
 }
 
 impl WidgetExampleApp {
-    pub fn new(_cx: &mut Cx) -> Self {
+    fn new(_cx: &mut Cx) -> Self {
         Self {
-            desktop_window: DesktopWindow::new(),
+            desktop_window: DesktopWindow::default(),
             button: Button::default(),
             buttons: (0..1000).map(|_| Button::default()).collect(),
             menu: Menu::main(vec![Menu::sub("Example", vec![Menu::line(), Menu::item("Quit Example", Cx::COMMAND_QUIT)])]),
         }
     }
 
-    pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
+    fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
         self.desktop_window.handle(cx, event);
 
         if let ButtonEvent::Clicked = self.button.handle(cx, event) {
@@ -37,7 +37,7 @@ impl WidgetExampleApp {
         }
     }
 
-    pub fn draw(&mut self, cx: &mut Cx) {
+    fn draw(&mut self, cx: &mut Cx) {
         self.desktop_window.begin_draw(cx, Some(&self.menu));
         cx.begin_wrapping_box();
 

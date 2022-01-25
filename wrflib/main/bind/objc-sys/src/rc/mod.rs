@@ -57,7 +57,7 @@ pub use self::weak::WeakPtr;
 mod tests {
     use super::autoreleasepool;
     use super::StrongPtr;
-    use runtime::Object;
+    use crate::runtime::Object;
 
     #[test]
     fn test_strong_clone() {

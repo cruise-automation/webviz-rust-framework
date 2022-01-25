@@ -5,8 +5,8 @@
 // You may not use this file except in compliance with the License.
 
 use super::MessageError;
-use runtime::{Class, Object, Sel};
-use {Encode, EncodeArguments};
+use crate::runtime::{Class, Object, Sel};
+use crate::{Encode, EncodeArguments};
 
 pub fn verify_message_signature<A, R>(cls: &Class, sel: Sel) -> Result<(), MessageError>
 where

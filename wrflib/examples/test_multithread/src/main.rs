@@ -33,7 +33,7 @@ static SHADER: Shader = Shader {
     ..Shader::DEFAULT
 };
 
-pub struct MultithreadExampleApp {
+struct MultithreadExampleApp {
     window: Window,
     pass: Pass,
     main_view: View,
@@ -50,7 +50,7 @@ const BLUE_DURATION: u64 = 3;
 const GREEN_DURATION: u64 = 2;
 
 impl MultithreadExampleApp {
-    pub fn new(cx: &mut Cx) -> Self {
+    fn new(cx: &mut Cx) -> Self {
         Self {
             window: Window::default(),
             pass: Pass::default(),
@@ -61,7 +61,7 @@ impl MultithreadExampleApp {
         }
     }
 
-    pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
+    fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
         if let Event::Signal(sig) = event {
             if let Some(statusses) = sig.signals.get(&self.signal) {
                 for status in statusses {
@@ -117,7 +117,7 @@ impl MultithreadExampleApp {
         }
     }
 
-    pub fn draw(&mut self, cx: &mut Cx) {
+    fn draw(&mut self, cx: &mut Cx) {
         self.window.begin_window(cx);
         self.pass.begin_pass(cx, Vec4::color("300"));
         self.main_view.begin_view(cx, LayoutSize::FILL);

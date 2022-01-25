@@ -186,10 +186,10 @@ where
                         }
                         None
                     } else {
-                        let tab_control = self.tab_controls.get_mut(stack_top.uid);
+                        let tab_control_option = self.tab_controls.get_mut(stack_top.uid);
                         let mut defocus = false;
-                        if tab_control.is_some() {
-                            match tab_control.unwrap().handle_tab_control(cx, event) {
+                        if let Some(tab_control) = tab_control_option {
+                            match tab_control.handle_tab_control(cx, event) {
                                 TabControlEvent::TabSelect { tab_id } => {
                                     if *current != tab_id {
                                         *previous = *current;
@@ -330,19 +330,19 @@ where
                         stack_top.uid = self.walk_uid;
                         self.walk_uid += 1;
                         // begin a split
-                        let split = self.splitters.get_draw(stack_top.uid, Splitter::new);
+                        let split = self.splitters.get_draw(stack_top.uid, Splitter::default);
                         split.set_splitter_state(align.clone(), *pos, *axis);
                         split.begin_draw(cx);
                         Some(DockWalkStack { counter: 0, uid: 0, item: unsafe { mem::transmute(first.as_mut()) } })
                     } else if stack_top.counter == 1 {
                         stack_top.counter += 1;
 
-                        let split = self.splitters.get_draw(stack_top.uid, Splitter::new);
+                        let split = self.splitters.get_draw(stack_top.uid, Splitter::default);
                         split.mid_draw(cx);
 
                         Some(DockWalkStack { counter: 0, uid: 0, item: unsafe { mem::transmute(last.as_mut()) } })
                     } else {
-                        let split = self.splitters.get_draw(stack_top.uid, Splitter::new);
+                        let split = self.splitters.get_draw(stack_top.uid, Splitter::default);
                         split.end_draw(cx);
                         None
                     }
@@ -372,11 +372,11 @@ enum DockDropKind {
     Center,
 }
 
-impl<TItem> Dock<TItem>
+impl<TItem> Default for Dock<TItem>
 where
     TItem: Clone,
 {
-    pub fn new() -> Dock<TItem> {
+    fn default() -> Dock<TItem> {
         Dock {
             // dock_items:None,
             drop_size: Vec2 { x: 100., y: 70. },
@@ -393,7 +393,12 @@ where
             //_tweening_quad: None
         }
     }
+}
 
+impl<TItem> Dock<TItem>
+where
+    TItem: Clone,
+{
     fn recur_remove_tab(
         dock_walk: &mut DockItem<TItem>,
         control_id: usize,
@@ -467,7 +472,7 @@ where
 
     fn recur_split_dock(
         dock_walk: &mut DockItem<TItem>,
-        items: &Vec<DockTab<TItem>>,
+        items: &[DockTab<TItem>],
         control_id: usize,
         kind: &DockDropKind,
         counter: &mut usize,
@@ -497,7 +502,7 @@ where
                                 pos: 0.5,
                                 axis: Axis::Vertical,
                                 last: Box::new(dock_walk.clone()),
-                                first: Box::new(DockItem::TabControl { current: 0, previous: 0, tabs: items.clone() }),
+                                first: Box::new(DockItem::TabControl { current: 0, previous: 0, tabs: items.to_owned() }),
                             };
                             return Some(DockTabIdent { tab_control_id: control_id + 1, tab_id: 0 });
                         }
@@ -507,7 +512,7 @@ where
                                 pos: 0.5,
                                 axis: Axis::Vertical,
                                 first: Box::new(dock_walk.clone()),
-                                last: Box::new(DockItem::TabControl { current: 0, previous: 0, tabs: items.clone() }),
+                                last: Box::new(DockItem::TabControl { current: 0, previous: 0, tabs: items.to_owned() }),
                             };
                             return Some(DockTabIdent { tab_control_id: control_id + 2, tab_id: 0 });
                         }
@@ -517,7 +522,7 @@ where
                                 pos: 0.5,
                                 axis: Axis::Horizontal,
                                 last: Box::new(dock_walk.clone()),
-                                first: Box::new(DockItem::TabControl { current: 0, previous: 0, tabs: items.clone() }),
+                                first: Box::new(DockItem::TabControl { current: 0, previous: 0, tabs: items.to_owned() }),
                             };
                             return Some(DockTabIdent { tab_control_id: control_id + 1, tab_id: 0 });
                         }
@@ -527,7 +532,7 @@ where
                                 pos: 0.5,
                                 axis: Axis::Horizontal,
                                 first: Box::new(dock_walk.clone()),
-                                last: Box::new(DockItem::TabControl { current: 0, previous: 0, tabs: items.clone() }),
+                                last: Box::new(DockItem::TabControl { current: 0, previous: 0, tabs: items.to_owned() }),
                             };
                             return Some(DockTabIdent { tab_control_id: control_id + 2, tab_id: 0 });
                         }
@@ -720,10 +725,7 @@ where
     }
 
     pub fn walker<'a>(&'a mut self, dock_items: &'a mut DockItem<TItem>) -> DockWalker<'a, TItem> {
-        let mut stack = Vec::new();
-        //if !self.dock_items.is_none(){
-        stack.push(DockWalkStack { counter: 0, uid: 0, item: dock_items });
-        //}
+        let stack = vec![DockWalkStack { counter: 0, uid: 0, item: dock_items }];
         self.splitters.begin_draw();
         self.tab_controls.begin_draw();
         DockWalker {
@@ -883,12 +885,12 @@ where
     }
 
     // enumerate the set of 'last drawn' items
-    fn enumerate<'a>(&'a mut self) -> ElementsIteratorNamed<'a, ID, T> {
+    fn enumerate(&mut self) -> ElementsIteratorNamed<ID, T> {
         ElementsIteratorNamed::new(self)
     }
 
     // gets a particular item. Returns None when not created (yet)
-    fn get_mut<'a>(&'a mut self, index: ID) -> Option<&mut T> {
+    fn get_mut(&mut self, index: ID) -> Option<&mut T> {
         let elem = self.element_map.get_mut(&index);
         if let Some(elem) = elem {
             Some(&mut elem.item)

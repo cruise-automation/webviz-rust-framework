@@ -459,15 +459,15 @@ impl<'a> ShaderGenerator<'a> {
     }
 
     fn write_var_decl(&mut self, is_inout: bool, is_packed: bool, ident: Ident, ty: &Ty) {
-        self.backend_writer.write_var_decl(&mut self.string, is_inout, is_packed, ident, ty);
+        self.backend_writer.write_var_decl(self.string, is_inout, is_packed, ident, ty);
     }
 
     fn write_ident(&mut self, ident: Ident) {
-        self.backend_writer.write_ident(&mut self.string, ident);
+        self.backend_writer.write_ident(self.string, ident);
     }
 
     fn write_ty_lit(&mut self, ty_lit: TyLit) {
-        self.backend_writer.write_ty_lit(&mut self.string, ty_lit);
+        self.backend_writer.write_ty_lit(self.string, ty_lit);
     }
 }
 
@@ -547,7 +547,7 @@ impl<'a> FnDeclGenerator<'a> {
     }
 
     fn write_var_decl(&mut self, is_inout: bool, is_packed: bool, ident: Ident, ty: &Ty) {
-        self.backend_writer.write_var_decl(&mut self.string, is_inout, is_packed, ident, ty);
+        self.backend_writer.write_var_decl(self.string, is_inout, is_packed, ident, ty);
     }
 }
 

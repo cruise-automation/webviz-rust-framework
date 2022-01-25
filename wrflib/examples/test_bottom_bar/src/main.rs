@@ -9,7 +9,7 @@ use wrflib::*;
 mod bottom_bar;
 use bottom_bar::*;
 
-pub struct BottomBarExampleApp {
+struct BottomBarExampleApp {
     window: Window,
     pass: Pass,
     main_view: View,
@@ -17,7 +17,7 @@ pub struct BottomBarExampleApp {
 }
 
 impl BottomBarExampleApp {
-    pub fn new(_cx: &mut Cx) -> Self {
+    fn new(_cx: &mut Cx) -> Self {
         Self {
             window: Window { create_inner_size: Some(Vec2 { x: 700., y: 400. }), ..Window::default() },
             pass: Pass::default(),
@@ -26,11 +26,11 @@ impl BottomBarExampleApp {
         }
     }
 
-    pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
+    fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
         self.bottom_bar.handle(cx, event);
     }
 
-    pub fn draw(&mut self, cx: &mut Cx) {
+    fn draw(&mut self, cx: &mut Cx) {
         self.window.begin_window(cx);
         self.pass.begin_pass(cx, Vec4::color("333"));
         self.main_view.begin_view(cx, LayoutSize::FILL);

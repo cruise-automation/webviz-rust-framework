@@ -30,7 +30,7 @@ struct CounterQuad {
 }
 
 #[derive(Default)]
-pub struct BareExampleApp {
+struct BareExampleApp {
     window: Window,
     pass: Pass,
     main_view: View,
@@ -38,11 +38,11 @@ pub struct BareExampleApp {
 }
 
 impl BareExampleApp {
-    pub fn new(_cx: &mut Cx) -> Self {
+    fn new(_cx: &mut Cx) -> Self {
         Self::default()
     }
 
-    pub fn handle(&mut self, _cx: &mut Cx, event: &mut Event) {
+    fn handle(&mut self, _cx: &mut Cx, event: &mut Event) {
         match event {
             Event::Construct => {}
             Event::FingerMove(fm) => {
@@ -52,7 +52,7 @@ impl BareExampleApp {
         }
     }
 
-    pub fn draw(&mut self, cx: &mut Cx) {
+    fn draw(&mut self, cx: &mut Cx) {
         self.window.begin_window(cx);
         self.pass.begin_pass(cx, Vec4::color("300"));
         self.main_view.begin_view(cx, LayoutSize::FILL);

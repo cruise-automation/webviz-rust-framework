@@ -1,6 +1,6 @@
 # Wrflib JS API
 
-| API                                         | browser top-level | browser WebWorker | native top-level | native WebWorker |
+| API                                         | browser top-level | browser Web Worker | native top-level | native Web Worker |
 | ------------------------------------------- | :---------------: | :---------------: | :--------------: | :--------------: |
 | wrflib.initialize                           |       ✅          |        —          |       ✅         |       —         |
 | wrflib.initializeWorker                     |        —          |        ✅          |       —         |       ❌         |

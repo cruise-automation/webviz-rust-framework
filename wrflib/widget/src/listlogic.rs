@@ -76,6 +76,7 @@ impl ListSelect {
 }
 
 impl ListLogic {
+    #[must_use]
     pub fn with_multi_select(self, multi_select: bool) -> Self {
         Self { multi_select, ..self }
     }

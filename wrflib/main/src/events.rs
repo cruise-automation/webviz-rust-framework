@@ -6,7 +6,7 @@
 
 //! Events coming from user actions, system calls, and so on.
 
-use crate::{universal_file::UniversalFile, *};
+use crate::*;
 use std::collections::{BTreeSet, HashMap};
 
 /// Modifiers that were held when a key event was fired.
@@ -469,6 +469,7 @@ impl Event {
     /// TODO(JP): Only checking the "first instance" for mouse events is
     /// confusing. Ideally we would check if the event falls within any of the
     /// instances covered by the [`Area`].
+    #[must_use]
     pub fn hits(&mut self, cx: &mut Cx, component_base: &ComponentBase, opt: HitOpt) -> Event {
         let area = component_base.area;
         let id = component_base.id;

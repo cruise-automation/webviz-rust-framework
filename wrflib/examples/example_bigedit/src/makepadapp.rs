@@ -129,6 +129,7 @@ impl MakepadApp {
     pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
         match event {
             Event::Construct => {
+                #[cfg(not(target_arch = "wasm32"))]
                 self.makepad_storage.init(cx);
                 self.default_layout(cx);
             }

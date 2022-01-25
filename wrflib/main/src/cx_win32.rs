@@ -54,12 +54,9 @@ pub(crate) struct Win32Window {
 
     pub(crate) time_start: u64,
 
-    pub(crate) last_key_mod: KeyModifiers,
     pub(crate) ime_spot: Vec2,
-    pub(crate) current_cursor: MouseCursor,
     pub(crate) last_mouse_pos: Vec2,
     pub(crate) fingers_down: Vec<bool>,
-    pub(crate) ignore_wmsize: usize,
     pub(crate) hwnd: Option<HWND>,
     pub(crate) track_mouse_event: bool,
 }
@@ -67,7 +64,7 @@ pub(crate) struct Win32Window {
 #[derive(Clone)]
 pub(crate) enum Win32Timer {
     Free,
-    Timer { win32_id: UINT_PTR, timer_id: u64, interval: f64, repeats: bool },
+    Timer { win32_id: UINT_PTR, timer_id: u64, repeats: bool },
     Resize { win32_id: UINT_PTR },
 }
 
@@ -218,7 +215,7 @@ impl Win32App {
     }
 
     pub(crate) fn get_free_timer_slot(&mut self) -> usize {
-        if self.free_timers.len() > 0 {
+        if !self.free_timers.is_empty() {
             self.free_timers.pop().unwrap()
         } else {
             let slot = self.timers.len();
@@ -230,7 +227,7 @@ impl Win32App {
     pub(crate) fn start_timer(&mut self, timer_id: u64, interval: f64, repeats: bool) {
         let slot = self.get_free_timer_slot();
         let win32_id = unsafe { winuser::SetTimer(NULL as HWND, 0, (interval * 1000.0) as u32, Some(Self::timer_proc)) };
-        self.timers[slot] = Win32Timer::Timer { timer_id, win32_id, interval, repeats };
+        self.timers[slot] = Win32Timer::Timer { timer_id, win32_id, repeats };
     }
 
     pub(crate) fn stop_timer(&mut self, which_timer_id: u64) {
@@ -249,7 +246,7 @@ impl Win32App {
 
     pub(crate) fn start_resize(&mut self) {
         let slot = self.get_free_timer_slot();
-        let win32_id = unsafe { winuser::SetTimer(NULL as HWND, 0, 8 as u32, Some(Self::timer_proc)) };
+        let win32_id = unsafe { winuser::SetTimer(NULL as HWND, 0, 8_u32, Some(Self::timer_proc)) };
         self.timers[slot] = Win32Timer::Resize { win32_id };
     }
 
@@ -271,7 +268,7 @@ impl Win32App {
             let status_id = isize::from_ne_bytes(status.0.to_ne_bytes());
 
             if let Ok(mut sigs) = win32_app.race_signals.lock() {
-                if win32_app.all_windows.len() > 0 {
+                if !win32_app.all_windows.is_empty() {
                     winuser::PostMessageW(
                         win32_app.all_windows[0],
                         winuser::WM_USER,
@@ -288,7 +285,7 @@ impl Win32App {
 
     pub(crate) fn terminate_event_loop(&mut self) {
         unsafe {
-            if self.all_windows.len() > 0 {
+            if !self.all_windows.is_empty() {
                 winuser::PostMessageW(self.all_windows[0], winuser::WM_QUIT, 0, 0);
             }
         }
@@ -377,12 +374,9 @@ impl Win32Window {
             win32_app,
             last_window_geom: WindowGeom::default(),
             time_start: win32_app.time_start,
-            last_key_mod: KeyModifiers::default(),
             ime_spot: Vec2::default(),
-            current_cursor: MouseCursor::Default,
             last_mouse_pos: Vec2::default(),
             fingers_down,
-            ignore_wmsize: 0,
             hwnd: None,
             track_mouse_event: false,
         }
@@ -723,7 +717,7 @@ impl Win32Window {
             }
             _ => return winuser::DefWindowProcW(hwnd, msg, wparam, lparam),
         }
-        return 1;
+        1
         // lets get the window
         // Unwinding into foreign code is undefined behavior. So we catch any panics that occur in our
         // code, and if a panic happens we cancel any future operations.
@@ -812,7 +806,7 @@ impl Win32Window {
             if (ex_style & winuser::WS_EX_TOPMOST) != 0 {
                 return true;
             }
-            return false;
+            false
         }
     }
 
@@ -839,7 +833,7 @@ impl Win32Window {
             if wp.showCmd as i32 == winuser::SW_MAXIMIZE {
                 return true;
             }
-            return false;
+            false
         }
     }
 

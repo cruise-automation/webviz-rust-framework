@@ -71,8 +71,8 @@ document.getElementById('root').textContent = "sum: " + sum + " product: " + pro
 
 Even though we called `callRust` multiple times with `values`, there was no copying of data involved!
 
-## Read-Only vs Mutatable
-The `values` buffer is read-only, which means that you can safely read from it in JavaScript and Rust at the same time! In fact, you can pass it safely to Rust threads or WebWorkers (using `wrflib.serializeWrfArrayForPostMessage`). Wrflib will keep track of where you use the array, so that it gets properly deallocated when you don't use it anymore.
+## Read-Only vs Mutable
+The `values` buffer is read-only, which means that you can safely read from it in JavaScript and Rust at the same time! In fact, you can pass it safely to Rust threads or Web Workers (using `wrflib.serializeWrfArrayForPostMessage`). Wrflib will keep track of where you use the array, so that it gets properly deallocated when you don't use it anymore.
 
 Note that we currently don't enforce that you don't mutate `values`. There is no built-in way in JavaScript to do that. (In the future we might run periodic checksums on the data in debug builds, to prevent bugs.)
 

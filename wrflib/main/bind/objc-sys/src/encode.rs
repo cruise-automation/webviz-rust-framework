@@ -4,13 +4,13 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
-use malloc_buf::MallocBuffer;
+use crate::malloc_buf::MallocBuffer;
 use std::ffi::CStr;
 use std::fmt;
 use std::os::raw::{c_char, c_void};
 use std::str;
 
-use runtime::{Class, Object, Sel};
+use crate::runtime::{Class, Object, Sel};
 
 const QUALIFIERS: &[char] = &[
     'r', // const
@@ -254,7 +254,7 @@ encode_args_impl!(A, B, C, D, E, F, G, H, I, J, K, L);
 #[cfg(test)]
 mod tests {
     use super::{Encode, Encoding};
-    use runtime::{Class, Object, Sel};
+    use crate::runtime::{Class, Object, Sel};
 
     #[test]
     fn test_encode() {

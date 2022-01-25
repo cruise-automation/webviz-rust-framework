@@ -20,7 +20,7 @@ fi
 # Used by `kill-descendants-on-exit.bash`.
 brew install pstree
 
-rustup toolchain install nightly-2021-08-03
+rustup toolchain install nightly-2022-01-18
 rustup target add wasm32-unknown-unknown
 rustup component add rustfmt
 rustup component add clippy

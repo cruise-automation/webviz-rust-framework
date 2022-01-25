@@ -154,21 +154,23 @@ const ANIM_DOWN: Anim = Anim {
 /// so that the knob can extend a little bit outside of the line and into the padded area.
 const HOR_PAD: f32 = 10.;
 
-impl FloatSlider {
-    pub fn new() -> Self {
+impl Default for FloatSlider {
+    fn default() -> Self {
         Self {
             component_base: Default::default(),
-            norm_value: 0.0,
-            scaled_value: 0.0,
-            animator: Animator::default(),
-            min: 0.0,
+            norm_value: Default::default(),
+            scaled_value: Default::default(),
+            animator: Default::default(),
+            min: Default::default(),
             max: 1.0,
-            step: None,
-            area: Area::Empty,
-            dragging: false,
+            step: Default::default(),
+            area: Default::default(),
+            dragging: Default::default(),
         }
     }
+}
 
+impl FloatSlider {
     fn animate(&mut self, cx: &mut Cx) {
         let slider = self.area.get_first_mut::<FloatSliderIns>(cx);
         slider.hover = self.animator.get_float(0);

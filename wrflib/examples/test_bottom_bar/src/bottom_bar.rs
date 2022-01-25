@@ -26,7 +26,7 @@ impl BottomBar {
                 ..TextInputOptions::default()
             }),
             play_speed_button: Button::default(),
-            slider: FloatSlider::new(),
+            slider: FloatSlider::default(),
             play_speed: String::from("1x"),
             position: 0.5,
         }

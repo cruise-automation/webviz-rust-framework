@@ -56,8 +56,8 @@ impl Popover {
     ///   TODO list, so there indeed isn't proper support for this yet. I think
     ///   it might be better to start in user space though, since that's more
     ///   flexible, and then we can "graduate" it when we're happy with it.
-    pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) {
-        event.hits(cx, &self.component_base, HitOpt::default());
+    pub fn handle(&mut self, _cx: &mut Cx, _event: &mut Event) {
+        // event.hits(cx, &self.component_base, HitOpt::default());
     }
 
     /// Draw the popover.

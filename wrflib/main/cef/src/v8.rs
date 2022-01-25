@@ -389,7 +389,7 @@ impl<T: V8Handler> V8HandlerWrapper<T> {
         let name = CefString::from_cef(cef_name);
         let object = V8Value::from(cef_object, false);
         let arguments: Vec<V8Value> = slice::from_raw_parts(cef_arguments, cef_arguments_count as usize)
-            .into_iter()
+            .iter()
             .map(|cef_argument| V8Value::from(*cef_argument, false))
             .collect();
         match handler.internal.execute(&name, &object, &arguments) {

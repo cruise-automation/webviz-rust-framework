@@ -8,6 +8,7 @@ use crate::geometry::Transformation;
 
 /// A trait to transform geometric objects in 2-dimensional Euclidian space.
 pub trait Transform {
+    #[must_use]
     fn transform<T>(self, t: &T) -> Self
     where
         T: Transformation;

@@ -108,7 +108,7 @@ impl TestSuiteApp {
                 let arc_ptr = params[0].as_str().parse::<u64>().unwrap() as *const Vec<u8>;
                 let arc: Arc<Vec<u8>> = unsafe { Arc::from_raw(arc_ptr) };
                 let count = Arc::strong_count(&arc);
-                Arc::into_raw(arc);
+                let _ = Arc::into_raw(arc);
                 vec![vec![count as u8].into_param()]
             }
             unknown_name => {

@@ -60,6 +60,9 @@ impl Default for Geometry {
 #[derive(Clone)]
 pub struct GpuGeometry {
     gpu_geometry_id: usize,
+
+    // Not actually dead, since this increases/decreases [`CxGpuGeometry::usage_count`].
+    #[allow(dead_code)]
     usage_count: Rc<()>,
 }
 impl GpuGeometry {

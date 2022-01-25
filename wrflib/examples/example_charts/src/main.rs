@@ -25,7 +25,7 @@ pub struct ChartsExampleApp {
 
 impl ChartsExampleApp {
     pub fn new(_: &mut Cx) -> Self {
-        let mut splitter = Splitter::new();
+        let mut splitter = Splitter::default();
         splitter.set_splitter_state(SplitterAlign::First, 300., Axis::Vertical);
         Self {
             window: Window { create_inner_size: Some(vec2(1000., 700.)), ..Window::default() },

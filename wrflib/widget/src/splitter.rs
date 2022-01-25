@@ -74,8 +74,8 @@ const ANIM_DOWN: Anim = Anim {
     ..Anim::DEFAULT
 };
 
-impl Splitter {
-    pub fn new() -> Self {
+impl Default for Splitter {
+    fn default() -> Self {
         Self {
             axis: Axis::Vertical,
             align: SplitterAlign::First,
@@ -96,7 +96,8 @@ impl Splitter {
             animator: Animator::default(),
         }
     }
-
+}
+impl Splitter {
     fn animate(&mut self, cx: &mut Cx) {
         self.bg.set_color(cx, self.animator.get_vec4(0));
     }
@@ -273,7 +274,7 @@ impl Splitter {
 
     pub fn end_draw(&mut self, cx: &mut Cx) {
         cx.end_row();
-        // draw the splitter in the middle of the turtle
+        // draw the splitter in the middle of the box
         let rect = cx.get_box_rect();
 
         self.animator.draw(cx, ANIM_DEFAULT);

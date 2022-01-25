@@ -253,7 +253,11 @@ export const initialize: Initialize = (initParams) => {
   return new Promise<void>((resolve) => {
     rpc = new Rpc(new Worker(new URL("./main_worker.ts", import.meta.url)));
 
-    const wasmPath = new URL(initParams.filename, document.baseURI).href;
+    const baseUri =
+      initParams.baseUri ??
+      window.location.protocol + "//" + window.location.host + "/";
+
+    const wasmPath = new URL(initParams.filename, baseUri).href;
 
     // Safari (as of version 15.2) needs the WebAssembly Module to be compiled on the browser's
     // main thread. This also allows us to start compiling while still waiting for the DOM to load.
@@ -646,7 +650,7 @@ export const initialize: Initialize = (initParams) => {
                 taskWorkerSab,
                 ctxPtr,
                 fileHandles,
-                baseUri: document.baseURI,
+                baseUri,
                 tlsAndStackData,
                 mainWorkerPort: channel.port2,
               },
@@ -669,7 +673,7 @@ export const initialize: Initialize = (initParams) => {
               wasmModule,
               offscreenCanvas,
               sizingData: getSizingData(),
-              baseUri: document.baseURI,
+              baseUri,
               memory: wasmMemory,
               taskWorkerSab,
             },

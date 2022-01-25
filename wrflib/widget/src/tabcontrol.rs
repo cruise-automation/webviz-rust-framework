@@ -42,8 +42,9 @@ const COLOR_BG_NORMAL: Vec4 = Vec4::all(0.);
 impl TabControl {
     pub fn new() -> Self {
         Self {
-            tabs_view: ScrollView::default()
-                .with_scroll_h(ScrollBar::new().with_bar_size(8.0).with_smoothing(0.15).with_use_vertical_finger_scroll(true)),
+            tabs_view: ScrollView::default().with_scroll_h(
+                ScrollBar::default().with_bar_size(8.0).with_smoothing(0.15).with_use_vertical_finger_scroll(true),
+            ),
 
             page_view: View::default(),
 

@@ -5,7 +5,6 @@
 # You may not use this file except in compliance with the License.
 
 [workspace]
-resolver = "2"
 members = [
     "wrflib/examples/example_bigedit",
     "wrflib/examples/example_bigedit/http",
@@ -26,6 +25,8 @@ members = [
     "wrflib/examples/test_padding",
     "wrflib/examples/test_popover",
     "wrflib/examples/test_shader_2d_primitives",
+    "wrflib/examples/tutorial_hello_world_console",
+    "wrflib/examples/tutorial_hello_thread",
     "wrflib/examples/tutorial_js_rust_bridge",
     "wrflib/test_suite",
 ]

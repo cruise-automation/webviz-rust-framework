@@ -265,7 +265,6 @@ pub struct SelectionIns {
 pub struct TextEditor {
     pub component_base: ComponentBase,
     pub view: ScrollView,
-    pub bg: Background,
     pub gutter_bg: Background,
     pub cursor: Cursor,
     pub cursor_row: Background,
@@ -401,7 +400,6 @@ pub struct CodeEditorColors {
 }
 
 // TODO(JP): Make these constant Vec4's instead of recomputing them all the time.
-const COLOR_BG: Vec4 = vec4(30.0 / 255.0, 30.0 / 255.0, 30.0 / 255.0, 1.0);
 const COLOR_GUTTER_BG: Vec4 = vec4(30.0 / 255.0, 30.0 / 255.0, 30.0 / 255.0, 1.0);
 const COLOR_INDENT_LINE_UNKNOWN: Vec4 = vec4(85.0 / 255.0, 85.0 / 255.0, 85.0 / 255.0, 1.0);
 const COLOR_INDENT_LINE_FN: Vec4 = vec4(220.0 / 255.0, 220.0 / 255.0, 174.0 / 255.0, 1.0);
@@ -441,19 +439,17 @@ const COLOR_WARNING: Vec4 = vec4(225.0 / 255.0, 229.0 / 255.0, 112.0 / 255.0, 1.
 const COLOR_ERROR: Vec4 = vec4(254.0 / 255.0, 0.0 / 255.0, 0.0 / 255.0, 1.0);
 const COLOR_DEFOCUS: Vec4 = vec4(128.0 / 255.0, 128.0 / 255.0, 128.0 / 255.0, 1.0);
 
-impl TextEditor {
-    pub fn new() -> Self {
+impl Default for TextEditor {
+    fn default() -> Self {
         Self {
             component_base: Default::default(),
             read_only: false,
             multiline: true,
-            cursors: TextCursorSet::new(),
+            cursors: TextCursorSet::default(),
 
             indent_lines: IndentLines::new(),
 
             view: ScrollView::new_standard_hv(),
-
-            bg: Background::default(),
 
             gutter_bg: Background::default().with_draw_depth(1.4),
 
@@ -506,9 +502,9 @@ impl TextEditor {
             folding_depth: 2,
             _anim_folding: AnimFolding { state: AnimFoldingState::Open, focussed_line: 0, did_animate: false },
             _select_scroll: None,
-            _draw_cursors: DrawCursors::new(),
-            _draw_search: DrawCursors::new(),
-            _draw_messages: DrawCursors::new(),
+            _draw_cursors: DrawCursors::default(),
+            _draw_search: DrawCursors::default(),
+            _draw_messages: DrawCursors::default(),
 
             _paren_stack: Vec::new(),
             _indent_stack: Vec::new(),
@@ -527,7 +523,8 @@ impl TextEditor {
             _line_number_glyphs: Vec::new(),
         }
     }
-
+}
+impl TextEditor {
     pub fn apply_style(&mut self) {
         // copy over colors
         self.colors.indent_line_unknown = COLOR_INDENT_LINE_UNKNOWN;
@@ -932,7 +929,7 @@ impl TextEditor {
             }
             // lets insert a newline
         } else if !self.multiline {
-            let replaced = te.input.replace("\n", "");
+            let replaced = te.input.replace('\n', "");
             self.cursors.replace_text(&replaced, text_buffer, None);
         } else {
             self.cursors.replace_text(&te.input, text_buffer, None);
@@ -1021,21 +1018,11 @@ impl TextEditor {
                         {
                             cx.request_draw();
                         } else if *status == TextBuffer::STATUS_KEYBOARD_UPDATE {
-                            if let Some(key_down) = &text_buffer.keyboard.key_down {
-                                match key_down {
-                                    KeyCode::Alt => {
-                                        self.start_code_folding(cx, text_buffer);
-                                    }
-                                    _ => (),
-                                }
+                            if let Some(KeyCode::Alt) = &text_buffer.keyboard.key_down {
+                                self.start_code_folding(cx, text_buffer);
                             }
-                            if let Some(key_up) = &text_buffer.keyboard.key_up {
-                                match key_up {
-                                    KeyCode::Alt => {
-                                        self.start_code_unfolding(cx, text_buffer);
-                                    }
-                                    _ => (),
-                                }
+                            if let Some(KeyCode::Alt) = &text_buffer.keyboard.key_up {
+                                self.start_code_unfolding(cx, text_buffer);
                             }
                         }
                     }
@@ -1148,9 +1135,9 @@ impl TextEditor {
     pub fn init_draw_state(&mut self, cx: &mut Cx, text_buffer: &TextBuffer) {
         self._monospace_base = TextIns::get_monospace_base(cx, &TEXT_STYLE_MONO);
         self.set_font_scale(cx, self.open_font_scale);
-        self._draw_cursors = DrawCursors::new();
-        self._draw_messages = DrawCursors::new();
-        self._draw_search = DrawCursors::new();
+        self._draw_cursors = DrawCursors::default();
+        self._draw_messages = DrawCursors::default();
+        self._draw_search = DrawCursors::default();
         self._tokens_on_line = 0;
         self._visible_lines = 0;
         self._newline_tabs = 0;
@@ -1171,12 +1158,7 @@ impl TextEditor {
         cx.move_draw_pos(self.line_number_width, self.top_padding);
     }
 
-    pub fn begin_text_editor(
-        &mut self,
-        cx: &mut Cx,
-        text_buffer: &TextBuffer,
-        override_layout_size: Option<LayoutSize>,
-    ) -> Result<(), ()> {
+    pub fn begin_text_editor(&mut self, cx: &mut Cx, text_buffer: &TextBuffer, override_layout_size: Option<LayoutSize>) {
         // adjust dilation based on DPI factor
 
         if let Some(layout_size) = override_layout_size {
@@ -1196,7 +1178,6 @@ impl TextEditor {
             self.set_key_focus(cx);
         }
 
-        self.bg.draw_with_scroll_sticky(cx, cx.get_turtle_rect(), COLOR_BG);
         self.begin_draw_objects();
 
         if let Some(select_scroll) = &mut self._select_scroll {
@@ -1228,8 +1209,6 @@ impl TextEditor {
         self.init_draw_state(cx, text_buffer);
 
         self._scroll_pos = self.view.get_scroll_pos(cx);
-
-        Ok(())
     }
 
     fn do_folding_animation_step(&mut self, cx: &mut Cx) {
@@ -1276,7 +1255,7 @@ impl TextEditor {
         let pos = cx.get_draw_pos();
         let vy = cx.get_box_origin().y + scroll.y;
         let vh = cx.get_height_total();
-        return !(pos.y > vy + vh || pos.y + min_height < vy);
+        !(pos.y > vy + vh || pos.y + min_height < vy)
     }
 
     fn draw_new_line(&mut self, cx: &mut Cx) {
@@ -1382,7 +1361,7 @@ impl TextEditor {
         &mut self,
         cx: &mut Cx,
         token_chunks_index: usize,
-        flat_text: &Vec<char>,
+        flat_text: &[char],
         token_chunk: &TokenChunk,
         markers: &TextBufferMarkers,
     ) {
@@ -1806,8 +1785,7 @@ impl TextEditor {
         let origin = cx.get_box_origin();
         let message_markers = &mut self._draw_messages.selections;
 
-        for i in 0..message_markers.len() {
-            let mark = &message_markers[i];
+        for mark in message_markers {
             let body = &text_buffer.markers.message_bodies[mark.index];
             self.message_marker.color = match body.level {
                 TextBufferMessageLevel::Warning => self.colors.message_marker_warning,
@@ -1912,8 +1890,7 @@ impl TextEditor {
             let sel = &mut self._draw_cursors.selections;
 
             let mut anim_select_any = false;
-            for i in 0..sel.len() {
-                let cur = &mut sel[i];
+            for (i, cur) in sel.iter_mut().enumerate() {
                 let start_time = if self._select_scroll.is_none() && self._last_finger_move.is_some() { 1. } else { 0. };
                 // silly selection animation start
                 if i < self._anim_select.len() && cur.rc.pos.y < self._anim_select[i].ypos {
@@ -1983,7 +1960,7 @@ impl TextEditor {
     }
 
     pub fn reset_cursors(&mut self) {
-        self.cursors = TextCursorSet::new();
+        self.cursors = TextCursorSet::default();
     }
 
     fn scroll_last_cursor_visible(&mut self, cx: &mut Cx, text_buffer: &TextBuffer, height_pad: f32) {
@@ -2244,19 +2221,11 @@ pub struct ParenItem {
 
 impl AnimFoldingState {
     fn is_animating(&self) -> bool {
-        match self {
-            AnimFoldingState::Open => false,
-            AnimFoldingState::Folded => false,
-            _ => true,
-        }
+        !matches!(self, AnimFoldingState::Open | AnimFoldingState::Folded)
     }
 
     fn is_folded(&self) -> bool {
-        match self {
-            AnimFoldingState::Folded => true,
-            AnimFoldingState::Folding(_, _, _) => true,
-            _ => false,
-        }
+        matches!(self, AnimFoldingState::Folded | AnimFoldingState::Folding(_, _, _))
     }
 
     fn get_font_size(&self, open_size: f32, folded_size: f32) -> f32 {

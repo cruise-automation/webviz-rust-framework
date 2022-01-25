@@ -15,7 +15,7 @@ pub struct JSEditor {
 
 impl JSEditor {
     pub fn new() -> Self {
-        Self { text_editor: TextEditor { folding_depth: 3, ..TextEditor::new() } }
+        Self { text_editor: TextEditor { folding_depth: 3, ..TextEditor::default() } }
     }
 
     pub fn handle(&mut self, cx: &mut Cx, event: &mut Event, mtb: &mut MakepadTextBuffer) -> TextEditorEvent {
@@ -25,13 +25,12 @@ impl JSEditor {
     pub fn draw(&mut self, cx: &mut Cx, mtb: &mut MakepadTextBuffer, search_index: Option<&mut SearchIndex>) {
         JSTokenizer::update_token_chunks(mtb, search_index);
 
-        if self.text_editor.begin_text_editor(cx, &mut mtb.text_buffer, None).is_ok() {
-            for (index, token_chunk) in mtb.text_buffer.token_chunks.iter_mut().enumerate() {
-                self.text_editor.draw_chunk(cx, index, &mtb.text_buffer.flat_text, token_chunk, &mtb.text_buffer.markers);
-            }
-
-            self.text_editor.end_text_editor(cx, &mut mtb.text_buffer);
+        self.text_editor.begin_text_editor(cx, &mut mtb.text_buffer, None);
+        for (index, token_chunk) in mtb.text_buffer.token_chunks.iter_mut().enumerate() {
+            self.text_editor.draw_chunk(cx, index, &mtb.text_buffer.flat_text, token_chunk, &mtb.text_buffer.markers);
         }
+
+        self.text_editor.end_text_editor(cx, &mut mtb.text_buffer);
     }
 }
 

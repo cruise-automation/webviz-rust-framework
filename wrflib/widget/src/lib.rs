@@ -12,8 +12,6 @@
 #![allow(clippy::float_cmp)]
 // We want to use links to private fields, since we use `--document-private-items`.
 #![allow(rustdoc::private_intra_doc_links)]
-// Clippy TODO
-#![warn(clippy::all)]
 
 mod background;
 pub use crate::background::*;

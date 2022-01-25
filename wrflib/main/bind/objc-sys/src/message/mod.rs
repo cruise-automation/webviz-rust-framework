@@ -9,13 +9,13 @@ use std::error::Error;
 use std::fmt;
 use std::mem;
 
-use runtime::{Class, Imp, Object, Sel};
-use {Encode, EncodeArguments};
+use crate::runtime::{Class, Imp, Object, Sel};
+use crate::{Encode, EncodeArguments};
 
 #[cfg(feature = "exception")]
 macro_rules! objc_try {
     ($b:block) => {
-        $crate::exception::try(|| $b).map_err(|exception| {
+        $crate::exception::r#try(|| $b).map_err(|exception| {
             if exception.is_null() {
                 MessageError("Uncaught exception nil".to_owned())
             } else {
@@ -247,8 +247,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::Message;
-    use runtime::Object;
-    use test_utils;
+    use crate::runtime::Object;
+    use crate::test_utils;
 
     #[test]
     fn test_send_message() {

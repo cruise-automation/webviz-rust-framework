@@ -98,7 +98,7 @@ impl<'a, 'b> ShaderGenerator<'a> {
         }
         self.generate_fn_decl(vertex_decl, self.backend_writer);
         writeln!(self.string, "void main() {{").unwrap();
-        let mut geometry_unpacker = VarUnpacker::new("mpsc_packed_geometry", packed_geometries_size, &mut self.string);
+        let mut geometry_unpacker = VarUnpacker::new("mpsc_packed_geometry", packed_geometries_size, self.string);
         for decl in &self.shader.decls {
             match decl {
                 Decl::Geometry(decl) => {
@@ -107,7 +107,7 @@ impl<'a, 'b> ShaderGenerator<'a> {
                 _ => {}
             }
         }
-        let mut instance_unpacker = VarUnpacker::new("mpsc_packed_instance", packed_instances_size, &mut self.string);
+        let mut instance_unpacker = VarUnpacker::new("mpsc_packed_instance", packed_instances_size, self.string);
         for decl in &self.shader.decls {
             match decl {
                 Decl::Instance(decl) => {
@@ -117,7 +117,7 @@ impl<'a, 'b> ShaderGenerator<'a> {
             }
         }
         writeln!(self.string, "    gl_Position = vertex();").unwrap();
-        let mut varying_packer = VarPacker::new("mpsc_packed_varying", packed_varyings_size, &mut self.string);
+        let mut varying_packer = VarPacker::new("mpsc_packed_varying", packed_varyings_size, self.string);
         for decl in &self.shader.decls {
             match decl {
                 Decl::Geometry(decl) if decl.is_used_in_fragment_shader.get().unwrap() => {
@@ -168,7 +168,7 @@ impl<'a, 'b> ShaderGenerator<'a> {
         }
         self.generate_fn_decl(pixel_decl, self.backend_writer);
         writeln!(self.string, "void main() {{").unwrap();
-        let mut varying_unpacker = VarUnpacker::new("mpsc_packed_varying", packed_varyings_size, &mut self.string);
+        let mut varying_unpacker = VarUnpacker::new("mpsc_packed_varying", packed_varyings_size, self.string);
         for decl in &self.shader.decls {
             match decl {
                 Decl::Geometry(decl) if decl.is_used_in_fragment_shader.get().unwrap() => {
@@ -432,11 +432,11 @@ impl<'a, 'b> ShaderGenerator<'a> {
     }
 
     fn write_var_decl(&mut self, is_inout: bool, ident: Ident, ty: &Ty) {
-        self.backend_writer.write_var_decl(&mut self.string, is_inout, false, ident, ty);
+        self.backend_writer.write_var_decl(self.string, is_inout, false, ident, ty);
     }
 
     fn write_ty_lit(&mut self, ty_lit: TyLit) {
-        self.backend_writer.write_ty_lit(&mut self.string, ty_lit);
+        self.backend_writer.write_ty_lit(self.string, ty_lit);
     }
 }
 
@@ -494,7 +494,7 @@ impl<'a> FnDeclGenerator<'a> {
     }
 
     fn write_var_decl(&mut self, is_inout: bool, ident: Ident, ty: &Ty) {
-        self.backend_writer.write_var_decl(&mut self.string, is_inout, false, ident, ty);
+        self.backend_writer.write_var_decl(self.string, is_inout, false, ident, ty);
     }
 }
 

@@ -20,12 +20,7 @@ These are all the types of parameters that can be sent over the JS-Rust bridge:
 <tr><td>Caveats</td><td>No enforcement of read-only on JS side (yet).</td></tr>
 <thead><tr><td colspan="2">WrfParam::ReadOnlyF32Buffer</td></tr></thead>
 <tr><td colspan="2"><em>Most common for graphics data.</em></td></tr>
-<tr><td>Create in JS</td><td><code>wrflib.createReadOnlyBuffer(new Float32Array([1, 2, 3]))</code></td></tr>
-<tr><td>Type in Rust</td><td><code>Arc&lt;Vec&lt;f32>></code></td></tr>
-<tr><td>Returned to JS</td><td><code>WrfTypedArray (extends Float32Array)</code></td></tr>
-<tr><td>Borrowing data</td><td><code>as_f32_slice() -> &[f32]</code></td></tr>
-<tr><td>Adding ownership (refcount)</td><td><code>as_arc_vec_f32() -> Arc&lt;Vec&lt;f32>></code></td></tr>
-<tr><td>Caveats</td><td>No enforcement of read-only on JS side (yet).</td></tr>
+<tr><td colspan="2">Same as above, but instead with <code>f32</code> and <code>Float32Array</code>.</td></tr>
 <thead><tr><td colspan="2">WrfParam::MutableU8Buffer</td></tr></thead>
 <tr><td colspan="2"><em>Less common.</em></td></tr>
 <tr><td>Create in JS</td><td><code>wrflib.createMutableBuffer(new Uint8Array([1, 2, 3]))</code></td></tr>
@@ -36,15 +31,10 @@ These are all the types of parameters that can be sent over the JS-Rust bridge:
 <tr><td>Caveats</td><td>Once passed from JS to Rust, the data cannot be used on the JS side any more (neither reading nor writing); representing transfer of ownership to Rust. This is not enforced (yet).</td></tr>
 <thead><tr><td colspan="2">WrfParam::MutableF32Buffer</td></tr></thead>
 <tr><td colspan="2"><em>Less common.</em></td></tr>
-<tr><td>Create in JS</td><td><code>wrflib.createMutableBuffer(new Float32Array([1, 2, 3]))</code></td></tr>
-<tr><td>Type in Rust</td><td><code>Vec&lt;f32></code></td></tr>
-<tr><td>Returned to JS</td><td><code>WrfTypedArray (extends Float32Array)</code></td></tr>
-<tr><td>Borrowing data</td><td><code>as_f32_slice() -> &[f32]</code></td></tr>
-<tr><td>Transferring ownership</td><td><code>into_vec_f32() -> Vec&lt;f32></code></td></tr>
-<tr><td>Caveats</td><td>Once passed from JS to Rust, the data cannot be used on the JS side any more (neither reading nor writing); representing transfer of ownership to Rust. This is not enforced (yet).</td></tr>
+<tr><td colspan="2">Same as above, but instead with <code>f32</code> and <code>Float32Array</code>.</td></tr>
 </table>
 
-As noted in the caveats above, you must take care when using these buffers on the Javascript side:
+As noted in the caveats above, you must take care when using these buffers on the JavaScript side:
 * **Read-only buffers should not be mutated in JS.** If you do mutate them anyway, race conditions and data corruption can occur. This restriction is not enforced (yet).
 * Mutable buffers can be mutated in JS. However, **once you pass a mutable buffer into Rust, you cannot use the buffer in JS in *any way*.** This is because ownership is passed to Rust, which can now mutate the data. If you read from such a stale buffer in JS, race conditions and data corruption can occur. This restriction is not enforced (yet).
   * It is possible to mutate some data in JS, then in Rust, and then in JS again, without ever copying of the data. Just pass the mutable buffer back from Rust to JS when you're done with it.

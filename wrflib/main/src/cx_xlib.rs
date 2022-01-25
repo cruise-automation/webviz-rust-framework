@@ -767,7 +767,7 @@ impl XlibApp {
                 delta_timeout -= timer.delta_timeout;
                 false
             })
-            .unwrap_or_else(|| self.timers.len());
+            .unwrap_or(self.timers.len());
 
         // Insert the timer in the list.
         //

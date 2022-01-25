@@ -8,9 +8,9 @@ use std::ops::{Deref, DerefMut};
 use std::os::raw::c_char;
 use std::sync::Once;
 
-use declare::{ClassDecl, ProtocolDecl};
-use runtime::{self, Class, Object, Protocol, Sel};
-use {Encode, Encoding};
+use crate::declare::{ClassDecl, ProtocolDecl};
+use crate::runtime::{self, Class, Object, Protocol, Sel};
+use crate::{Encode, Encoding};
 
 pub struct CustomObject {
     obj: *mut Object,

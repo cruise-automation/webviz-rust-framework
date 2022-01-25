@@ -840,7 +840,7 @@ impl CxPlatformTexture {
         let width = desc.width.unwrap_or(default_size.x as usize) as u64;
         let height = desc.height.unwrap_or(default_size.y as usize) as u64;
 
-        if self.inner.as_mut().map_or(false, |inner| {
+        let inited = self.inner.as_mut().map_or(false, |inner| {
             if inner.width != width {
                 return false;
             }
@@ -855,7 +855,8 @@ impl CxPlatformTexture {
             }
             inner.is_inited = true;
             true
-        }) {
+        });
+        if inited {
             return;
         }
 
@@ -925,12 +926,14 @@ impl<T> MetalRwLock<T> {
     }
 
     fn gpu_read(&self) -> MetalRwLockGpuReadGuard {
+        #[allow(clippy::mutex_atomic)]
         let mut reader_count = self.inner.reader_count.lock().unwrap();
         *reader_count += 1;
         MetalRwLockGpuReadGuard { inner: self.inner.clone() }
     }
 
     fn cpu_write(&mut self) -> &mut T {
+        #[allow(clippy::mutex_atomic)]
         let mut reader_count = self.inner.reader_count.lock().unwrap();
         while *reader_count != 0 {
             reader_count = self.inner.condvar.wait(reader_count).unwrap();
@@ -940,6 +943,9 @@ impl<T> MetalRwLock<T> {
 }
 
 #[derive(Default)]
+#[allow(clippy::mutex_atomic)]
+// This is a false positive since Clippy is unable to detect us
+// waiting on the Mutex in `cpu_write`
 struct MetalRwLockInner {
     reader_count: Mutex<usize>,
     condvar: Condvar,
@@ -951,6 +957,7 @@ struct MetalRwLockGpuReadGuard {
 
 impl Drop for MetalRwLockGpuReadGuard {
     fn drop(&mut self) {
+        #[allow(clippy::mutex_atomic)]
         let mut reader_count = self.inner.reader_count.lock().unwrap();
         *reader_count -= 1;
         if *reader_count == 0 {

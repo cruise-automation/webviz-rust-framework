@@ -17,7 +17,6 @@
 mod analyse;
 mod builtin;
 mod const_eval;
-mod const_gather;
 mod dep_analyse;
 mod detok;
 mod env;

@@ -21,6 +21,7 @@ module.exports = {
       name: "wrflib",
       type: "umd",
     },
+    clean: true,
   },
   module: {
     rules: [

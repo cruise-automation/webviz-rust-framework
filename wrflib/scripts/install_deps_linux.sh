@@ -11,7 +11,7 @@ set -euo pipefail
 # Per https://stackoverflow.com/a/16349776
 cd "${0%/*}"
 
-rustup toolchain install nightly-2021-08-03
+rustup toolchain install nightly-2022-01-18
 rustup target add wasm32-unknown-unknown
 rustup component add rustfmt
 rustup component add clippy
