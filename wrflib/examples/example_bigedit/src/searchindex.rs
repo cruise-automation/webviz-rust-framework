@@ -7,7 +7,7 @@
 use crate::makepadstorage::*;
 use std::collections::HashMap;
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 #[derive(Clone, Default)]
 pub struct SearchIndex {

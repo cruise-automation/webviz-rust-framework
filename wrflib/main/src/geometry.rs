@@ -10,26 +10,26 @@ use std::rc::Rc;
 
 use crate::*;
 
-/// Generated geometry data, used for instanced rendering.
+/// Generated geometry data used for instanced rendering, represented as triangles.
 ///
 /// For example, you can define that a quad has 4 vertices, spanning 2 triangles
 /// (for use in e.g. [`crate::QuadIns`]), so you don't have to manually create
 /// them every time you want to render a quad.
 pub struct Geometry {
-    /// The vertex attributes; corresponds to "geometry" fields in the shader.
-    ///
-    /// Be sure to use `#[repr(C)]` in the structs you pass in, and only use
-    /// [`f32`]/[`Vec2`]/[`Vec3`]/[`Vec4`].
-    ///
-    /// Anything that we can get an f32-slice (`[f32]`) from works here.
     vertex_attributes: Box<dyn AsF32Slice>,
-
-    /// The indices of vertex attributes to render each triangle with.
-    ///
-    /// A triangle has 3 vertices, hence we group indices in sets of 3.
     triangle_indices: Vec<[u32; 3]>,
 }
 impl Geometry {
+    /// Instantiates a new [`Geometry`].
+    ///
+    /// `vertex_attributes` correspond to "geometry" fields in the shader.
+    /// Be sure to use `#[repr(C)]` in the structs you pass in. Structs can only
+    /// contain fields of type [`f32`]/[`Vec2`]/[`Vec3`]/[`Vec4`].
+    ///
+    /// Anything that we can get an f32-slice (`[f32]`) from works here.
+    ///
+    /// `triangle_indices` - the indices of vertex attributes by which to render each triangle.
+    /// A triangle has 3 vertices, hence we group indices in sets of 3.
     pub fn new<T: 'static + Sized>(vertex_attributes: Vec<T>, triangle_indices: Vec<[u32; 3]>) -> Self {
         Self { vertex_attributes: Box::new(vertex_attributes), triangle_indices }
     }
@@ -66,7 +66,7 @@ pub struct GpuGeometry {
     usage_count: Rc<()>,
 }
 impl GpuGeometry {
-    /// Create a [`GpuGeometry`] out of indices and vertex attributes.
+    /// Create a [`GpuGeometry`] from a [`Geometry`].
     pub fn new(cx: &mut Cx, geometry: Geometry) -> Self {
         let gpu_geometry_id =
             cx.gpu_geometries.iter().position(|gpu_geometry| gpu_geometry.usage_count() == 0).unwrap_or_else(|| {

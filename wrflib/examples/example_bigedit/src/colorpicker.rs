@@ -42,7 +42,7 @@ static SHADER: Shader = Shader {
             }
 
             fn pixel() -> vec4 {
-                let rgbv = Pal::hsv2rgb(vec4(hue, sat, val, 1.));
+                let rgbv = hsv2rgb(vec4(hue, sat, val, 1.));
                 let w = rect_size.x;
                 let h = rect_size.y;
                 let df = Df::viewport(pos * vec2(w, h));
@@ -56,7 +56,8 @@ static SHADER: Shader = Shader {
                 df.hexagon(cx, cy, w * 0.4);
                 df.subtract();
                 let ang = atan(pos.x * w - cx, 0.0001 + pos.y * h - cy) / PI * 0.5 - 0.33333;
-                df.fill(Pal::hsv2rgb(vec4(ang, 1.0, 1.0, 1.0)));
+                df.fill(hsv2rgb(vec4(ang, 1.0, 1.0, 1.0)));
+                df.new_path();
 
                 let rsize = inner / sqrt(2.0);
                 df.rect(cx - rsize, cy - rsize, rsize * 2.0, rsize * 2.0);
@@ -64,7 +65,8 @@ static SHADER: Shader = Shader {
                 let norm_rect = vec2(pos.x * w - (cx - inner), pos.y * h - (cy - inner)) / (2. * inner);
                 let circ = clamp(circ_to_rect(norm_rect.x * 2. - 1., norm_rect.y * 2. - 1.), vec2(-1.), vec2(1.));
 
-                df.fill(Pal::hsv2rgb(vec4(hue, (circ.x * .5 + .5), 1. - (circ.y * .5 + .5), 1.)));
+                df.fill(hsv2rgb(vec4(hue, (circ.x * .5 + .5), 1. - (circ.y * .5 + .5), 1.)));
+                df.new_path();
 
                 let col_angle = (hue + .333333) * 2. * PI;
                 let circle_puk = vec2(sin(col_angle) * radius + cx, cos(col_angle) * radius + cy);
@@ -77,15 +79,19 @@ static SHADER: Shader = Shader {
                 df.rect(cx - rsize, cy - rsize, rsize * 2.0, rsize * 2.0);
                 df.intersect();
                 df.fill(color);
+                df.new_path();
                 df.circle(rect_puk.x, rect_puk.y, puck_size - 1. - 2. * hover + down);
                 df.rect(cx - rsize, cy - rsize, rsize * 2.0, rsize * 2.0);
                 df.intersect();
                 df.fill(rgbv);
+                df.new_path();
 
                 df.circle(circle_puk.x, circle_puk.y, puck_size);
                 df.fill(color);
+                df.new_path();
                 df.circle(circle_puk.x, circle_puk.y, puck_size - 1. - 2. * hover + down);
                 df.fill(rgbv);
+                df.new_path();
 
                 return df.result;
             }"#
@@ -102,7 +108,7 @@ pub enum ColorPickerEvent {
 
 #[derive(Default)]
 pub struct ColorPicker {
-    component_base: ComponentBase,
+    component_id: ComponentId,
     size: f32,
     area: Area,
     animator: Animator,
@@ -195,7 +201,7 @@ impl ColorPicker {
             self.animate(cx);
         }
 
-        match event.hits(cx, &self.component_base, HitOpt::default()) {
+        match event.hits_finger(cx, self.component_id, self.area.get_rect_for_first_instance(cx)) {
             Event::FingerHover(fe) => {
                 cx.set_hover_mouse_cursor(MouseCursor::Arrow);
 
@@ -255,8 +261,6 @@ impl ColorPicker {
             &SHADER,
             &[ColorPickerIns { base: QuadIns::from_rect(rect), hue: hsva.x, sat: hsva.y, val: hsva.z, ..Default::default() }],
         );
-
-        self.component_base.register_component_area(cx, self.area);
 
         self.animator.draw(cx, ANIM_DEFAULT);
         self.animate(cx);

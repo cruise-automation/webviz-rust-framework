@@ -18,7 +18,7 @@ use crate::searchresults::*;
 use crate::worldview::WorldView;
 use std::collections::HashMap;
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 #[derive(Debug, Clone)]
 pub enum Panel {
@@ -106,7 +106,7 @@ impl WrfWindow {
                                 closeable: true,
                                 title: "skybox.rs".to_string(),
                                 item: Panel::FileEditor {
-                                    path: "main/wrflib/wrflib/widget/src/skybox.rs".to_string(),
+                                    path: "main/wrflib/wrflib/components/src/skybox.rs".to_string(),
                                     scroll_pos: Vec2::default(),
                                     editor_id: 3,
                                 },

@@ -5,7 +5,7 @@
 // You may not use this file except in compliance with the License.
 
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 const COLOR_INNER: Vec4 = vec4(0.8, 0.2, 0.4, 1.);
 

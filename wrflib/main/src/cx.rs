@@ -135,16 +135,16 @@ pub struct Cx {
     /// The last [`Signal::signal_id`] that was issued.
     pub(crate) last_signal_id: usize,
 
-    /// The current [`ComponentBase`] that has keyboard focus, so it can register key input [`Event`]s.
+    /// The current [`ComponentId`] that has keyboard focus, so it can register key input [`Event`]s.
     ///
     /// See also [`Cx::prev_key_focus`] and [`Cx::next_key_focus`].
     pub(crate) key_focus: Option<ComponentId>,
-    /// The [`ComponentBase`] that previously was [`Cx::key_focus`], so you can revert it using
+    /// The [`ComponentId`] that previously was [`Cx::key_focus`], so you can revert it using
     /// [`Cx::revert_key_focus`].
     ///
     /// See also [`Cx::key_focus`] and [`Cx::next_key_focus`].
     prev_key_focus: Option<ComponentId>,
-    /// The [`ComponentBase`] that will become [`Cx::key_focus`] when the current events are handled.
+    /// The [`ComponentId`] that will become [`Cx::key_focus`] when the current events are handled.
     /// Gets set using [`Cx::set_key_focus`] or [`Cx::revert_key_focus`].
     ///
     /// See also [`Cx::prev_key_focus`] and [`Cx::next_key_focus`].
@@ -224,8 +224,6 @@ pub struct Cx {
     /// Various debug logs that are getting appended during draw cycle.
     /// See [`DebugLog`] for more information on supported types
     pub(crate) debug_logs: Vec<DebugLog>,
-
-    pub(crate) next_component_id: u64,
 
     /// Function registered through [`Cx::on_call_rust`]
     pub call_rust_fn: Option<usize>,
@@ -366,7 +364,6 @@ impl Cx {
             cef_browser: MaybeCefBrowser::new(),
 
             debug_logs: Vec::new(),
-            next_component_id: 1, // Using 1 instead of 0 to avoid confusion for if someone thinks 0 means empty.
 
             call_rust_fn: None,
             app_type_id,
@@ -571,17 +568,13 @@ impl Cx {
         self.requested_draw = true;
     }
 
-    /// Sets a [`ComponentBase`] that will become [`Cx::key_focus`] when the current events are handled.
+    /// Sets a [`ComponentId`] that will become [`Cx::key_focus`] when the current events are handled.
     ///
     /// TODO(JP): It's possible to set this during the draw cycle instead of during an
     /// event handler, and then it won't update [`Cx::key_focus`] until the next event
     /// is handled. We should probably guard against that.
-    pub fn set_key_focus(&mut self, focus_component_base: Option<&ComponentBase>) {
-        if let Some(mgr) = focus_component_base {
-            self.next_key_focus = Some(mgr.id);
-        } else {
-            self.next_key_focus = Some(None);
-        }
+    pub fn set_key_focus(&mut self, focus_component_id: Option<ComponentId>) {
+        self.next_key_focus = Some(focus_component_id);
     }
 
     /// Keep the existing key focus during an [`Event::FingerDown`], because otherwise we'll reset
@@ -599,9 +592,9 @@ impl Cx {
         self.next_key_focus = Some(self.prev_key_focus);
     }
 
-    /// Check if an [`ComponentBase`] currently has keyboard focus.
-    pub fn has_key_focus(&self, component_base: Option<&ComponentBase>) -> bool {
-        self.key_focus == component_base.and_then(|mgr| mgr.id)
+    /// Check if a [`ComponentId`] currently has keyboard focus.
+    pub fn has_key_focus(&self, component_id: Option<ComponentId>) -> bool {
+        self.key_focus == component_id
     }
 
     pub(crate) fn process_key_down(&mut self, key_event: KeyEvent) {

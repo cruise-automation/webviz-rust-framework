@@ -397,199 +397,102 @@ impl Default for Event {
     }
 }
 
-/// A margin around the area that is checked for event hits
-#[derive(Clone, Copy, Debug)]
-pub struct Margin {
-    pub l: f32,
-    pub t: f32,
-    pub r: f32,
-    pub b: f32,
-}
-impl Margin {
-    pub const ZERO: Margin = Margin { l: 0.0, t: 0.0, r: 0.0, b: 0.0 };
-
-    /// TODO(JP): Replace these with Margin::default() when
-    /// <https://github.com/rust-lang/rust/issues/67792> gets done
-    pub const DEFAULT: Margin = Margin::ZERO;
-
-    pub const fn all(v: f32) -> Margin {
-        Margin { l: v, t: v, r: v, b: v }
-    }
-
-    pub const fn left(v: f32) -> Margin {
-        Margin { l: v, ..Margin::ZERO }
-    }
-
-    pub const fn top(v: f32) -> Margin {
-        Margin { t: v, ..Margin::ZERO }
-    }
-
-    pub const fn right(v: f32) -> Margin {
-        Margin { r: v, ..Margin::ZERO }
-    }
-
-    pub const fn bottom(v: f32) -> Margin {
-        Margin { b: v, ..Margin::ZERO }
-    }
-}
-
-impl Default for Margin {
-    fn default() -> Self {
-        Margin::DEFAULT
-    }
-}
-
-/// Modify the behavior of [`Event::hits`].
-#[derive(Clone, Debug, Default)]
-pub struct HitOpt {
-    pub use_multi_touch: bool,
-    pub margin: Option<Margin>,
-}
-
 impl Event {
-    /// Checks if an [`Event`] matches an [`ComponentBase`].
+    /// Checks if an [`Event`] is a finger-event with coordinates falling inside
+    /// [`Rect`], or already has an associated [`ComponentId`] that matches the given one.
     ///
-    /// For key/text events, it checks if the given [`Area`] matches _exactly_
-    /// the one currently set in [`Cx::key_focus`] (which gets set through
-    /// [`Cx::set_key_focus`]).
+    /// For unhandled [`Event::FingerDown`] and [`Event::FingerHover`] events, the given
+    /// [`ComponentId`] will be associated with that finger (if the event falls in [`Rect`]).
     ///
-    /// For mouse events, it checks if the event coordinates fall in the [`Rect`]
-    /// of the _first instance_ of the [`Area`].
+    /// For [`Event::FingerUp`] (and [`Event::FingerHover`] with [`HoverState::Out`]) it's
+    /// the other way around: if the finger is associated with the given [`ComponentId`], it
+    /// will be returned regardless of [`Rect`].
     ///
-    /// This will return [`Event::None`] if [`Area::is_valid`] returns false.
-    /// This is sometimes useful, e.g. when clicking a button that brings a
-    /// previously hidden [`Area`] into view. A subsequent event might then
-    /// call [`Event::hits`] on that (old) [`Area`], before it had a chance
-    /// to get rerendered, so we just ignore it.
-    ///
-    /// TODO(JP): For the [`Area::is_valid`] case described above, should we
-    /// instead explicitly set an area to [`Area::Empty`] when it goes out of
-    /// view? Would that be better, or just more work?
-    ///
-    /// TODO(JP): Only checking the "first instance" for mouse events is
-    /// confusing. Ideally we would check if the event falls within any of the
-    /// instances covered by the [`Area`].
+    /// We pass in [`Option<Rect>`] instead of [`Rect`] for convenience, since it often comes
+    /// from [`Area::get_rect_for_first_instance`], which returns [`Option<Rect>`]. When passing
+    /// in [`None`], we always return [`Event::None`].
     #[must_use]
-    pub fn hits(&mut self, cx: &mut Cx, component_base: &ComponentBase, opt: HitOpt) -> Event {
-        let area = component_base.area;
-        let id = component_base.id;
-
-        if area.is_empty() || !area.is_valid(cx) {
-            return Event::None;
-        }
-        match self {
-            Event::KeyFocus(kf) => {
-                if id == kf.prev {
-                    return Event::KeyFocusLost(kf.clone());
-                } else if id == kf.focus {
-                    return Event::KeyFocus(kf.clone());
-                }
-            }
-            Event::KeyDown(_) => {
-                if id == cx.key_focus {
-                    return self.clone();
-                }
-            }
-            Event::KeyUp(_) => {
-                if id == cx.key_focus {
-                    return self.clone();
-                }
-            }
-            Event::TextInput(_) => {
-                if id == cx.key_focus {
-                    return self.clone();
-                }
-            }
-            Event::TextCopy => {
-                if id == cx.key_focus {
-                    return Event::TextCopy;
-                }
-            }
-            Event::FingerScroll(fe) => {
-                let rect = area.get_rect_for_first_instance(cx);
-                if rect_contains_with_margin(&rect, fe.abs, &opt.margin) {
-                    //fe.handled = true;
-                    return Event::FingerScroll(FingerScrollEvent { rel: fe.abs - rect.pos, rect, ..fe.clone() });
-                }
-            }
-            Event::FingerHover(fe) => {
-                let rect = area.get_rect_for_first_instance(cx);
-
-                if cx.fingers[fe.digit]._over_last == id {
-                    let mut any_down = false;
-                    for finger in &cx.fingers {
-                        if finger.captured == id {
-                            any_down = true;
-                            break;
-                        }
+    pub fn hits_finger(&mut self, cx: &mut Cx, component_id: ComponentId, rect: Option<Rect>) -> Event {
+        if let Some(rect) = rect {
+            match self {
+                Event::FingerScroll(fe) => {
+                    if rect.contains(fe.abs) {
+                        //fe.handled = true;
+                        return Event::FingerScroll(FingerScrollEvent { rel: fe.abs - rect.pos, rect, ..fe.clone() });
                     }
-                    if !fe.handled && rect_contains_with_margin(&rect, fe.abs, &opt.margin) {
-                        fe.handled = true;
-                        if let HoverState::Out = fe.hover_state {
-                            //    cx.finger_over_last_area = Area::Empty;
-                        } else {
-                            cx.fingers[fe.digit].over_last = id;
+                }
+                Event::FingerHover(fe) => {
+                    if cx.fingers[fe.digit]._over_last == Some(component_id) {
+                        let mut any_down = false;
+                        for finger in &cx.fingers {
+                            if finger.captured == Some(component_id) {
+                                any_down = true;
+                                break;
+                            }
                         }
-                        return Event::FingerHover(FingerHoverEvent { rel: fe.abs - rect.pos, rect, any_down, ..fe.clone() });
-                    } else {
-                        //self.was_over_last_call = false;
+                        if !fe.handled && rect.contains(fe.abs) {
+                            fe.handled = true;
+                            if let HoverState::Out = fe.hover_state {
+                                //    cx.finger_over_last_area = Area::Empty;
+                            } else {
+                                cx.fingers[fe.digit].over_last = Some(component_id);
+                            }
+                            return Event::FingerHover(FingerHoverEvent { rel: fe.abs - rect.pos, rect, any_down, ..fe.clone() });
+                        } else {
+                            //self.was_over_last_call = false;
+                            return Event::FingerHover(FingerHoverEvent {
+                                rel: fe.abs - rect.pos,
+                                rect,
+                                any_down,
+                                hover_state: HoverState::Out,
+                                ..fe.clone()
+                            });
+                        }
+                    } else if !fe.handled && rect.contains(fe.abs) {
+                        let mut any_down = false;
+                        for finger in &cx.fingers {
+                            if finger.captured == Some(component_id) {
+                                any_down = true;
+                                break;
+                            }
+                        }
+                        cx.fingers[fe.digit].over_last = Some(component_id);
+                        fe.handled = true;
+                        //self.was_over_last_call = true;
                         return Event::FingerHover(FingerHoverEvent {
                             rel: fe.abs - rect.pos,
                             rect,
                             any_down,
-                            hover_state: HoverState::Out,
+                            hover_state: HoverState::In,
                             ..fe.clone()
                         });
                     }
-                } else if !fe.handled && rect_contains_with_margin(&rect, fe.abs, &opt.margin) {
-                    let mut any_down = false;
-                    for finger in &cx.fingers {
-                        if finger.captured == id {
-                            any_down = true;
-                            break;
-                        }
+                }
+                Event::FingerMove(fe) => {
+                    // check wether our digit is captured, otherwise don't send
+                    if cx.fingers[fe.digit].captured == Some(component_id) {
+                        let abs_start = cx.fingers[fe.digit].down_abs_start;
+                        let rel_start = cx.fingers[fe.digit].down_rel_start;
+                        return Event::FingerMove(FingerMoveEvent {
+                            abs_start,
+                            rel: fe.abs - rect.pos,
+                            rel_start,
+                            rect,
+                            is_over: rect.contains(fe.abs),
+                            ..fe.clone()
+                        });
                     }
-                    cx.fingers[fe.digit].over_last = id;
-                    fe.handled = true;
-                    //self.was_over_last_call = true;
-                    return Event::FingerHover(FingerHoverEvent {
-                        rel: fe.abs - rect.pos,
-                        rect,
-                        any_down,
-                        hover_state: HoverState::In,
-                        ..fe.clone()
-                    });
                 }
-            }
-            Event::FingerMove(fe) => {
-                // check wether our digit is captured, otherwise don't send
-                if cx.fingers[fe.digit].captured == id {
-                    let abs_start = cx.fingers[fe.digit].down_abs_start;
-                    let rel_start = cx.fingers[fe.digit].down_rel_start;
-                    let rect = area.get_rect_for_first_instance(cx);
-                    return Event::FingerMove(FingerMoveEvent {
-                        abs_start,
-                        rel: fe.abs - rect.pos,
-                        rel_start,
-                        rect,
-                        is_over: rect_contains_with_margin(&rect, fe.abs, &opt.margin),
-                        ..fe.clone()
-                    });
-                }
-            }
-            Event::FingerDown(fe) => {
-                if !fe.handled {
-                    let rect = area.get_rect_for_first_instance(cx);
-                    if rect_contains_with_margin(&rect, fe.abs, &opt.margin) {
-                        // scan if any of the fingers already captured this area
-                        if !opt.use_multi_touch {
-                            for finger in &cx.fingers {
-                                if finger.captured == id {
-                                    return Event::None;
-                                }
+                Event::FingerDown(fe) => {
+                    if !fe.handled && rect.contains(fe.abs) {
+                        // Scan if any of the fingers already captured this area.
+                        // TODO(JP): We might want to skip this in cases where we want to support multi-touch.
+                        for finger in &cx.fingers {
+                            if finger.captured == Some(component_id) {
+                                return Event::None;
                             }
                         }
-                        cx.fingers[fe.digit].captured = id;
+                        cx.fingers[fe.digit].captured = Some(component_id);
                         let rel = fe.abs - rect.pos;
                         cx.fingers[fe.digit].down_abs_start = fe.abs;
                         cx.fingers[fe.digit].down_rel_start = rel;
@@ -597,37 +500,61 @@ impl Event {
                         return Event::FingerDown(FingerDownEvent { rel, rect, ..fe.clone() });
                     }
                 }
+                Event::FingerUp(fe) => {
+                    if cx.fingers[fe.digit].captured == Some(component_id) {
+                        cx.fingers[fe.digit].captured = None;
+                        let abs_start = cx.fingers[fe.digit].down_abs_start;
+                        let rel_start = cx.fingers[fe.digit].down_rel_start;
+                        return Event::FingerUp(FingerUpEvent {
+                            is_over: rect.contains(fe.abs),
+                            abs_start,
+                            rel_start,
+                            rel: fe.abs - rect.pos,
+                            rect,
+                            ..fe.clone()
+                        });
+                    }
+                }
+                _ => (),
+            };
+        }
+        Event::None
+    }
+
+    /// Process a keyboard/text-related event, if the given [`ComponentId`] has key focus ([`Cx::key_focus`]).
+    #[must_use]
+    pub fn hits_keyboard(&mut self, cx: &mut Cx, component_id: ComponentId) -> Event {
+        match self {
+            Event::KeyFocus(kf) => {
+                if kf.prev == Some(component_id) {
+                    return Event::KeyFocusLost(kf.clone());
+                } else if kf.focus == Some(component_id) {
+                    return Event::KeyFocus(kf.clone());
+                }
             }
-            Event::FingerUp(fe) => {
-                if cx.fingers[fe.digit].captured == id {
-                    cx.fingers[fe.digit].captured = None;
-                    let abs_start = cx.fingers[fe.digit].down_abs_start;
-                    let rel_start = cx.fingers[fe.digit].down_rel_start;
-                    let rect = area.get_rect_for_first_instance(cx);
-                    return Event::FingerUp(FingerUpEvent {
-                        is_over: rect.contains(fe.abs),
-                        abs_start,
-                        rel_start,
-                        rel: fe.abs - rect.pos,
-                        rect,
-                        ..fe.clone()
-                    });
+            Event::KeyDown(_) => {
+                if cx.key_focus == Some(component_id) {
+                    return self.clone();
+                }
+            }
+            Event::KeyUp(_) => {
+                if cx.key_focus == Some(component_id) {
+                    return self.clone();
+                }
+            }
+            Event::TextInput(_) => {
+                if cx.key_focus == Some(component_id) {
+                    return self.clone();
+                }
+            }
+            Event::TextCopy => {
+                if cx.key_focus == Some(component_id) {
+                    return Event::TextCopy;
                 }
             }
             _ => (),
-        };
+        }
         Event::None
-    }
-}
-
-fn rect_contains_with_margin(rect: &Rect, pos: Vec2, margin: &Option<Margin>) -> bool {
-    if let Some(margin) = margin {
-        pos.x >= rect.pos.x - margin.l
-            && pos.x <= rect.pos.x + rect.size.x + margin.r
-            && pos.y >= rect.pos.y - margin.t
-            && pos.y <= rect.pos.y + rect.size.y + margin.b
-    } else {
-        rect.contains(pos)
     }
 }
 

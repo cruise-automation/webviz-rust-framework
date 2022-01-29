@@ -10,7 +10,7 @@ use std::f32::consts::PI;
 use crate::fieldworld::FieldWorld;
 use crate::treeworld::TreeWorld;
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Hash, Ord)]
 enum WorldType {
@@ -55,7 +55,7 @@ impl Default for WorldView {
         Self {
             view: View::default(),
             bg: Background::default(),
-            select_view: ScrollView::new_standard_hv(),
+            select_view: ScrollView::new_standard_vh(),
             viewport_3d: Viewport3D::default(),
             buttons: WORLD_TYPES.iter().map(|_| Button::default()).collect(),
             world_type: WorldType::TreeWorld,

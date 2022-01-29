@@ -6,6 +6,17 @@ We're a small team at [Cruise](https://getcruise.com/) building an internal appl
 
 The current supported workflow is to clone this repo and then add your own package to the root Cargo.toml.
 
+# Development
+## Installing
+* [Install Rust](https://www.rust-lang.org/tools/install)
+* Install cargo extension for Wrflib `cargo install cargo-wrflib`
+* Run the dependency installation using Wrflib cargo tool `cargo wrflib install-deps`
+
+## Cargo extension
+Wrflib provides a cargo extension that can be used to perform different tasks. The extension can be installed like this: `cargo install cargo-wrflib`
+
+Optionally, you can use the tool directly like so `cargo run -p cargo-wrflib`, as any other project.
+
 ## Docs
 
 * [Install Rust](https://www.rust-lang.org/tools/install)

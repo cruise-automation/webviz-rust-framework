@@ -8,7 +8,7 @@ use crate::mprstokenizer::*;
 use crate::plaineditor::*;
 use bigedit_hub::*;
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 #[derive(Clone, PartialEq)]
 enum ItemDisplayType {

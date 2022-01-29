@@ -1,7 +1,7 @@
 # Forked from http://github.com/SSheldon/rust-objc
 [package]
 name = "wrflib_objc_sys"
-version = "0.0.1"
+version = "0.0.3"
 license = "MIT OR Apache-2.0"
 homepage = "https://github.com/cruise-automation/webviz-rust-framework"
 repository = "https://github.com/cruise-automation/webviz-rust-framework"

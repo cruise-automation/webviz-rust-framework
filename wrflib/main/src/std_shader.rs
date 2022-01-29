@@ -53,6 +53,7 @@ impl Cx {
         }
 
         impl Math{
+            // Rotate vector `v` by radians `a`
             fn rotate_2d(v: vec2, a: float)->vec2 {
                 let ca = cos(a);
                 let sa = sin(a);
@@ -60,59 +61,21 @@ impl Cx {
             }
         }
 
-        impl Pal {
-            fn iq(t: float, a: vec3, b: vec3, c: vec3, d: vec3) -> vec3 {
-                return a + b * cos(6.28318 * (c * t + d));
-            }
+        //http://gamedev.stackexchange.com/questions/59797/glsl-shader-change-hue-saturation-brightness
+        fn hsv2rgb(c: vec4) -> vec4 {
+            let K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+            let p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+            return vec4(c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y), c.w);
+        }
 
-            fn iq0(t: float) -> vec3 {
-                return mix(vec3(0., 0., 0.), vec3(1., 1., 1.), cos(t * PI) * 0.5 + 0.5);
-            }
+        fn rgb2hsv(c: vec4) -> vec4 {
+            let K: vec4 = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+            let p: vec4 = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+            let q: vec4 = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
 
-            fn iq1(t: float) -> vec3 {
-                return Pal::iq(t, vec3(0.5, 0.5, 0.5), vec3(0.5, 0.5, 0.5), vec3(1., 1., 1.), vec3(0., 0.33, 0.67));
-            }
-
-            fn iq2(t: float) -> vec3 {
-                return Pal::iq(t, vec3(0.5, 0.5, 0.5), vec3(0.5, 0.5, 0.5), vec3(1., 1., 1.), vec3(0., 0.1, 0.2));
-            }
-
-            fn iq3(t: float) -> vec3 {
-                return Pal::iq(t, vec3(0.5, 0.5, 0.5), vec3(0.5, 0.5, 0.5), vec3(1., 1., 1.), vec3(0.3, 0.2, 0.2));
-            }
-
-            fn iq4(t: float) -> vec3 {
-                return Pal::iq(t, vec3(0.5, 0.5, 0.5), vec3(0.5, 0.5, 0.5), vec3(1., 1., 0.5), vec3(0.8, 0.9, 0.3));
-            }
-
-            fn iq5(t: float) -> vec3 {
-                return Pal::iq(t, vec3(0.5, 0.5, 0.5), vec3(0.5, 0.5, 0.5), vec3(1., 0.7, 0.4), vec3(0, 0.15, 0.20));
-            }
-
-            fn iq6(t: float) -> vec3 {
-                return Pal::iq(t, vec3(0.5, 0.5, 0.5), vec3(0.5, 0.5, 0.5), vec3(2., 1.0, 0.), vec3(0.5, 0.2, 0.25));
-            }
-
-            fn iq7(t: float) -> vec3 {
-                return Pal::iq(t, vec3(0.8, 0.5, 0.4), vec3(0.2, 0.4, 0.2), vec3(2., 1.0, 1.0), vec3(0., 0.25, 0.25));
-            }
-
-            //http://gamedev.stackexchange.com/questions/59797/glsl-shader-change-hue-saturation-brightness
-            fn hsv2rgb(c: vec4) -> vec4 {
-                let K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-                let p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-                return vec4(c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y), c.w);
-            }
-
-            fn rgb2hsv(c: vec4) -> vec4 {
-                let K: vec4 = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
-                let p: vec4 = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
-                let q: vec4 = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
-
-                let d: float = q.x - min(q.w, q.y);
-                let e: float = 1.0e-10;
-                return vec4(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x, c.w);
-            }
+            let d: float = q.x - min(q.w, q.y);
+            let e: float = 1.0e-10;
+            return vec4(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x, c.w);
         }
 
         impl Df {
@@ -157,32 +120,31 @@ impl Cx {
                 return 1.0 / length(vec2(length(dFdx(p)), length(dFdy(p))));
             }
 
-            // Performs a translation with offset (x, y)
-            fn translate(inout self, x: float, y: float) -> vec2 {
-                self.pos -= vec2(x, y);
+            // Translate a specified offset
+            fn translate(inout self, offset: vec2) -> vec2 {
+                self.pos -= offset;
                 return self.pos;
             }
 
-            // Performs a rotation by `a` radians and pivot (x, y)
-            fn rotate(inout self, a: float, x: float, y: float) {
-                let ca = cos(-a);
-                let sa = sin(-a);
-                let p = self.pos - vec2(x, y);
-                self.pos = vec2(p.x * ca - p.y * sa, p.x * sa + p.y * ca) + vec2(x, y);
+            // Rotate by `a` radians around pivot
+            fn rotate(inout self, a: float, pivot: vec2) {
+                self.pos = Math::rotate_2d(self.pos - pivot, -a) + pivot;
             }
 
-            // Performs uniform scaling by `f` factor and pivot (x, y)
-            fn scale(inout self, f: float, x: float, y: float) {
+            // Uniformly scale by factor `f` around `pivot`
+            fn scale(inout self, f: float, pivot: vec2) {
                 self.scale *= f;
-                self.pos = (self.pos - vec2(x, y)) * f + vec2(x, y);
+                self.pos = (self.pos - pivot) * f + pivot;
             }
 
-            // TODO(hernan): Add documentation
+            // Sets clear color. Useful for specifying background colors before
+            // rendering a path.
             fn clear(inout self, color: vec4) {
-                self.result = vec4(color.rgb * color.a + self.result.rgb * (1.0 - color.a), color.a);
+                self.write_color(color, 1.0);
             }
 
-            // Calculate antialising blur
+            // Calculate antialiasing blur
+            // Private function
             fn calc_blur(inout self, w: float) -> float {
                 let wa = clamp(-w * self.aa, 0.0, 1.0);
                 let wb = 1.0;
@@ -201,14 +163,15 @@ impl Cx {
             }
 
             // Writes a color to the distance field, using premultiplied alpha
+            // Private function. Users should instead use `clear`, `fill`, `stroke`.
             fn write_color(inout self, src: vec4, w: float) -> vec4{
                 let src_a = src.a * w;
                 self.result = src * src_a + (1. - src_a) * self.result;
                 return self.result;
             }
 
-            // Fills and preserves the current path in the distance field, allowing further operations on it.
-            fn fill_keep(inout self, color: vec4) -> vec4 {
+            // Fills the current path with `color`.
+            fn fill(inout self, color: vec4) -> vec4 {
                 let f = self.calc_blur(self.shape);
                 self.write_color(color, f);
                 if self.has_clip > 0. {
@@ -217,25 +180,15 @@ impl Cx {
                 return self.result;
             }
 
-            // Fills the current path in the distance field and clears it.
-            fn fill(inout self, color: vec4) -> vec4 {
-                self.fill_keep(color);
-                return self.new_path();
-            }
-
-            // Strokes and preserves the current path in the distance field, allowing further operations on it.
-            fn stroke_keep(inout self, color: vec4, width: float) -> vec4 {
+            // Strokes the current path with `color` with a pixel width of `width`.
+            fn stroke(inout self, color: vec4, width: float) -> vec4 {
                 let f = self.calc_blur(abs(self.shape) - width / self.scale);
                 return self.write_color(color, f);
             }
 
-            // Strokes the current path in the distance field and clears it.
-            fn stroke(inout self, color: vec4, width: float) -> vec4 {
-                self.stroke_keep(color, width);
-                return self.new_path();
-            }
-
-            fn glow_keep(inout self, color: vec4, width: float) -> vec4 {
+            // Updates the current path by summing colors in `width`
+            // with the provided one.
+            fn glow(inout self, color: vec4, width: float) -> vec4 {
                 let f = self.calc_blur(abs(self.shape) - width / self.scale);
                 let source = vec4(color.rgb * color.a, color.a);
                 let dest = self.result;
@@ -243,22 +196,17 @@ impl Cx {
                 return self.result;
             }
 
-            fn glow(inout self, color: vec4, width: float) -> vec4 {
-                self.glow_keep(color, width);
-                self.old_shape = self.shape = 1e+20;
-                self.clip = -1e+20;
-                self.has_clip = 0.;
-                return self.result;
-            }
-
+            // Set field to the union of the current and previous field.
             fn union(inout self) {
                 self.old_shape = self.shape = min(self.field, self.old_shape);
             }
 
+            // Set field to the intersection of the current and previous field.
             fn intersect(inout self) {
                 self.old_shape = self.shape = max(self.field, self.old_shape);
             }
 
+            // Subtract current field from previous.
             fn subtract(inout self) {
                 self.old_shape = self.shape = max(-self.field, self.old_shape);
             }

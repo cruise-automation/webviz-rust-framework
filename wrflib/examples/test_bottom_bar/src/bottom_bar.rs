@@ -5,7 +5,7 @@
 // You may not use this file except in compliance with the License.
 
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 pub struct BottomBar {
     switch_button: Button,

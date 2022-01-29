@@ -6,7 +6,7 @@
 
 //use syn::Type;
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 use crate::jseditor::*;
 use crate::makepadstorage::*;

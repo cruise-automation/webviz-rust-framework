@@ -13,7 +13,7 @@ publish = false
 
 [dependencies]
 wrflib = { path="../../main" }
-wrflib_widget = { path="../../widget" }
+wrflib_components = { path="../../components" }
 bigedit_http = { path="http" }
 bigedit_microserde = { path="microserde" }
 bigedit_hub = { path="hub" }

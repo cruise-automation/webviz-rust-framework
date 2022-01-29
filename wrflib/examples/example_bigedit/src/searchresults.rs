@@ -7,7 +7,7 @@
 use crate::makepadstorage::*;
 use crate::searchindex::*;
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 pub struct SearchResults {
     view: ScrollView,
@@ -67,7 +67,7 @@ impl SearchResults {
             result_draw: SearchResultDraw::new(),
             list: ListLogic::default(),
             do_select_first: false,
-            view: ScrollView::new_standard_hv(),
+            view: ScrollView::new_standard_vh(),
             results: Vec::new(),
         }
     }
@@ -324,7 +324,7 @@ impl SearchResultDraw {
         cx.begin_padding_box(LAYOUT_ITEM_PADDING);
         cx.begin_center_y_align();
 
-        list_item.set_area(cx, self.item_bg.area());
+        list_item.set_area(self.item_bg.area());
         self.animate(cx, list_item.area(), &mut list_item.animator);
 
         let window_up = if selected { 2 } else { 1 };

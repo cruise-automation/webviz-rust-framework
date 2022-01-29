@@ -5,7 +5,7 @@
 // You may not use this file except in compliance with the License.
 
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 pub struct HomePage {
     view: ScrollView,
@@ -33,21 +33,21 @@ const TEXT_HEADING: TextInsProps = TextInsProps {
     text_style: TEXT_STYLE_HEADING,
     wrapping: Wrapping::Word,
     color: TEXT_COLOR,
-    padding: Padding { l: 0., r: 0., t: 10., b: 10. },
+    padding: Padding::vh(10., 0.),
     ..TextInsProps::DEFAULT
 };
 const TEXT_BODY: TextInsProps = TextInsProps {
     text_style: TEXT_STYLE_BODY,
     wrapping: Wrapping::Word,
     color: TEXT_COLOR,
-    padding: Padding { l: 0., r: 0., t: 10., b: 10. },
+    padding: Padding::vh(10., 0.),
     ..TextInsProps::DEFAULT
 };
 
 impl HomePage {
     pub fn new(cx: &mut Cx) -> Self {
         Self {
-            view: ScrollView::new_standard_hv(),
+            view: ScrollView::new_standard_vh(),
             send_mail_button: Button::default(),
             email_signal: cx.new_signal(),
             email_input: TextInput::new(TextInputOptions {

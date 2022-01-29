@@ -1,6 +1,6 @@
 [package]
 name = "cargo-wrflib"
-version = "0.0.4"
+version = "0.0.6"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 homepage = "https://github.com/cruise-automation/webviz-rust-framework"

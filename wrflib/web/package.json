@@ -1,8 +1,11 @@
 {
     "name": "wrflib",
-    "version": "0.0.0",
+    "version": "0.0.6",
     "license": "MIT",
-    "private": true,
+    "main": "dist/wrflib_runtime.js",
+    "files": [
+        "dist"
+    ],
     "dependencies": {},
     "devDependencies": {
         "@types/offscreencanvas": "^2019.6.4",
@@ -17,9 +20,11 @@
         "ts-loader": "^9.2.6",
         "typescript": "^4.4.3",
         "webpack": "^5.57.1",
-        "webpack-cli": "^4.8.0"
+        "webpack-cli": "^4.8.0",
+        "worker-loader": "^3.0.8"
     },
     "scripts": {
+        "prepublish": "yarn run build",
         "build": "webpack --mode production",
         "watch": "webpack --watch --mode development",
         "lint": "eslint . --ext .js,.jsx,.ts,.tsx"

@@ -6,7 +6,7 @@
 
 use crate::makepadstorage::*;
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 pub struct Keyboard {
     view: ScrollView,
@@ -44,7 +44,7 @@ const KEYS: &[KeyType] = &[KeyType::Alt, KeyType::Control, KeyType::Shift];
 impl Keyboard {
     pub fn new() -> Self {
         Self {
-            view: ScrollView::new_standard_hv(),
+            view: ScrollView::new_standard_vh(),
             buttons: KEYS.iter().map(|_| Button::default()).collect(),
             modifiers: KeyModifiers::default(),
             key_down: None,

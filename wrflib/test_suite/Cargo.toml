@@ -15,11 +15,11 @@ publish = false
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wrflib = { path="../main" }
-wrflib_widget = { path="../widget" }
+wrflib_components = { path="../components" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 wrflib = { path="../main", features=["cef"] }
-wrflib_widget = { path="../widget" }
+wrflib_components = { path="../components" }
 
 
 [dependencies]

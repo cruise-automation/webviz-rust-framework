@@ -10,7 +10,7 @@ use crate::listanims::*;
 use crate::makepadstorage::*;
 use bigedit_hub::*;
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 pub struct LogList {
     view: ScrollView,
@@ -36,7 +36,7 @@ impl LogList {
         Self {
             item_draw: LogItemDraw::default(),
             list: ListLogic::default().with_multi_select(true),
-            view: ScrollView::new_standard_hv(),
+            view: ScrollView::new_standard_vh(),
         }
     }
 
@@ -276,7 +276,7 @@ impl LogItemDraw {
     fn draw_log_item(&mut self, cx: &mut Cx, _index: usize, list_item: &mut ListItem, log_item: &HubLogItem, anim_default: Anim) {
         self.item_bg.set_area(list_item.area());
         self.item_bg.begin_draw(cx, Width::Fill, Height::Fix(ITEM_HEIGHT), Vec4::default());
-        list_item.set_area(cx, self.item_bg.area());
+        list_item.set_area(self.item_bg.area());
 
         list_item.animator.draw(cx, anim_default);
         self.animate(cx, list_item.area(), &mut list_item.animator);
@@ -314,7 +314,7 @@ impl LogItemDraw {
             }
         }
         self.item_bg.end_draw(cx);
-        list_item.set_area(cx, self.item_bg.area());
+        list_item.set_area(self.item_bg.area());
     }
 
     fn draw_status_line(&mut self, cx: &mut Cx, counter: usize, bm: &BuildManager) {

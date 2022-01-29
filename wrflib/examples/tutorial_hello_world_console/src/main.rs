@@ -15,11 +15,8 @@ impl App {
     }
 
     fn handle(&mut self, _cx: &mut Cx, event: &mut Event) {
-        match event {
-            Event::Construct => {
-                log!("Hello, world!");
-            }
-            _ => {}
+        if let Event::Construct = event {
+            log!("Hello, world!");
         }
     }
     fn draw(&mut self, _cx: &mut Cx) {}

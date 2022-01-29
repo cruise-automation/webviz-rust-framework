@@ -5,7 +5,7 @@
 // You may not use this file except in compliance with the License.
 
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 const TEXT_HEADING: TextInsProps = TextInsProps {
     text_style: TextStyle { font_size: 28.0, line_spacing: 2.0, ..TEXT_STYLE_NORMAL },

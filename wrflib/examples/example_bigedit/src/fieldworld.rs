@@ -6,7 +6,7 @@
 
 // a bunch o buttons to select the world
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 #[derive(Default)]
 pub struct FieldWorld {

@@ -12,6 +12,7 @@ use std::ops;
 
 /// 4x4 matrix; very common in graphics programming.
 #[derive(Clone, Copy, Default, PartialEq, Debug)]
+#[repr(C)]
 pub struct Mat4 {
     pub v: [f32; 16],
 }
@@ -429,11 +430,78 @@ impl Rect {
     pub fn contains(&self, pos: Vec2) -> bool {
         pos.x >= self.pos.x && pos.x <= self.pos.x + self.size.x && pos.y >= self.pos.y && pos.y <= self.pos.y + self.size.y
     }
+
     pub fn intersects(&self, r: Rect) -> bool {
         !(r.pos.x > self.pos.x + self.size.x
             || r.pos.x + r.size.x < self.pos.x
             || r.pos.y > self.pos.y + self.size.y
             || r.pos.y + r.size.y < self.pos.y)
+    }
+
+    /// This returns the [`Rect`] for if you'd add padding all around the given [`Rect`].
+    ///
+    /// This means that the `pos` will move according to the left/top padding, and the size will be adjusted
+    /// based on the sum of the vertical/horizontal paddings.
+    ///
+    /// If you just want to adjust the size while keeping `pos` the same, you can simply add the desired
+    /// dimensions to `size`.
+    pub fn add_padding(self, padding: Padding) -> Self {
+        Self {
+            pos: Vec2 { x: self.pos.x - padding.l, y: self.pos.y - padding.t },
+            size: Vec2 { x: self.size.x + padding.l + padding.r, y: self.size.y + padding.t + padding.b },
+        }
+    }
+}
+
+/// Inner padding dimensions that should be applied on top of a [`Rect`] or other
+/// object that defines dimensions.
+///
+/// TODO(JP): these values can be negative, which can be quite confusing, but we
+/// seem to actually honor that in the layout boxes code. Might be good to look into that
+/// and see if we should forbid that or not (we seem to never actually do that yet).
+#[derive(Clone, Copy, Debug)]
+pub struct Padding {
+    pub l: f32,
+    pub t: f32,
+    pub r: f32,
+    pub b: f32,
+}
+impl Padding {
+    pub const ZERO: Padding = Padding { l: 0.0, t: 0.0, r: 0.0, b: 0.0 };
+
+    /// TODO(JP): Replace these with Padding::default() when
+    /// <https://github.com/rust-lang/rust/issues/67792> gets done
+    pub const DEFAULT: Padding = Padding::ZERO;
+
+    pub const fn all(v: f32) -> Padding {
+        Padding { l: v, t: v, r: v, b: v }
+    }
+
+    pub const fn left(v: f32) -> Padding {
+        Padding { l: v, ..Padding::ZERO }
+    }
+
+    pub const fn top(v: f32) -> Padding {
+        Padding { t: v, ..Padding::ZERO }
+    }
+
+    pub const fn right(v: f32) -> Padding {
+        Padding { r: v, ..Padding::ZERO }
+    }
+
+    pub const fn bottom(v: f32) -> Padding {
+        Padding { b: v, ..Padding::ZERO }
+    }
+
+    /// Helper function to set vertical and horizontal padding
+    /// This is a common case when top=bottom left=right
+    pub const fn vh(v: f32, h: f32) -> Padding {
+        Padding { l: h, r: h, t: v, b: v }
+    }
+}
+impl Default for Padding {
+    fn default() -> Self {
+        Padding::DEFAULT
     }
 }
 

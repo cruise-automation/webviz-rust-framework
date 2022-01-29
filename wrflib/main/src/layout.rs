@@ -85,52 +85,6 @@ impl Default for LayoutSize {
     }
 }
 
-/// Inner padding dimensions that should be applied on top of the width/height
-/// from the parent [`CxLayoutBox`].
-
-/// TODO(JP): these values can be negative, which can be quite confusing, but we
-/// seem to actually honor that in the layout boxes code. Might be good to look into that
-/// and see if we should forbid that or not (we seem to never actually do that yet).
-#[derive(Clone, Copy, Debug)]
-pub struct Padding {
-    pub l: f32,
-    pub t: f32,
-    pub r: f32,
-    pub b: f32,
-}
-impl Padding {
-    pub const ZERO: Padding = Padding { l: 0.0, t: 0.0, r: 0.0, b: 0.0 };
-
-    /// TODO(JP): Replace these with Padding::default() when
-    /// <https://github.com/rust-lang/rust/issues/67792> gets done
-    pub const DEFAULT: Padding = Padding::ZERO;
-
-    pub const fn all(v: f32) -> Padding {
-        Padding { l: v, t: v, r: v, b: v }
-    }
-
-    pub const fn left(v: f32) -> Padding {
-        Padding { l: v, ..Padding::ZERO }
-    }
-
-    pub const fn top(v: f32) -> Padding {
-        Padding { t: v, ..Padding::ZERO }
-    }
-
-    pub const fn right(v: f32) -> Padding {
-        Padding { r: v, ..Padding::ZERO }
-    }
-
-    pub const fn bottom(v: f32) -> Padding {
-        Padding { b: v, ..Padding::ZERO }
-    }
-}
-impl Default for Padding {
-    fn default() -> Self {
-        Padding::DEFAULT
-    }
-}
-
 /// The direction in which the [`CxLayoutBox`] should walk. It will typically walk
 /// in a straight line in this direction. E.g. when walking to [`Direction::Right`],
 /// it will only walk horizontally, not vertically, until it hits the [`CxLayoutBox::width`],

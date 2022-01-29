@@ -1,6 +1,6 @@
 [package]
 name = "wrflib_x11_sys"
-version = "0.0.1"
+version = "0.0.3"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 homepage = "https://github.com/cruise-automation/webviz-rust-framework"

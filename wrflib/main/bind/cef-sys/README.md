@@ -34,3 +34,10 @@ When using VSCode, you can use the [CodeLLDB extension](https://marketplace.visu
 ```
 
 TODO(JP): It might be nice to also be able to show the Chrome source code; see e.g. https://bitbucket.org/chromiumembedded/cef/wiki/MasterBuildQuickStart
+
+## Publishing
+When publishing this crate, make sure you're setting the `CEF_ROOT` env variable with the full path to Cef framework.
+
+```
+CEF_ROOT=`pwd`/wrflib/main/bind/cef-sys/deps/cef_binary_91.1.23+g04c8d56+chromium-91.0.4472.164_macosx64 cargo publish -p wrflib_cef_sys
+```

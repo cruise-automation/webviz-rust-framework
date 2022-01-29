@@ -4,7 +4,7 @@
 //! Internally it depends on [`wrflib_shader_compiler`] and [`wrflib_vector`],
 //! for shader compilation and vector graphics (mostly for fonts) respectively.
 //!
-//! If you need to use higher-level widgets, use `wrflib_widget`.
+//! If you need to use higher-level widgets, use `wrflib_components`.
 
 // Necessary in cx_xlib
 #![allow(temporary_cstring_as_ptr)]
@@ -85,7 +85,7 @@ mod area;
 pub mod byte_extract;
 mod cast;
 mod colors;
-mod component_base;
+mod component_id;
 mod cursor;
 mod cx;
 pub mod debug_log;
@@ -139,7 +139,7 @@ pub use wrflib_shader_compiler::ty::Ty;
 
 pub use animator::*;
 pub use colors::*;
-pub use component_base::*;
+pub use component_id::*;
 pub use draw_tree::*;
 pub use fonts::*;
 pub use geometry::*;

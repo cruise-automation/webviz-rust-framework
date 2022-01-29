@@ -40,4 +40,9 @@ module.exports = {
     extensions: [".tsx", ".ts", ".js"],
   },
   devtool: "eval-cheap-module-source-map",
+  optimization: {
+    // We shouldn't output non-entry chunks, but if we do, then this
+    // helps in debugging.
+    chunkIds: "named",
+  },
 };

@@ -5,7 +5,7 @@
 // You may not use this file except in compliance with the License.
 
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 // TODO(hernan): Wrflib uses rounded corners for strokes. I guess this has to do with the SDF nature
 // of the rendering functions, right?
@@ -71,14 +71,18 @@ static MAIN_SHADER: Shader = Shader {
                 } else if prim_style == 3. {
                     df.stroke(#0f0, 10.);
                 } else if prim_style == 4. {
-                    df.fill_keep(#f00);
+                    df.fill(#f00);
                     df.stroke(#0f0, 1.);
                 } else if prim_style == 5. {
-                    df.fill_keep(#f00);
+                    df.fill(#f00);
                     df.stroke(#0f0, 5.);
                 } else if prim_style == 6. {
-                    df.fill_keep(#f00);
+                    df.fill(#f00);
                     df.stroke(#0f0, 10.);
+                } else if prim_style == 7. {
+                    df.fill(#f00);
+                    // note: after glowing red and green it becomes yellow border
+                    df.glow(#0f0, 10.);
                 }
 
                 return df.result;

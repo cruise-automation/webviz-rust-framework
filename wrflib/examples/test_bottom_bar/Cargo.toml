@@ -12,4 +12,4 @@ publish = false
 
 [dependencies]
 wrflib = { path="../../main" }
-wrflib_widget = { path="../../widget" }
+wrflib_components = { path="../../components" }

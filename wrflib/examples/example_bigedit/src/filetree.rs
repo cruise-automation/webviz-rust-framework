@@ -6,7 +6,7 @@
 
 use crate::listanims::*;
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 #[derive(Clone, Default)]
 #[repr(C)]
@@ -195,7 +195,7 @@ impl FileTree {
                 self.node_bg.set_color(cx, node_draw.animator.get_vec4(0));
             }
 
-            match event.hits(cx, &node_draw.component_base, HitOpt::default()) {
+            match event.hits_finger(cx, node_draw.component_id, node_draw.area.get_rect_for_first_instance(cx)) {
                 Event::FingerDown(_fe) => {
                     // mark ourselves, unmark others
                     if is_filenode {
@@ -276,7 +276,7 @@ impl FileTree {
         if let Some(fe) = drag_end {
             self._drag_move = None;
             let paths = Self::get_marked_paths(&mut self.root_node);
-            if !self.view.area().get_rect_for_first_instance(cx).contains(fe.abs) {
+            if !self.view.area().get_rect_for_first_instance(cx).unwrap_or_default().contains(fe.abs) {
                 return FileTreeEvent::DragEnd { fe, paths };
             }
         }
@@ -285,7 +285,7 @@ impl FileTree {
                 // lets check if we are over our own filetree
                 // ifso, we need to support moving files with directories
                 let paths = Self::get_marked_paths(&mut self.root_node);
-                if !self.view.area().get_rect_for_first_instance(cx).contains(fe.abs) {
+                if !self.view.area().get_rect_for_first_instance(cx).unwrap_or_default().contains(fe.abs) {
                     return FileTreeEvent::DragMove { fe: fe.clone(), paths };
                 } else {
                     return FileTreeEvent::DragCancel;
@@ -364,7 +364,6 @@ impl FileTree {
             cx.begin_padding_box(NODE_PADDING);
 
             node_draw.area = self.node_bg.area();
-            node_draw.component_base.register_component_area(cx, node_draw.area);
 
             let is_marked = node_draw.marked != 0;
 
@@ -535,7 +534,7 @@ pub enum NodeState {
 
 #[derive(Default)]
 pub struct NodeDraw {
-    component_base: ComponentBase,
+    component_id: ComponentId,
     area: Area,
     animator: Animator,
     marked: u64,

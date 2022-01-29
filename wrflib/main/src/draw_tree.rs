@@ -387,6 +387,8 @@ impl Cx {
     /// Uses [`Cx::create_draw_call`] under the hood to find the [`DrawCall`]
     /// to add to.
     pub fn add_instances<T: Sized>(&mut self, shader: &'static Shader, data: &[T]) -> Area {
+        assert!(shader.build_geom.is_some(), "Can't add instances without `build_geom` defined");
+
         self.add_instances_internal(shader, data, DrawCallProps::default())
     }
 
@@ -407,7 +409,7 @@ impl Cx {
     /// TODO(JP): The fact that this only applies to the direct parent [`View`]
     /// makes it so you can't just arbitrarily wrap [`DrawCall`]s inside [`View`]s,
     /// which is somewhat unexpected. It might be better to have this apply to
-    /// the nearest `wrflib_widget::ScrollView` instead?
+    /// the nearest `wrflib_components::ScrollView` instead?
     ///
     /// TODO(JP): Do we need to track as fields on [`DrawCall`]? The same behavior
     /// can also be accomplished by overriding the [`Shader`]'s `scroll`

@@ -16,7 +16,7 @@ use bigedit_hub::*;
 use bigedit_microserde::*;
 use std::collections::HashMap;
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 #[derive(Debug, Clone, SerRon, DeRon)]
 pub struct MakepadSettings {

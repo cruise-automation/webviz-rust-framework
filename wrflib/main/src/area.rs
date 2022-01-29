@@ -18,7 +18,7 @@ use crate::*;
 /// You can use an [`Area`] pointer to write fields, e.g. using [`Area::get_slice_mut`],
 /// [`Area::write_user_uniforms`], and so on. You
 /// can also use it for checking if an event was fired on a certain part
-/// of the draw tree (using [`Event::hits`], [`Cx::key_focus`], etc), and more.
+/// of the draw tree (using [`Event::hits_finger`], [`Cx::key_focus`], etc), and more.
 ///
 /// TODO(JP): this can currently point to a [`View`]/[`CxView`] that isn't
 /// actually in the draw tree anymore (ie. there the corresponding [`CxView`] is
@@ -167,14 +167,14 @@ impl Area {
     ///
     /// TODO(JP): Specifically, this seems to return very weird values for
     /// [`crate::TextIns`] (only the first character, and offset to the bottom it seems).
-    pub fn get_rect_for_first_instance(&self, cx: &Cx) -> Rect {
+    pub fn get_rect_for_first_instance(&self, cx: &Cx) -> Option<Rect> {
         if !self.is_valid(cx) {
-            panic!("get_rect was called for an invalid Area");
+            return None;
         }
         match self {
             Area::InstanceRange(inst) => {
                 if inst.instance_count == 0 {
-                    return Rect::default();
+                    return None;
                 }
                 let cxview = &cx.views[inst.view_id];
                 let draw_call = &cxview.draw_calls[inst.draw_call_id];
@@ -186,16 +186,16 @@ impl Area {
                     if let Some(rect_size) = sh.mapping.rect_instance_props.rect_size {
                         let w = draw_call.instances[inst.instance_offset + rect_size];
                         let h = draw_call.instances[inst.instance_offset + rect_size + 1];
-                        return draw_call.clip_and_scroll_rect(x, y, w, h);
+                        return Some(draw_call.clip_and_scroll_rect(x, y, w, h));
                     }
                 }
-                Rect::default()
+                None
             }
             Area::View(view_area) => {
                 let cxview = &cx.views[view_area.view_id];
-                Rect { pos: cxview.rect.pos - cxview.parent_scroll, size: cxview.rect.size }
+                Some(Rect { pos: cxview.rect.pos - cxview.parent_scroll, size: cxview.rect.size })
             }
-            _ => unreachable!(),
+            _ => None,
         }
     }
 

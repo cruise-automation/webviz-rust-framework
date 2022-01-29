@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 pub struct TestSuiteApp {
     window: Window,

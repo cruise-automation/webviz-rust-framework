@@ -12,7 +12,7 @@
 
 use crate::filetree::*;
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 pub struct FilePanel {
     pub file_tree: FileTree,

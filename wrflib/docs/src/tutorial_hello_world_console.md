@@ -16,7 +16,14 @@ Now, let's create `src/main.rs`:
 {{#include ../../examples/tutorial_hello_world_console/src/main.rs:7:}}
 ```
 
-This is already enough to run the native version: `cargo run -p tutorial_hello_world_console`. Hurray! It prints "Hello, world!"
+Let's break it down a bit. The app must be a `struct` that implement three methods:
+* `new` — Returns an initialized struct and any initial state we add. For now, let's call the `default` implementation.
+* `handle` — An entrypoint into Wrflib's event handling system. We will go in depth on various event types in a different tutorial. For now, we'll put our `log!()` call in the the `Construct` event.
+* `draw` — Called when requesting a draw. This will control what gets shown on the application window, which we don't use yet.
+
+The call to `main_app!()` tells Wrflib to use the `App` struct for all its eventing and rendering.
+
+This is already enough to run the native version: `cargo run -p tutorial_hello_world_console`. Hurray! It prints "Hello, world!".
 
 Notice how this program currently never exits on its own. That behavior is similar to the web version, where the program doesn't exit until the browser window is closed. In our case here we don't have a native window yet, so terminate the program using CTRL+C.
 
@@ -32,6 +39,6 @@ Compile to WebAssembly: `wrflib/scripts/build_wasm.sh -p tutorial_hello_world_co
 
 Be sure to run the server, as described in [Getting Started](./getting_started.md).
 
-Navigate to [http://localhost:5000/wrflib/examples/tutorial_hello_world_console](http://localhost:5000/wrflib/examples/tutorial_hello_world_console), open the browser console, and again, see how it has printed "Hello, world!"
+Navigate to [http://localhost:5000/wrflib/examples/tutorial_hello_world_console](http://localhost:5000/wrflib/examples/tutorial_hello_world_console), open the browser console, and again, see how it has printed "Hello, world!".
 
 Congratulations, you've written your first Wrflib program! 😄

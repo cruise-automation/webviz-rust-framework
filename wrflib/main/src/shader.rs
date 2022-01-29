@@ -57,34 +57,41 @@ impl Shader {
 /// and so on it contains. That information can then be used to modify a [`Shader`
 /// or [`DrawCall`].
 #[derive(Debug, Default, Clone)]
-pub struct CxShaderMapping {
+pub(crate) struct CxShaderMapping {
     /// Contains information about the special "rect_pos" and "rect_size" fields.
     /// See [`RectInstanceProps`].
-    pub rect_instance_props: RectInstanceProps,
+    pub(crate) rect_instance_props: RectInstanceProps,
     /// Special structure for user-level uniforms.
-    pub user_uniform_props: UniformProps,
+    pub(crate) user_uniform_props: UniformProps,
     /// Special structure for reading/editing instance properties.
-    pub instance_props: InstanceProps,
+    pub(crate) instance_props: InstanceProps,
     /// Special structure for reading/editing geometry properties.
-    pub geometry_props: InstanceProps,
+    #[cfg(any(target_arch = "wasm32", target_os = "linux", target_os = "windows"))]
+    pub(crate) geometry_props: InstanceProps,
     /// Raw definition of all textures.
-    pub textures: Vec<PropDef>,
+    pub(crate) textures: Vec<PropDef>,
     /// Raw definition of all geometries.
-    pub geometries: Vec<PropDef>,
+    #[cfg(target_os = "windows")]
+    pub(crate) geometries: Vec<PropDef>,
     /// Raw definition of all instances.
-    pub instances: Vec<PropDef>,
+    #[cfg(target_os = "windows")]
+    pub(crate) instances: Vec<PropDef>,
     /// Raw definition of all user-level uniforms.
-    pub user_uniforms: Vec<PropDef>,
+    #[cfg(any(target_arch = "wasm32", target_os = "linux"))]
+    pub(crate) user_uniforms: Vec<PropDef>,
     /// Raw definition of all framework-level uniforms that get set per [`DrawCall`].
-    pub draw_uniforms: Vec<PropDef>,
+    #[cfg(any(target_arch = "wasm32", target_os = "linux"))]
+    pub(crate) draw_uniforms: Vec<PropDef>,
     /// Raw definition of all framework-level uniforms that get set per [`View`].
-    pub view_uniforms: Vec<PropDef>,
+    #[cfg(any(target_arch = "wasm32", target_os = "linux"))]
+    pub(crate) view_uniforms: Vec<PropDef>,
     /// Raw definition of all framework-level uniforms that get set per [`Pass`].
-    pub pass_uniforms: Vec<PropDef>,
+    #[cfg(any(target_arch = "wasm32", target_os = "linux"))]
+    pub(crate) pass_uniforms: Vec<PropDef>,
 }
 
 impl CxShaderMapping {
-    pub fn from_shader_ast(shader_ast: ShaderAst) -> Self {
+    fn from_shader_ast(shader_ast: ShaderAst) -> Self {
         let mut instances = Vec::new();
         let mut geometries = Vec::new();
         let mut user_uniforms = Vec::new();
@@ -132,13 +139,20 @@ impl CxShaderMapping {
             rect_instance_props: RectInstanceProps::construct(&instances),
             user_uniform_props: UniformProps::construct(&user_uniforms),
             instance_props: InstanceProps::construct(&instances),
+            #[cfg(any(target_arch = "wasm32", target_os = "linux", target_os = "windows"))]
             geometry_props: InstanceProps::construct(&geometries),
             textures,
+            #[cfg(target_os = "windows")]
             instances,
+            #[cfg(target_os = "windows")]
             geometries,
+            #[cfg(any(target_arch = "wasm32", target_os = "linux"))]
             pass_uniforms,
+            #[cfg(any(target_arch = "wasm32", target_os = "linux"))]
             view_uniforms,
+            #[cfg(any(target_arch = "wasm32", target_os = "linux"))]
             draw_uniforms,
+            #[cfg(any(target_arch = "wasm32", target_os = "linux"))]
             user_uniforms,
         }
     }
@@ -146,9 +160,9 @@ impl CxShaderMapping {
 
 /// The raw definition of an input property to a [`Shader`].
 #[derive(Debug, Clone, Hash, PartialEq)]
-pub struct PropDef {
-    pub name: String,
-    pub ty: Ty,
+pub(crate) struct PropDef {
+    pub(crate) name: String,
+    pub(crate) ty: Ty,
 }
 
 /// Contains information about the special "rect_pos" and "rect_size" fields.
@@ -158,12 +172,12 @@ pub struct PropDef {
 /// TODO(JP): We might want to consider instead doing bulk moves using [`DrawCall`-
 /// or [`View`]-level uniforms.
 #[derive(Debug, Default, Clone)]
-pub struct RectInstanceProps {
-    pub rect_pos: Option<usize>,
-    pub rect_size: Option<usize>,
+pub(crate) struct RectInstanceProps {
+    pub(crate) rect_pos: Option<usize>,
+    pub(crate) rect_size: Option<usize>,
 }
 impl RectInstanceProps {
-    pub fn construct(instances: &[PropDef]) -> RectInstanceProps {
+    fn construct(instances: &[PropDef]) -> RectInstanceProps {
         let mut rect_pos = None;
         let mut rect_size = None;
         let mut slot = 0;
@@ -183,82 +197,68 @@ impl RectInstanceProps {
 ///
 /// TODO(JP): Merge this into [`NamedProp`].
 #[derive(Debug, Clone)]
-pub struct InstanceProp {
-    pub name: String,
-    pub ty: Ty,
-    pub offset: usize,
-    pub slots: usize,
+pub(crate) struct InstanceProp {
+    pub(crate) name: String,
+    pub(crate) slots: usize,
 }
 
 /// Represents all "instance" GPU inputs in a [`Shader`].
 ///
 /// TODO(JP): Merge this into [`NamedProps`].
 #[derive(Debug, Default, Clone)]
-pub struct InstanceProps {
-    pub props: Vec<InstanceProp>,
-    pub total_slots: usize,
-}
-
-/// Represents a "uniform" GPU input in a [`Shader`].
-///
-/// TODO(JP): Merge this into [`NamedProp`].
-#[derive(Debug, Clone)]
-pub struct UniformProp {
-    pub name: String,
-    pub ty: Ty,
-    pub offset: usize,
-    pub slots: usize,
+pub(crate) struct InstanceProps {
+    pub(crate) props: Vec<InstanceProp>,
+    pub(crate) total_slots: usize,
 }
 
 /// Represents all "uniform" GPU inputs in a [`Shader`].
 ///
 /// TODO(JP): Merge this into [`NamedProps`].
 #[derive(Debug, Default, Clone)]
-pub struct UniformProps {
-    pub props: Vec<UniformProp>,
-    pub total_slots: usize,
+pub(crate) struct UniformProps {
+    pub(crate) total_slots: usize,
 }
 
 /// A generic representation of any kind of [`Shader`] input (instance/uniform/geometry).
+#[cfg(target_os = "windows")]
 #[derive(Debug, Clone)]
-pub struct NamedProp {
-    pub name: String,
-    pub ty: Ty,
-    pub offset: usize,
-    pub slots: usize,
+pub(crate) struct NamedProp {
+    pub(crate) offset: usize,
+    pub(crate) slots: usize,
 }
 
 /// A generic representation of a list of [`Shader`] inputs (instance/uniform/geometry).
+#[cfg(target_os = "windows")]
 #[derive(Debug, Default, Clone)]
-pub struct NamedProps {
-    pub props: Vec<NamedProp>,
-    pub total_slots: usize,
+pub(crate) struct NamedProps {
+    pub(crate) props: Vec<NamedProp>,
 }
 
+#[cfg(target_os = "windows")]
 impl NamedProps {
-    pub fn construct(in_props: &[PropDef]) -> NamedProps {
+    pub(crate) fn construct(in_props: &[PropDef]) -> NamedProps {
         let mut offset = 0;
         let out_props = in_props
             .iter()
             .map(|prop| {
                 let slots = prop.ty.size();
-                let prop = NamedProp { ty: prop.ty.clone(), name: prop.name.clone(), offset, slots };
+                let prop = NamedProp { offset, slots };
                 offset += slots;
                 prop
             })
             .collect();
-        NamedProps { props: out_props, total_slots: offset }
+        NamedProps { props: out_props }
     }
 }
 
 impl InstanceProps {
-    pub fn construct(in_props: &[PropDef]) -> InstanceProps {
+    fn construct(in_props: &[PropDef]) -> InstanceProps {
         let mut offset = 0;
         let out_props = in_props
             .iter()
             .map(|prop| {
                 let slots = prop.ty.size();
-                let prop = InstanceProp { ty: prop.ty.clone(), name: prop.name.clone(), offset, slots };
+                let prop = InstanceProp { name: prop.name.clone(), slots };
                 offset += slots;
                 prop
             })
@@ -269,26 +269,7 @@ impl InstanceProps {
 
 impl UniformProps {
     pub fn construct(in_props: &[PropDef]) -> UniformProps {
-        let mut offset = 0;
-        let out_props = in_props
-            .iter()
-            .map(|prop| {
-                let slots = prop.ty.size();
-                let prop = UniformProp { ty: prop.ty.clone(), name: prop.name.clone(), offset, slots };
-                offset += slots;
-                prop
-            })
-            .collect();
-        UniformProps { props: out_props, total_slots: offset }
-    }
-
-    pub fn find_zbias_uniform_prop(&self) -> Option<usize> {
-        for prop in &self.props {
-            if prop.name == "zbias" {
-                return Some(prop.offset);
-            }
-        }
-        None
+        UniformProps { total_slots: in_props.iter().map(|prop| prop.ty.size()).sum() }
     }
 }
 
@@ -296,12 +277,12 @@ impl UniformProps {
 /// [`ShaderAst`] will be removed, and the [`CxPlatformShader`] (platform-specific
 /// part of the compiled shader) gets set.
 #[derive(Default)]
-pub struct CxShader {
-    pub name: String,
-    pub gpu_geometry: Option<GpuGeometry>,
+pub(crate) struct CxShader {
+    pub(crate) name: String,
+    pub(crate) gpu_geometry: Option<GpuGeometry>,
     pub(crate) platform: Option<CxPlatformShader>,
-    pub mapping: CxShaderMapping,
-    pub shader_ast: Option<ShaderAst>,
+    pub(crate) mapping: CxShaderMapping,
+    pub(crate) shader_ast: Option<ShaderAst>,
 }
 
 impl Cx {

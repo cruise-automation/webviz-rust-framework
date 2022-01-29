@@ -6,6 +6,7 @@
 
 [workspace]
 members = [
+    "wrflib/cargo-wrflib",
     "wrflib/examples/example_bigedit",
     "wrflib/examples/example_bigedit/http",
     "wrflib/examples/example_bigedit/hub",
@@ -27,6 +28,14 @@ members = [
     "wrflib/examples/test_shader_2d_primitives",
     "wrflib/examples/tutorial_hello_world_console",
     "wrflib/examples/tutorial_hello_thread",
+    "wrflib/examples/tutorial_hello_world_canvas",
+    "wrflib/examples/tutorial_2d_rendering/step1",
+    "wrflib/examples/tutorial_2d_rendering/step2",
+    "wrflib/examples/tutorial_2d_rendering/step3",
     "wrflib/examples/tutorial_js_rust_bridge",
+    "wrflib/examples/tutorial_3d_rendering/step2",
+    "wrflib/examples/tutorial_3d_rendering/step3",
+    "wrflib/examples/tutorial_ui_components",
+    "wrflib/examples/tutorial_ui_layout",
     "wrflib/test_suite",
 ]

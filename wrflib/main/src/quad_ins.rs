@@ -61,11 +61,31 @@ impl QuadIns {
         Rect { pos: self.rect_pos, size: self.rect_size }
     }
 
+    //ANCHOR: build_geom
     pub fn build_geom() -> Geometry {
-        let vertex_attributes = vec![vec2(0., 0.), vec2(1., 0.), vec2(1., 1.), vec2(0., 1.)];
-        let indices = vec![[0, 1, 2], [2, 3, 0]];
+        // First, represent each corner of the quad as a vertex,
+        // with each side having a length of 1.
+        let vertex_attributes = vec![
+            // top left vertex
+            vec2(0., 0.),
+            // top right vertex
+            vec2(1., 0.),
+            // bottom right vertex
+            vec2(1., 1.),
+            // bottom left vertex
+            vec2(0., 1.),
+        ];
+        // Group the vertices into two triangles, right triangles
+        // on opposing corner coming together to share a hypotenuse.
+        let indices = vec![
+            // top-right triangle
+            [0, 1, 2],
+            // bottom-left triangle
+            [2, 3, 0],
+        ];
         Geometry::new(vertex_attributes, indices)
     }
+    //ANCHOR_END: build_geom
 
     /// Common [`Shader`] code for using [`QuadIns`].
     pub const SHADER: CodeFragment = code_fragment!(

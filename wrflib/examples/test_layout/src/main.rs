@@ -5,7 +5,7 @@
 // You may not use this file except in compliance with the License.
 
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 #[derive(Default)]
 #[repr(C)]
@@ -16,7 +16,7 @@ impl ExampleQuad {
     fn draw(&mut self, cx: &mut Cx, label: &str) {
         cx.begin_padding_box(Padding::all(1.0));
         self.base.begin_draw(cx, Width::Compute, Height::Compute, vec4(0.8, 0.2, 0.4, 1.));
-        cx.begin_padding_box(Padding { l: 16.0, t: 12.0, r: 16.0, b: 12.0 });
+        cx.begin_padding_box(Padding::vh(12., 16.));
         TextIns::draw_walk(cx, label, &TextInsProps::DEFAULT);
         cx.end_padding_box();
         self.base.end_draw(cx);

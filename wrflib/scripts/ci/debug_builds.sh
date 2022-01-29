@@ -15,4 +15,4 @@ wrflib/scripts/ci/common.sh
 
 export RUSTFLAGS="-D warnings"
 cargo build --all-targets --workspace # builds everything in the workspace, including tests, etc
-wrflib/scripts/build_wasm.sh --all-targets --workspace # same but for wasm
+cargo run -p cargo-wrflib -- build --all-targets --workspace # same but for wasm

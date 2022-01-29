@@ -4,6 +4,9 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
+// @ts-ignore
+import TestSuiteWorker from "worker-loader?inline=no-fallback!./test_suite_worker";
+
 import { assertNotNull, Rpc } from "./common";
 import { TestSuiteTests } from "./test_suite_worker";
 import { PostMessageTypedArray, WrfArray } from "./types";
@@ -36,9 +39,7 @@ export type TestSuiteWorkerSpec = {
   };
   receive: Record<string, never>;
 };
-const rpc = new Rpc<TestSuiteWorkerSpec>(
-  new Worker(new URL("./test_suite_worker.ts", import.meta.url))
-);
+const rpc = new Rpc<TestSuiteWorkerSpec>(new TestSuiteWorker());
 
 const runWorkerTest = (testName: TestSuiteTests) => () =>
   rpc.send("runTest", testName);

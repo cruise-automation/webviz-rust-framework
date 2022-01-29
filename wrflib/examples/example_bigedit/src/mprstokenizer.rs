@@ -4,7 +4,7 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
-use wrflib_widget::*;
+use wrflib_components::*;
 
 #[derive(Default)]
 pub struct MprsTokenizer {

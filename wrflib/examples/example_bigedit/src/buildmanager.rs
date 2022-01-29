@@ -8,7 +8,7 @@ use crate::makepadstorage::*;
 use crate::searchindex::*;
 use bigedit_hub::*;
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 #[derive(Clone)]
 pub struct BuildManager {

@@ -5,7 +5,7 @@
 // You may not use this file except in compliance with the License.
 
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 #[derive(Clone)]
 #[repr(C)]
@@ -192,7 +192,7 @@ impl ColorSliders {
 }
 
 struct ShaderEditor {
-    component_base: ComponentBase,
+    component_id: ComponentId,
     window: Window,
     pass: Pass,
     main_view: View,
@@ -205,7 +205,7 @@ struct ShaderEditor {
 impl ShaderEditor {
     fn new(_cx: &mut Cx) -> Self {
         Self {
-            component_base: Default::default(),
+            component_id: Default::default(),
             window: Window::default(),
             pass: Pass::default(),
             quad: ShaderQuadIns::default(),
@@ -237,7 +237,7 @@ impl ShaderEditor {
             cx.request_draw();
         }
 
-        match event.hits(cx, &self.component_base, HitOpt::default()) {
+        match event.hits_finger(cx, self.component_id, self.quad_area.get_rect_for_first_instance(cx)) {
             Event::FingerMove(fm) => {
                 self.quad.counter += 0.001;
                 self.quad.mouse = fm.rel / self.quad.base.rect_size;
@@ -262,8 +262,6 @@ impl ShaderEditor {
         self.quad.base = QuadIns::from_rect(Rect { pos: cx.get_draw_pos(), size: vec2(quad_size, quad_size) });
 
         self.quad_area = cx.add_instances(&SHADER, &[self.quad.clone()]);
-
-        self.component_base.register_component_area(cx, self.quad_area);
 
         cx.end_row();
         self.main_view.end_view(cx);

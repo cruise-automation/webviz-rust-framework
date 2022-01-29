@@ -1,5 +1,5 @@
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 mod chart_list;
 use chart_list::*;

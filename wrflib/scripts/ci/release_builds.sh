@@ -15,4 +15,4 @@ wrflib/scripts/ci/common.sh
 
 export RUSTFLAGS="-D warnings"
 cargo build --release # builds a standard release build for the current operating system
-wrflib/scripts/build_wasm.sh --release # release build for wasm only
+cargo run -p cargo-wrflib -- build --release # release build for wasm only

@@ -13,4 +13,4 @@ cd "${0%/*}/../../.."
 
 # TODO(JP): The path where we put CEF originally is a bit funky, so it would be nice to clean
 # that up at some point. Still, this is better than downloading it from the internet again..
-cp -r /main/bind/cef-sys/deps/* wrflib/main/bind/cef-sys/deps/
+cp -r /tmp/cef_binary_* wrflib/main/bind/cef-sys/deps/

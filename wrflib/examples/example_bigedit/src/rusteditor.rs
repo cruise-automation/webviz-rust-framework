@@ -9,7 +9,7 @@ use crate::makepadstorage::*;
 use crate::mprstokenizer::*;
 use crate::searchindex::*;
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 pub struct RustEditor {
     pub view: View,
@@ -28,7 +28,7 @@ impl RustEditor {
             splitter: Splitter {
                 pos: 125.0,
                 align: SplitterAlign::Last,
-                _hit_state_margin: Some(Margin { l: 3., t: 0., r: 7., b: 0. }),
+                _hit_state_margin: Some(Padding { l: 3., t: 0., r: 7., b: 0. }),
                 ..Splitter::default()
             },
             text_editor: TextEditor::default(),

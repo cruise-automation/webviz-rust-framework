@@ -1,3 +1,12 @@
+// Import workers inline, so you can just include a single file "wasm_runtime.js"
+// without having to worry about having to serve multiple chunks.
+// @ts-ignore
+import MainWorker from "worker-loader?inline=no-fallback!./main_worker";
+// @ts-ignore
+import AsyncWorker from "worker-loader?inline=no-fallback!./async_worker";
+// @ts-ignore
+import TaskWorker from "worker-loader?inline=no-fallback!./task_worker";
+
 import {
   getWrfBufferWasm,
   isWrfBuffer,
@@ -251,7 +260,7 @@ export const initialize: Initialize = (initParams) => {
   overwriteTypedArraysWithWrfArrays();
 
   return new Promise<void>((resolve) => {
-    rpc = new Rpc(new Worker(new URL("./main_worker.ts", import.meta.url)));
+    rpc = new Rpc(new MainWorker());
 
     const baseUri =
       initParams.baseUri ??
@@ -539,9 +548,7 @@ export const initialize: Initialize = (initParams) => {
       // We also do this before initializing `WebAssembly.Memory`, to make sure we have
       // enough memory for both.. (This is mostly relevant on mobile; see note below.)
       const taskWorkerSab = initTaskWorkerSab();
-      const taskWorkerRpc = new Rpc(
-        new Worker(new URL("./task_worker.ts", import.meta.url))
-      );
+      const taskWorkerRpc = new Rpc(new TaskWorker());
       taskWorkerRpc.send(TaskWorkerEvent.Init, {
         taskWorkerSab,
         wasmMemory,
@@ -620,9 +627,7 @@ export const initialize: Initialize = (initParams) => {
           ctxPtr: BigInt;
           tlsAndStackData: TlsAndStackData;
         }) => {
-          const worker = new Worker(
-            new URL("./async_worker.ts", import.meta.url)
-          );
+          const worker = new AsyncWorker();
           const workerErrorHandler = (event: unknown) => {
             console.log("Async worker error event: ", event);
           };

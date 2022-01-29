@@ -16,5 +16,5 @@ cef-server=["wrflib/cef-server"] # Serve web files from the application bundle
 
 [dependencies]
 wrflib = { path="../../main" }
-wrflib_widget = { path="../../widget" }
+wrflib_components = { path="../../components" }
 

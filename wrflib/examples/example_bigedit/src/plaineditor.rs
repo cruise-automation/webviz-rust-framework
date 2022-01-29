@@ -7,7 +7,7 @@
 use crate::makepadstorage::*;
 use crate::searchindex::*;
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 pub struct PlainEditor {
     pub text_editor: TextEditor,

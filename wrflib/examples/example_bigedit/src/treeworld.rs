@@ -6,7 +6,7 @@
 
 // a bunch o buttons to select the world
 use wrflib::*;
-use wrflib_widget::*;
+use wrflib_components::*;
 
 static SHADER: Shader = Shader {
     build_geom: Some(QuadIns::build_geom),
