@@ -29,37 +29,36 @@ static MAIN_SHADER: Shader = Shader {
                 let df = Df::viewport_px(pos * rect_size);
 
                 let size = rect_size.x * dpi_factor;
-                let x = 0.25 * size;
-                let y = 0.25 * size;
+                let p = vec2(0.25 * size);
                 size = size / 2.;
 
                 if prim_type == 0. {
-                    df.circle(x + 0.5 * size, y + 0.5 * size, 0.5 * size);
+                    df.circle(p + 0.5 * size, 0.5 * size);
                 } else if prim_type == 1. {
-                    df.arc(x, y + size, size, 0., PI / 2.);
+                    df.arc(vec2(p.x, p.y + size), size, 0., PI / 2.);
                 } else if prim_type == 2. {
-                    df.box(x, y, size, size, 0.15 * size);
+                    df.box(p, vec2(size), 0.15 * size);
                 } else if prim_type == 3. {
-                    df.rect(x, y, size, size);
+                    df.rect(p, vec2(size));
                 } else if prim_type == 4. {
-                    df.hexagon(x + .5 * size, y + .5 * size, .5 * size);
+                    df.hexagon(p + .5 * size, .5 * size);
                 } else if prim_type == 5. {
-                    df.move_to(x, y);
-                    df.line_to(x + .25 * size, y + .3 * size);
-                    df.line_to(x + .5 * size, y + .15 * size);
-                    df.line_to(x + .75 * size, y + .8 * size);
-                    df.line_to(x + .25 * size, y + .9 * size);
-                    df.line_to(x + .1 * size, y + .5 * size);
+                    df.move_to(p);
+                    df.line_to(p + size * vec2(.25, .3));
+                    df.line_to(p + size * vec2(.5, .15));
+                    df.line_to(p + size * vec2(.75, .8));
+                    df.line_to(p + size * vec2(.25, .9));
+                    df.line_to(p + size * vec2(.1, .5));
                 } else if prim_type == 6. {
-                    df.move_to(x, y);
-                    df.line_to(x + .25 * size, y + .3 * size);
-                    df.line_to(x + .5 * size, y + .15 * size);
-                    df.line_to(x + .75 * size, y + .8 * size);
-                    df.line_to(x + .25 * size, y + .9 * size);
-                    df.line_to(x + .1 * size, y + .5 * size);
+                    df.move_to(p);
+                    df.line_to(p + size * vec2(.25, .3));
+                    df.line_to(p + size * vec2(.5, .15));
+                    df.line_to(p + size * vec2(.75, .8));
+                    df.line_to(p + size * vec2(.25, .9));
+                    df.line_to(p + size * vec2(.1, .5));
                     df.close_path();
                 } else if prim_type == 7. {
-                    df.triangle(vec2(x, y + size), vec2(x + 0.5 * size, y), vec2(x + size, y + size));
+                    df.triangle(vec2(p.x, p.y + size), vec2(p.x + 0.5 * size, p.y), p + size);
                 }
 
                 if prim_style == 0. {
@@ -150,8 +149,8 @@ impl PrimitivesExampleApp {
     pub fn handle(&mut self, _cx: &mut Cx, event: &mut Event) {
         match event {
             Event::Construct => {}
-            Event::FingerMove(fm) => {
-                self.count = fm.abs.x * 0.01;
+            Event::PointerMove(pm) => {
+                self.count = pm.abs.x * 0.01;
             }
             _ => (),
         }

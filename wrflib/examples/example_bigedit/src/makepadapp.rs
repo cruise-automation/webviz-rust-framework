@@ -202,7 +202,7 @@ impl MakepadApp {
                         cx.reset_font_atlas_and_redraw();
                     }*/
                     if self.makepad_storage.settings_old.builds != self.makepad_storage.settings.builds {
-                        self.build_manager.restart_build(cx, &mut self.makepad_storage);
+                        // self.build_manager.restart_build(cx, &mut self.makepad_storage);
                     }
                 }
             }

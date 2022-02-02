@@ -12,7 +12,7 @@ use wrflib_components::*;
 pub struct SearchResults {
     view: ScrollView,
     result_draw: SearchResultDraw,
-    list: ListLogic,
+    list: List,
     search_input: TextInput,
     do_select_first: bool,
     first_tbid: MakepadTextBufferId,
@@ -65,7 +65,7 @@ impl SearchResults {
                 empty_message: "search".to_string(),
             }),
             result_draw: SearchResultDraw::new(),
-            list: ListLogic::default(),
+            list: List::default(),
             do_select_first: false,
             view: ScrollView::new_standard_vh(),
             results: Vec::new(),
@@ -199,7 +199,7 @@ impl SearchResults {
                 cx.request_draw();
                 let result = &self.results[select_index];
                 let text_buffer = &mut makepad_storage.text_buffers[result.text_buffer_id.as_index()].text_buffer;
-                if let Event::FingerDown(_) = event {
+                if let Event::PointerDown(_) = event {
                     self.search_input.text_editor.set_key_focus(cx);
                 }
                 let tok = &text_buffer.token_chunks[result.token as usize];

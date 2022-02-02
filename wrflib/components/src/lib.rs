@@ -4,7 +4,7 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
-//! Collection of widgets for use with Wrf.
+//! Collection of widgets for use with Wrflib.
 //!
 //! Doesn't contain lower level primitives; those are in [`wrflib`].
 
@@ -19,28 +19,20 @@ mod axis;
 pub use crate::axis::*;
 mod scrollview;
 pub use crate::scrollview::*;
-mod buttonlogic;
-pub use crate::buttonlogic::*;
 mod button;
 pub use crate::button::*;
-mod scrollbar;
-pub use crate::scrollbar::*;
 mod splitter;
 pub use crate::splitter::*;
 mod tab;
 pub use crate::tab::*;
-mod tabclose;
-pub use crate::tabclose::*;
 mod tabcontrol;
 pub use crate::tabcontrol::*;
 mod dock;
 pub use crate::dock::*;
 mod desktopwindow;
 pub use crate::desktopwindow::*;
-mod desktopbutton;
-pub use crate::desktopbutton::*;
-mod listlogic;
-pub use crate::listlogic::*;
+mod list;
+pub use crate::list::*;
 mod textbuffer;
 pub use crate::textbuffer::*;
 mod texteditor;
@@ -78,3 +70,6 @@ mod drawpoints3d;
 pub use crate::drawpoints3d::*;
 mod arrow_pointer;
 pub use crate::arrow_pointer::*;
+
+mod internal;
+pub(crate) use crate::internal::*;

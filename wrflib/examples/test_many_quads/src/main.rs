@@ -45,8 +45,8 @@ impl BareExampleApp {
     fn handle(&mut self, _cx: &mut Cx, event: &mut Event) {
         match event {
             Event::Construct => {}
-            Event::FingerMove(fm) => {
-                self.count = fm.abs.x * 0.01;
+            Event::PointerMove(pm) => {
+                self.count = pm.abs.x * 0.01;
             }
             _ => (),
         }

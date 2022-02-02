@@ -21,6 +21,7 @@ const FONT_UBUNTU_REGULAR: Font = Font { font_id: 0 };
 /// The monospace [Liberation mono font](https://en.wikipedia.org/wiki/Liberation_fonts).
 const FONT_LIBERATION_MONO_REGULAR: Font = Font { font_id: 1 };
 /// Actual font data; should match the font_ids above.
+#[cfg(not(feature = "disable-fonts"))]
 const FONTS_BYTES: &[&[u8]] =
     &[include_bytes!("../resources/Ubuntu-R.ttf"), include_bytes!("../resources/LiberationMono-Regular.ttf")];
 
@@ -80,12 +81,15 @@ impl Default for TextStyle {
 
 impl Cx {
     pub(crate) fn load_fonts(&mut self) {
-        let mut write_fonts_data = self.fonts_data.write().unwrap();
-        write_fonts_data.fonts = Iterator::map(FONTS_BYTES.iter(), |bytes| {
-            let font = wrflib_vector::ttf_parser::parse_ttf(bytes).expect("Error loading font");
-            CxFont { font_loaded: Some(font), atlas_pages: vec![] }
-        })
-        .collect();
+        #[cfg(not(feature = "disable-fonts"))]
+        {
+            let mut write_fonts_data = self.fonts_data.write().unwrap();
+            write_fonts_data.fonts = Iterator::map(FONTS_BYTES.iter(), |bytes| {
+                let font = wrflib_vector::ttf_parser::parse_ttf(bytes).expect("Error loading font");
+                CxFont { font_loaded: Some(font), atlas_pages: vec![] }
+            })
+            .collect();
+        }
     }
 
     pub fn reset_font_atlas_and_redraw(&mut self) {
@@ -238,7 +242,7 @@ impl TrapezoidText {
             }
             let glyph = &cx.fonts[font_id].font_loaded.as_ref().unwrap().glyphs[slot];
             let dpi_factor = cx.current_dpi_factor;
-            let pos = cx.get_turtle_pos();
+            let pos = cx.get_draw_pos();
             let font_scale_logical = font_size * 96.0 / (72.0 * font.units_per_em);
             let font_scale_pixels = font_scale_logical * dpi_factor;
             let mut trapezoids = Vec::new();

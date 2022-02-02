@@ -156,18 +156,18 @@ pub struct Cx {
     pub(crate) keys_down: Vec<KeyEvent>,
 
     /// The cursor type that the user sees while holding the mouse down. Gets reset to [`None`] when
-    /// you release the mouse button ([`Event::FingerUp`]).
+    /// you release the mouse button ([`Event::PointerUp`]).
     pub(crate) down_mouse_cursor: Option<MouseCursor>,
 
     /// The cursor type that the user sees while hovering (not holding the mouse down).
-    /// Gets reset when there's a new [`Event::FingerHover`], so you have to periodically set this.
+    /// Gets reset when there's a new [`Event::PointerHover`], so you have to periodically set this.
     pub(crate) hover_mouse_cursor: Option<MouseCursor>,
 
-    /// The current state of each "finger" that we track.
+    /// The current state of each "pointer" that we track.
     ///
     /// TODO(JP): This seems mostly relevant for multi-touch, which we don't really support very
     /// well yet. Should we keep this?
-    pub(crate) fingers: Vec<CxPerFinger>,
+    pub(crate) pointers: Vec<CxPerPointer>,
 
     /// Whether [`Cx::request_next_frame`] was called.
     pub(crate) requested_next_frame: bool,
@@ -276,7 +276,7 @@ pub(crate) struct CxCommandSetting {
 }
 
 #[derive(Default, Clone)]
-pub(crate) struct CxPerFinger {
+pub(crate) struct CxPerPointer {
     pub(crate) captured: Option<ComponentId>,
     pub(crate) tap_count: (Vec2, f64, u32),
     pub(crate) down_abs_start: Vec2,
@@ -285,12 +285,12 @@ pub(crate) struct CxPerFinger {
     pub(crate) _over_last: Option<ComponentId>,
 }
 
-pub(crate) const NUM_FINGERS: usize = 10;
+pub(crate) const NUM_POINTERS: usize = 10;
 
 impl Cx {
     pub fn new(app_type_id: TypeId) -> Self {
-        let mut fingers = Vec::new();
-        fingers.resize(NUM_FINGERS, CxPerFinger::default());
+        let mut pointers = Vec::new();
+        pointers.resize(NUM_POINTERS, CxPerPointer::default());
 
         let textures = vec![CxTexture {
             desc: TextureDesc { format: TextureFormat::ImageRGBA, width: Some(4), height: Some(4), multisample: None },
@@ -337,7 +337,7 @@ impl Cx {
 
             down_mouse_cursor: None,
             hover_mouse_cursor: None,
-            fingers,
+            pointers,
 
             shader_ast_generator: ShaderAstGenerator::new(),
 
@@ -372,16 +372,16 @@ impl Cx {
 
     pub(crate) fn process_pre_event(&mut self, event: &mut Event) {
         match event {
-            Event::FingerHover(fe) => {
-                self.fingers[fe.digit].over_last = None;
+            Event::PointerHover(pe) => {
+                self.pointers[pe.digit].over_last = None;
                 self.hover_mouse_cursor = None;
             }
-            Event::FingerUp(_fe) => {
+            Event::PointerUp(_pe) => {
                 self.down_mouse_cursor = None;
             }
-            Event::FingerDown(fe) => {
-                // lets set the finger tap count
-                fe.tap_count = self.process_tap_count(fe.digit, fe.abs, fe.time);
+            Event::PointerDown(pe) => {
+                // lets set the pointer tap count
+                pe.tap_count = self.process_tap_count(pe.digit, pe.abs, pe.time);
             }
             Event::KeyDown(ke) => {
                 self.process_key_down(ke.clone());
@@ -429,18 +429,18 @@ impl Cx {
 
     pub(crate) fn process_post_event(&mut self, event: &mut Event) {
         match event {
-            Event::FingerUp(fe) => {
+            Event::PointerUp(pe) => {
                 // decapture automatically
-                self.fingers[fe.digit].captured = None;
+                self.pointers[pe.digit].captured = None;
             }
-            Event::FingerHover(fe) => {
-                // new last area finger over
-                self.fingers[fe.digit]._over_last = self.fingers[fe.digit].over_last;
-                //if fe.hover_state == HoverState::Out{
+            Event::PointerHover(pe) => {
+                // new last area pointer over
+                self.pointers[pe.digit]._over_last = self.pointers[pe.digit].over_last;
+                //if pe.hover_state == HoverState::Out{
                 //    self.hover_mouse_cursor = None;
                 //}
             }
-            Event::FingerScroll(_) => {
+            Event::PointerScroll(_) => {
                 // check for anything being paint or draw dirty
                 #[cfg(not(target_arch = "wasm32"))]
                 if self.requested_draw {
@@ -452,16 +452,16 @@ impl Cx {
     }
 
     pub(crate) fn process_tap_count(&mut self, digit: usize, pos: Vec2, time: f64) -> u32 {
-        if digit >= self.fingers.len() {
+        if digit >= self.pointers.len() {
             return 0;
         };
-        let (last_pos, last_time, count) = self.fingers[digit].tap_count;
+        let (last_pos, last_time, count) = self.pointers[digit].tap_count;
 
         if (time - last_time) < 0.5 && pos.distance(&last_pos) < 10. {
-            self.fingers[digit].tap_count = (pos, time, count + 1);
+            self.pointers[digit].tap_count = (pos, time, count + 1);
             count + 1
         } else {
-            self.fingers[digit].tap_count = (pos, time, 1);
+            self.pointers[digit].tap_count = (pos, time, 1);
             1
         }
     }
@@ -577,7 +577,7 @@ impl Cx {
         self.next_key_focus = Some(focus_component_id);
     }
 
-    /// Keep the existing key focus during an [`Event::FingerDown`], because otherwise we'll reset
+    /// Keep the existing key focus during an [`Event::PointerDown`], because otherwise we'll reset
     /// it back to [`Area::Empty`].
     pub fn keep_key_focus(&mut self) {
         self.next_key_focus = Some(self.key_focus);
@@ -628,9 +628,9 @@ impl Cx {
             (*event_handler)(self, event);
         }
 
-        // Someone has to call `set_key_focus` or `keep_key_focus` when handling `FingerDown`, otherwise
+        // Someone has to call `set_key_focus` or `keep_key_focus` when handling `PointerDown`, otherwise
         // the key focus will be reset.
-        if let Event::FingerDown(_) = event {
+        if let Event::PointerDown(_) = event {
             if self.next_key_focus.is_none() {
                 self.next_key_focus = Some(None);
             }

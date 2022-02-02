@@ -13,8 +13,9 @@ import SimpleHTTPServer
 import SocketServer
 import urllib
 import ssl
+import os
 
-PORT = 3000
+PORT = int(os.environ.get("PORT") or 3000)
 WEBPACK_URL = "http://localhost:3001"
 EXCLUDED_HEADERS = [
     "Cross-Origin-Embedder-Policy",

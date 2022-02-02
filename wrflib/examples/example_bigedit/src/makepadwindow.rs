@@ -102,15 +102,6 @@ impl WrfWindow {
                                     editor_id: 2,
                                 },
                             },
-                            DockTab {
-                                closeable: true,
-                                title: "skybox.rs".to_string(),
-                                item: Panel::FileEditor {
-                                    path: "main/wrflib/wrflib/components/src/skybox.rs".to_string(),
-                                    scroll_pos: Vec2::default(),
-                                    editor_id: 3,
-                                },
-                            },
                         ],
                     }),
 
@@ -157,7 +148,7 @@ impl WrfWindow {
                 KeyCode::Backtick => {
                     if ke.modifiers.logo || ke.modifiers.control {
                         if build_manager.active_builds.is_empty() {
-                            build_manager.restart_build(cx, makepad_storage);
+                            // build_manager.restart_build(cx, makepad_storage);
                         }
                         let mut clear = true;
                         for ab in &build_manager.active_builds {
@@ -169,7 +160,7 @@ impl WrfWindow {
                             build_manager.tail_log_items = true;
                             build_manager.log_items.truncate(0);
                         }
-                        build_manager.artifact_run(makepad_storage);
+                        // build_manager.artifact_run(makepad_storage);
                         self.show_log_tab(cx, window_index);
                     }
                 }
@@ -269,7 +260,7 @@ impl WrfWindow {
                             TextEditorEvent::LagChange => {
                                 makepad_storage.text_buffer_file_write(cx, path);
                                 if makepad_storage.settings.build_on_save {
-                                    build_manager.restart_build(cx, makepad_storage);
+                                    // build_manager.restart_build(cx, makepad_storage);
                                 }
                             }
                             TextEditorEvent::CursorMove => {
@@ -310,19 +301,19 @@ impl WrfWindow {
         }
 
         match file_tree_event {
-            FileTreeEvent::DragMove { fe, .. } => {
-                self.dock.dock_drag_move(cx, fe);
+            FileTreeEvent::DragMove { pe, .. } => {
+                self.dock.dock_drag_move(cx, pe);
             }
             FileTreeEvent::DragCancel => {
                 self.dock.dock_drag_cancel(cx);
             }
-            FileTreeEvent::DragEnd { fe, paths } => {
+            FileTreeEvent::DragEnd { pe, paths } => {
                 let mut tabs = Vec::new();
                 for path in paths {
                     // find a free editor id
                     tabs.push(self.new_file_editor_tab(cx, &path, None, false, true));
                 }
-                self.dock.dock_drag_end(cx, fe, tabs);
+                self.dock.dock_drag_end(cx, pe, tabs);
                 self.ensure_unique_tab_title_for_file_editors(cx, window_index);
             }
             FileTreeEvent::SelectFile { path } => {

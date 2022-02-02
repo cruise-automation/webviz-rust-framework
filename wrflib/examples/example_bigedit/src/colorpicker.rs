@@ -46,50 +46,49 @@ static SHADER: Shader = Shader {
                 let w = rect_size.x;
                 let h = rect_size.y;
                 let df = Df::viewport(pos * vec2(w, h));
-                let cx = w * 0.5;
-                let cy = h * 0.5;
+                let c = vec2(w, h) * 0.5;
 
                 let radius = w * 0.37;
                 let inner = w * 0.28;
 
-                df.hexagon(cx, cy, w * 0.45);
-                df.hexagon(cx, cy, w * 0.4);
+                df.hexagon(c, w * 0.45);
+                df.hexagon(c, w * 0.4);
                 df.subtract();
-                let ang = atan(pos.x * w - cx, 0.0001 + pos.y * h - cy) / PI * 0.5 - 0.33333;
+                let ang = atan(pos.x * w - c.x, 0.0001 + pos.y * h - c.y) / PI * 0.5 - 0.33333;
                 df.fill(hsv2rgb(vec4(ang, 1.0, 1.0, 1.0)));
                 df.new_path();
 
                 let rsize = inner / sqrt(2.0);
-                df.rect(cx - rsize, cy - rsize, rsize * 2.0, rsize * 2.0);
+                df.rect(c - rsize, vec2(rsize * 2.0));
 
-                let norm_rect = vec2(pos.x * w - (cx - inner), pos.y * h - (cy - inner)) / (2. * inner);
+                let norm_rect = (vec2(pos.x * w, pos.y * h) - (c - inner)) / (2. * inner);
                 let circ = clamp(circ_to_rect(norm_rect.x * 2. - 1., norm_rect.y * 2. - 1.), vec2(-1.), vec2(1.));
 
                 df.fill(hsv2rgb(vec4(hue, (circ.x * .5 + .5), 1. - (circ.y * .5 + .5), 1.)));
                 df.new_path();
 
                 let col_angle = (hue + .333333) * 2. * PI;
-                let circle_puk = vec2(sin(col_angle) * radius + cx, cos(col_angle) * radius + cy);
+                let circle_puk = vec2(sin(col_angle) * radius, cos(col_angle) * radius) + c;
 
-                let rect_puk = vec2(cx + sat * 2. * rsize - rsize, cy + (1. - val) * 2. * rsize - rsize);
+                let rect_puk = c + vec2(sat * 2. * rsize - rsize, (1. - val) * 2. * rsize - rsize);
 
                 let color = mix(mix(#3, #E, hover), #F, down);
                 let puck_size = 0.1 * w;
-                df.circle(rect_puk.x, rect_puk.y, puck_size);
-                df.rect(cx - rsize, cy - rsize, rsize * 2.0, rsize * 2.0);
+                df.circle(rect_puk, puck_size);
+                df.rect(c - rsize, vec2(rsize * 2.0));
                 df.intersect();
                 df.fill(color);
                 df.new_path();
-                df.circle(rect_puk.x, rect_puk.y, puck_size - 1. - 2. * hover + down);
-                df.rect(cx - rsize, cy - rsize, rsize * 2.0, rsize * 2.0);
+                df.circle(rect_puk, puck_size - 1. - 2. * hover + down);
+                df.rect(c - rsize, vec2(rsize * 2.0));
                 df.intersect();
                 df.fill(rgbv);
                 df.new_path();
 
-                df.circle(circle_puk.x, circle_puk.y, puck_size);
+                df.circle(circle_puk, puck_size);
                 df.fill(color);
                 df.new_path();
-                df.circle(circle_puk.x, circle_puk.y, puck_size - 1. - 2. * hover + down);
+                df.circle(circle_puk, puck_size - 1. - 2. * hover + down);
                 df.fill(rgbv);
                 df.new_path();
 
@@ -168,7 +167,7 @@ impl ColorPicker {
         color_picker.down = self.animator.get_float(1);
     }
 
-    fn handle_finger(&mut self, cx: &mut Cx, rel: Vec2) -> ColorPickerEvent {
+    fn handle_pointer(&mut self, cx: &mut Cx, rel: Vec2) -> ColorPickerEvent {
         let color_picker = self.area.get_first_mut::<ColorPickerIns>(cx);
         let size = color_picker.base.rect_size.x;
         let vx = rel.x - 0.5 * size;
@@ -201,11 +200,11 @@ impl ColorPicker {
             self.animate(cx);
         }
 
-        match event.hits_finger(cx, self.component_id, self.area.get_rect_for_first_instance(cx)) {
-            Event::FingerHover(fe) => {
+        match event.hits_pointer(cx, self.component_id, self.area.get_rect_for_first_instance(cx)) {
+            Event::PointerHover(pe) => {
                 cx.set_hover_mouse_cursor(MouseCursor::Arrow);
 
-                match fe.hover_state {
+                match pe.hover_state {
                     HoverState::In => {
                         self.animator.play_anim(cx, ANIM_HOVER);
                     }
@@ -215,14 +214,14 @@ impl ColorPicker {
                     _ => (),
                 }
             }
-            Event::FingerDown(fe) => {
+            Event::PointerDown(pe) => {
                 self.animator.play_anim(cx, ANIM_DOWN);
                 cx.set_down_mouse_cursor(MouseCursor::Arrow);
                 let color_picker = self.area.get_first::<ColorPickerIns>(cx);
                 let size = color_picker.base.rect_size.x;
                 let rsize = (size * 0.28) / 2.0f32.sqrt();
-                let vx = fe.rel.x - 0.5 * size;
-                let vy = fe.rel.y - 0.5 * size;
+                let vx = pe.rel.x - 0.5 * size;
+                let vy = pe.rel.y - 0.5 * size;
                 if vx >= -rsize && vx <= rsize && vy >= -rsize && vy <= rsize {
                     self.drag_mode = ColorPickerDragMode::Rect;
                 } else if vx >= -0.5 * size && vx <= 0.5 * size && vy >= -0.5 * size && vy <= 0.5 * size {
@@ -230,11 +229,11 @@ impl ColorPicker {
                 } else {
                     self.drag_mode = ColorPickerDragMode::None;
                 }
-                return self.handle_finger(cx, fe.rel);
+                return self.handle_pointer(cx, pe.rel);
             }
-            Event::FingerUp(fe) => {
-                if fe.is_over {
-                    if fe.input_type.has_hovers() {
+            Event::PointerUp(pe) => {
+                if pe.is_over {
+                    if pe.input_type.has_hovers() {
                         self.animator.play_anim(cx, ANIM_HOVER);
                     } else {
                         self.animator.play_anim(cx, ANIM_DEFAULT);
@@ -245,7 +244,7 @@ impl ColorPicker {
                 self.drag_mode = ColorPickerDragMode::None;
                 return ColorPickerEvent::DoneChanging;
             }
-            Event::FingerMove(fe) => return self.handle_finger(cx, fe.rel),
+            Event::PointerMove(pe) => return self.handle_pointer(cx, pe.rel),
             _ => (),
         }
         ColorPickerEvent::None

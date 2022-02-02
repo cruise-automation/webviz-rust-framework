@@ -55,7 +55,7 @@ static SHADER: Shader = Shader {
             fn pixel() -> vec4 {
                 if point_style == 1. {
                     let df = Df::viewport(geom);
-                    df.circle(0.5, 0.5, 0.5);
+                    df.circle(vec2(0.5), 0.5);
                     df.fill(vec4(in_color, 1.));
                     return df.result;
                 } else {

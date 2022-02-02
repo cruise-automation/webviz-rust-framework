@@ -27,8 +27,8 @@ static SHADER_INDENT_LINES: Shader = Shader {
                     col *= vec4(0.75, 0.75, 0.75, 0.75);
                 }
                 let df = Df::viewport(pos * rect_size);
-                df.move_to(1., -1.);
-                df.line_to(1., rect_size.y + 1.);
+                df.move_to(vec2(1., -1.));
+                df.line_to(vec2(1., rect_size.y + 1.));
                 return df.stroke(col, thickness);
             }"#
         ),
@@ -72,6 +72,13 @@ static SHADER_SELECTION: Shader = Shader {
             const gloopiness: float = 8.;
             const border_radius: float = 2.;
 
+            impl Df {
+                fn gloop(inout self, k: float) {
+                    let h = clamp(0.5 + 0.5 * (self.old_shape - self.field) / k, 0.0, 1.0);
+                    self.old_shape = self.shape = mix(self.old_shape, self.field, h) - k * h * (1.0 - h);
+                }
+            }
+
             fn vertex() -> vec4 { // custom vertex shader because we widen the draweable area a bit for the gloopiness
                 let shift: vec2 = -draw_scroll;
                 let clipped: vec2 = clamp(
@@ -86,13 +93,13 @@ static SHADER_SELECTION: Shader = Shader {
 
             fn pixel() -> vec4 {
                 let df = Df::viewport(pos * rect_size);
-                df.box(0., 0., rect_size.x, rect_size.y, border_radius);
+                df.box(vec2(0.), rect_size, border_radius);
                 if prev_w > 0. {
-                    df.box(prev_x, -rect_size.y, prev_w, rect_size.y, border_radius);
+                    df.box(vec2(prev_x, -rect_size.y), vec2(prev_w, rect_size.y), border_radius);
                     df.gloop(gloopiness);
                 }
                 if next_w > 0. {
-                    df.box(next_x, rect_size.y, next_w, rect_size.y, border_radius);
+                    df.box(vec2(next_x, rect_size.y), vec2(next_w, rect_size.y), border_radius);
                     df.gloop(gloopiness);
                 }
                 //df_shape *= cos(pos.x*8.)+cos(pos.y*16.);
@@ -112,7 +119,7 @@ static SHADER_PAREN_PAIR: Shader = Shader {
             instance color: vec4;
             fn pixel() -> vec4 {
                 let df = Df::viewport(pos * rect_size);
-                df.rect(0., rect_size.y - 1.5 - dpi_dilate, rect_size.x, 1.5 + dpi_dilate);
+                df.rect(vec2(0., rect_size.y - 1.5 - dpi_dilate), vec2(rect_size.x, 1.5 + dpi_dilate));
                 return df.fill(color);
             }"#
         ),
@@ -130,7 +137,7 @@ static SHADER_SEARCH_MARKER: Shader = Shader {
             fn pixel() -> vec4 {
                 let pos2 = vec2(pos.x, pos.y + 0.03 * sin(pos.x * rect_size.x));
                 let df = Df::viewport(pos2 * rect_size);
-                df.move_to(0., rect_size.y - 1.);
+                df.move_to(vec2(0., rect_size.y - 1.));
                 df.line_to(rect_size.x, rect_size.y - 1.);
                 return df.stroke(vec4(171.0/255.0,99.0/255.0,99.0/255.0,1.0), 0.8);
             }"#
@@ -149,7 +156,7 @@ static SHADER_MESSAGE_MARKER: Shader = Shader {
             fn pixel() -> vec4 {
                 let pos2 = vec2(pos.x, pos.y + 0.03 * sin(pos.x * rect_size.x));
                 let df = Df::viewport(pos2 * rect_size);
-                df.move_to(0., rect_size.y - 1.);
+                df.move_to(vec2(0., rect_size.y - 1.));
                 df.line_to(rect_size.x, rect_size.y - 1.);
                 return df.stroke(color, 0.8);
             }"#
@@ -305,7 +312,7 @@ pub struct TextEditor {
     pub _line_number_chunk: Vec<char>,
 
     pub _scroll_pos: Vec2,
-    pub _last_finger_move: Option<Vec2>,
+    pub _last_pointer_move: Option<Vec2>,
     pub _paren_stack: Vec<ParenItem>,
     pub _indent_stack: Vec<(Vec4, f32)>,
     pub _indent_id_alloc: f32,
@@ -480,7 +487,7 @@ impl Default for TextEditor {
             _set_last_cursor: None,
             _monospace_size: Vec2::default(),
             _monospace_base: Vec2::default(),
-            _last_finger_move: None,
+            _last_pointer_move: None,
             _tokens_on_line: 0,
             _line_was_folded: false,
             _scroll_pos: Vec2::default(),
@@ -569,24 +576,24 @@ impl TextEditor {
         self.cursor.set_blink(cx, self._cursor_blink_flipflop);
     }
 
-    fn handle_finger_down(&mut self, cx: &mut Cx, fe: &FingerDownEvent, text_buffer: &mut TextBuffer) {
+    fn handle_pointer_down(&mut self, cx: &mut Cx, pe: &PointerDownEvent, text_buffer: &mut TextBuffer) {
         cx.set_down_mouse_cursor(MouseCursor::Text);
         // give us the focus
         self.set_key_focus(cx);
         self._undo_id += 1;
         let offset;
-        if fe.rel.x < self.line_number_width - self.line_number_click_margin {
-            offset = self.compute_offset_from_ypos(cx, fe.abs.y, text_buffer, false);
+        if pe.rel.x < self.line_number_width - self.line_number_click_margin {
+            offset = self.compute_offset_from_ypos(cx, pe.abs.y, text_buffer, false);
             let range = text_buffer.get_nearest_line_range(offset);
             self.cursors.set_last_clamp_range(range);
             self._is_row_select = true;
         } else {
-            offset = if let Some(o) = TextIns::closest_offset(cx, &self.text_area, fe.abs, TEXT_STYLE_MONO.line_spacing) {
+            offset = if let Some(o) = TextIns::closest_offset(cx, &self.text_area, pe.abs, TEXT_STYLE_MONO.line_spacing) {
                 o
             } else {
                 return;
             };
-            match fe.tap_count {
+            match pe.tap_count {
                 1 => {}
                 2 => {
                     if let Some((coffset, len)) = TextCursorSet::get_nearest_token_chunk(offset, text_buffer) {
@@ -620,10 +627,10 @@ impl TextEditor {
             // ok so we should scan a range
         }
 
-        if fe.modifiers.shift {
-            if fe.modifiers.logo || fe.modifiers.control {
+        if pe.modifiers.shift {
+            if pe.modifiers.logo || pe.modifiers.control {
                 // grid select
-                let pos = self.compute_grid_text_pos_from_abs(cx, fe.abs);
+                let pos = self.compute_grid_text_pos_from_abs(cx, pe.abs);
                 self._grid_select_corner = Some(self.cursors.grid_select_corner(pos, text_buffer));
                 self.cursors.grid_select(self._grid_select_corner.unwrap(), pos, text_buffer);
                 if self.cursors.set.is_empty() {
@@ -635,7 +642,7 @@ impl TextEditor {
             }
         } else {
             // cursor drag with possible add
-            if fe.modifiers.logo || fe.modifiers.control {
+            if pe.modifiers.logo || pe.modifiers.control {
                 self.cursors.add_last_cursor_head_and_tail(offset, offset, text_buffer);
             } else {
                 self.cursors.clear_and_set_last_cursor_head_and_tail(offset, offset, text_buffer);
@@ -643,27 +650,27 @@ impl TextEditor {
         }
 
         cx.request_draw();
-        self._last_finger_move = Some(fe.abs);
+        self._last_pointer_move = Some(pe.abs);
         //self.update_highlight(cx, text_buffer);
         self.reset_cursor_blinker(cx);
     }
 
-    fn handle_finger_move(&mut self, cx: &mut Cx, fe: &FingerMoveEvent, text_buffer: &mut TextBuffer) {
+    fn handle_pointer_move(&mut self, cx: &mut Cx, pe: &PointerMoveEvent, text_buffer: &mut TextBuffer) {
         let cursor_moved = if let Some(grid_select_corner) = self._grid_select_corner {
-            let pos = self.compute_grid_text_pos_from_abs(cx, fe.abs);
+            let pos = self.compute_grid_text_pos_from_abs(cx, pe.abs);
             self.cursors.grid_select(grid_select_corner, pos, text_buffer)
         } else if self._is_row_select {
-            let offset = self.compute_offset_from_ypos(cx, fe.abs.y, text_buffer, true);
+            let offset = self.compute_offset_from_ypos(cx, pe.abs.y, text_buffer, true);
             self.cursors.set_last_cursor_head(offset, text_buffer)
-        } else if let Some(offset) = TextIns::closest_offset(cx, &self.text_area, fe.abs, TEXT_STYLE_MONO.line_spacing) {
+        } else if let Some(offset) = TextIns::closest_offset(cx, &self.text_area, pe.abs, TEXT_STYLE_MONO.line_spacing) {
             self.cursors.set_last_cursor_head(offset, text_buffer)
         } else {
             false
         };
 
-        self._last_finger_move = Some(fe.abs);
+        self._last_pointer_move = Some(pe.abs);
         // determine selection drag scroll dynamics
-        let repaint_scroll = self.check_select_scroll_dynamics(fe);
+        let repaint_scroll = self.check_select_scroll_dynamics(pe);
         //if cursor_moved {
         //     self.update_highlight(cx, text_buffer);
         //};
@@ -675,10 +682,10 @@ impl TextEditor {
         }
     }
 
-    fn handle_finger_up(&mut self, cx: &mut Cx, _fe: &FingerUpEvent, _text_buffer: &mut TextBuffer) {
+    fn handle_pointer_up(&mut self, cx: &mut Cx, _pe: &PointerUpEvent, _text_buffer: &mut TextBuffer) {
         self.cursors.clear_last_clamp_range();
         self._select_scroll = None;
-        self._last_finger_move = None;
+        self._last_pointer_move = None;
         self._grid_select_corner = None;
         self._is_row_select = false;
         //self.update_highlight(cx, text_buffer);
@@ -969,12 +976,12 @@ impl TextEditor {
 
     pub fn handle(&mut self, cx: &mut Cx, event: &mut Event, text_buffer: &mut TextBuffer) -> TextEditorEvent {
         if self.view.handle(cx, event) {
-            if let Some(last_finger_move) = self._last_finger_move {
+            if let Some(last_pointer_move) = self._last_pointer_move {
                 if let Some(grid_select_corner) = self._grid_select_corner {
-                    let pos = self.compute_grid_text_pos_from_abs(cx, last_finger_move);
+                    let pos = self.compute_grid_text_pos_from_abs(cx, last_pointer_move);
                     self.cursors.grid_select(grid_select_corner, pos, text_buffer);
                 } else if let Some(offset) =
-                    TextIns::closest_offset(cx, &self.text_area, last_finger_move, TEXT_STYLE_MONO.line_spacing)
+                    TextIns::closest_offset(cx, &self.text_area, last_pointer_move, TEXT_STYLE_MONO.line_spacing)
                 {
                     self.cursors.set_last_cursor_head(offset, text_buffer);
                 }
@@ -1032,7 +1039,23 @@ impl TextEditor {
         }
         let mut cursor_moved = false;
         // editor local
-        match event.hits_finger(cx, self.component_id, self.view.area().get_rect_for_first_instance(cx)) {
+        match event.hits_pointer(cx, self.component_id, self.view.area().get_rect_for_first_instance(cx)) {
+            Event::PointerDown(pe) => {
+                self.handle_pointer_down(cx, &pe, text_buffer);
+            }
+            Event::PointerHover(_pe) => {
+                cx.set_hover_mouse_cursor(MouseCursor::Text);
+            }
+            Event::PointerUp(pe) => {
+                self.handle_pointer_up(cx, &pe, text_buffer);
+            }
+            Event::PointerMove(pe) => {
+                self.handle_pointer_move(cx, &pe, text_buffer);
+            }
+            _ => (),
+        };
+
+        match event.hits_keyboard(cx, self.component_id) {
             Event::KeyFocus(_kf) => {
                 self.reset_cursor_blinker(cx);
                 cx.request_draw();
@@ -1042,22 +1065,6 @@ impl TextEditor {
                 cx.request_draw();
                 return TextEditorEvent::KeyFocusLost;
             }
-            Event::FingerDown(fe) => {
-                self.handle_finger_down(cx, &fe, text_buffer);
-            }
-            Event::FingerHover(_fe) => {
-                cx.set_hover_mouse_cursor(MouseCursor::Text);
-            }
-            Event::FingerUp(fe) => {
-                self.handle_finger_up(cx, &fe, text_buffer);
-            }
-            Event::FingerMove(fe) => {
-                self.handle_finger_move(cx, &fe, text_buffer);
-            }
-            _ => (),
-        };
-
-        match event.hits_keyboard(cx, self.component_id) {
             Event::KeyDown(ke) => {
                 if ke.key_code == KeyCode::Return && !self.read_only && !self.multiline {
                     return TextEditorEvent::Return;
@@ -1894,7 +1901,7 @@ impl TextEditor {
 
             let mut anim_select_any = false;
             for (i, cur) in sel.iter_mut().enumerate() {
-                let start_time = if self._select_scroll.is_none() && self._last_finger_move.is_some() { 1. } else { 0. };
+                let start_time = if self._select_scroll.is_none() && self._last_pointer_move.is_some() { 1. } else { 0. };
                 // silly selection animation start
                 if i < self._anim_select.len() && cur.rc.pos.y < self._anim_select[i].ypos {
                     // insert new one at the top
@@ -2055,7 +2062,7 @@ impl TextEditor {
         text_buffer.text_pos_to_offset(TextPos { row: self._line_geometry.len() - 1, col: end_col })
     }
 
-    fn start_code_folding(&mut self, cx: &mut Cx, text_buffer: &TextBuffer) {
+    pub fn start_code_folding(&mut self, cx: &mut Cx, text_buffer: &TextBuffer) {
         // start code folding anim
         let speed = 0.98;
         //self._anim_folding.depth = if halfway {1}else {2};
@@ -2067,7 +2074,7 @@ impl TextEditor {
         cx.request_draw();
     }
 
-    fn start_code_unfolding(&mut self, cx: &mut Cx, text_buffer: &TextBuffer) {
+    pub fn start_code_unfolding(&mut self, cx: &mut Cx, text_buffer: &TextBuffer) {
         let speed = 0.96;
         self._anim_folding.state.do_opening(speed, 0.97);
         self._anim_folding.focussed_line = self.compute_focussed_line_for_folding(cx, text_buffer);
@@ -2076,31 +2083,31 @@ impl TextEditor {
         // return to normal size
     }
 
-    fn check_select_scroll_dynamics(&mut self, fe: &FingerMoveEvent) -> bool {
+    fn check_select_scroll_dynamics(&mut self, pe: &PointerMoveEvent) -> bool {
         let pow_scale = 0.1;
         let pow_fac = 3.;
         let max_speed = 40.;
         let pad_scroll = 20.;
-        let rect = Rect { pos: fe.rect.pos + pad_scroll, size: fe.rect.size - 2. * pad_scroll };
+        let rect = Rect { pos: pe.rect.pos + pad_scroll, size: pe.rect.size - 2. * pad_scroll };
         let delta = Vec2 {
-            x: if fe.abs.x < rect.pos.x {
-                -((rect.pos.x - fe.abs.x) * pow_scale).powf(pow_fac).min(max_speed)
-            } else if fe.abs.x > rect.pos.x + rect.size.x {
-                ((fe.abs.x - (rect.pos.x + rect.size.x)) * pow_scale).powf(pow_fac).min(max_speed)
+            x: if pe.abs.x < rect.pos.x {
+                -((rect.pos.x - pe.abs.x) * pow_scale).powf(pow_fac).min(max_speed)
+            } else if pe.abs.x > rect.pos.x + rect.size.x {
+                ((pe.abs.x - (rect.pos.x + rect.size.x)) * pow_scale).powf(pow_fac).min(max_speed)
             } else {
                 0.
             },
-            y: if fe.abs.y < rect.pos.y {
-                -((rect.pos.y - fe.abs.y) * pow_scale).powf(pow_fac).min(max_speed)
-            } else if fe.abs.y > rect.pos.y + rect.size.y {
-                ((fe.abs.y - (rect.pos.y + rect.size.y)) * pow_scale).powf(pow_fac).min(max_speed)
+            y: if pe.abs.y < rect.pos.y {
+                -((rect.pos.y - pe.abs.y) * pow_scale).powf(pow_fac).min(max_speed)
+            } else if pe.abs.y > rect.pos.y + rect.size.y {
+                ((pe.abs.y - (rect.pos.y + rect.size.y)) * pow_scale).powf(pow_fac).min(max_speed)
             } else {
                 0.
             },
         };
         let last_scroll_none = self._select_scroll.is_none();
         if delta.x != 0. || delta.y != 0. {
-            self._select_scroll = Some(SelectScroll { abs: fe.abs, delta, at_end: false });
+            self._select_scroll = Some(SelectScroll { abs: pe.abs, delta, at_end: false });
         } else {
             self._select_scroll = None;
         }

@@ -307,8 +307,8 @@ pub struct ChartCurrentElement {
 #[derive(Debug, Clone)]
 pub enum ChartEvent {
     None,
-    FingerOut,
-    FingerHover {
+    PointerOut,
+    PointerHover {
         /// Current mouse position relative to the chart boundaries.
         /// Useful for positioning tooltips.
         cursor: Vec2,
@@ -340,7 +340,7 @@ pub struct Chart {
     // Keep an Arc<RwLock> to plugins since most of them are maybe owned
     // by other components. But we also need to call them here.
     pub plugins: Vec<Arc<RwLock<dyn ChartPlugin>>>,
-    last_finger_pos: Vec2,
+    last_pointer_pos: Vec2,
     zoom_enabled: bool,
     pan_enabled: bool,
     panning: bool,
@@ -357,17 +357,17 @@ pub struct Chart {
 
 impl Chart {
     pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) -> ChartEvent {
-        match event.hits_finger(cx, self.component_id, self.texture_area.get_rect_for_first_instance(cx)) {
-            Event::FingerDown(fd) => {
+        match event.hits_pointer(cx, self.component_id, self.texture_area.get_rect_for_first_instance(cx)) {
+            Event::PointerDown(pd) => {
                 if self.pan_enabled {
-                    self.last_finger_pos = fd.rel;
+                    self.last_pointer_pos = pd.rel;
                     self.panning = true;
                 }
             }
-            Event::FingerMove(fm) => {
+            Event::PointerMove(pm) => {
                 if self.pan_enabled {
-                    let delta_pan = fm.rel - self.last_finger_pos;
-                    self.last_finger_pos = fm.rel;
+                    let delta_pan = pm.rel - self.last_pointer_pos;
+                    self.last_pointer_pos = pm.rel;
 
                     if self.zoom_pan.is_none() {
                         self.zoom_pan = Some(self.bounds);
@@ -380,12 +380,12 @@ impl Chart {
                     cx.request_draw();
                 }
             }
-            Event::FingerUp(_) => {
+            Event::PointerUp(_) => {
                 if self.pan_enabled {
                     self.panning = false;
                 }
             }
-            Event::FingerScroll(fs) => {
+            Event::PointerScroll(ps) => {
                 if self.zoom_enabled {
                     if self.zoom_pan.is_none() {
                         self.zoom_pan = Some(self.bounds);
@@ -393,13 +393,13 @@ impl Chart {
 
                     if let Some(zoom_pan) = &mut self.zoom_pan {
                         let old_size = zoom_pan.size;
-                        let new_size = old_size - vec2(fs.scroll.y, fs.scroll.y);
+                        let new_size = old_size - vec2(ps.scroll.y, ps.scroll.y);
                         let zoom_factor = (new_size / old_size).y;
 
                         // Compute new offset
                         // See: https://stackoverflow.com/a/38302057
                         let old_pos = zoom_pan.pos;
-                        let new_pos = fs.rel - zoom_factor * (fs.rel - old_pos);
+                        let new_pos = ps.rel - zoom_factor * (ps.rel - old_pos);
 
                         zoom_pan.size = new_size;
                         zoom_pan.pos = new_pos;
@@ -408,13 +408,13 @@ impl Chart {
                     cx.request_draw();
                 }
             }
-            Event::FingerHover(fe) => {
-                if self.panning || fe.hover_state == HoverState::Out {
+            Event::PointerHover(pe) => {
+                if self.panning || pe.hover_state == HoverState::Out {
                     self.tooltip_visible = false;
-                    return ChartEvent::FingerOut;
+                    return ChartEvent::PointerOut;
                 }
 
-                let mouse_pos_rel = fe.rel;
+                let mouse_pos_rel = pe.rel;
                 let cursor = mouse_pos_rel.clamp(&self.bounds.pos, &(self.bounds.pos + self.bounds.size));
                 let cursor_value = self.denormalize_data_point(cursor);
                 let current_element = self.get_element_at(cx, cursor_value);
@@ -427,7 +427,7 @@ impl Chart {
 
                 cx.request_draw();
 
-                return ChartEvent::FingerHover { cursor, cursor_value, current_element };
+                return ChartEvent::PointerHover { cursor, cursor_value, current_element };
             }
             _ => (),
         }

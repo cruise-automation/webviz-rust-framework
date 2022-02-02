@@ -41,7 +41,7 @@ impl Default for TooltipCustomExample {
 
 impl ChartExample for TooltipCustomExample {
     fn handle(&mut self, cx: &mut Cx, event: &mut Event) -> ChartEvent {
-        if let ChartEvent::FingerHover { current_element: Some(current_element), .. } = self.base.handle(cx, event) {
+        if let ChartEvent::PointerHover { current_element: Some(current_element), .. } = self.base.handle(cx, event) {
             let mut write = self.tooltip.write().unwrap();
             write.value = current_element.data_point.y;
             write.path = format!("{:.0}", current_element.data_point.x);

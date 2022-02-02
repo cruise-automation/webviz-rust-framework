@@ -19,11 +19,11 @@ As you might have seen in [Tutorial: Hello World Console](./tutorial_hello_world
 
 We also have access to a [`Cx`](/target/doc/wrflib/cx/struct.Cx.html) object. This is a global "context" object, that gets passed around practically everywhere.
 
-Here we'll look at the basic calls you can make on `Cx`, and their associated events. We'll save rendering-related calls and events for a later chapter.
+Here we'll look at the basic calls you can make on `Cx`, and their associated events. We'll save rendering-related calls and events for a [later chapter](./rendering_api_events_overview.md).
 
 ### Construction
 
-When the app is constructed and APIs can be called, a [`Construct`](/target/doc/wrflib/enum.Event.html#variant.Construct) event is fired. It is fired exactly once, and before any other calls to `handle` or `draw`. The event contains no futher information.
+When the app is constructed and APIs can be called, a [`Construct`](/target/doc/wrflib/enum.Event.html#variant.Construct) event is fired. It is fired exactly once, and before any other calls to `handle` or `draw`. The event contains no further information.
 
 ### Timers
 

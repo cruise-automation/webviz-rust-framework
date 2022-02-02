@@ -112,8 +112,8 @@ impl Splitter {
             .area()
             .get_rect_for_first_instance(cx)
             .map(|rect| rect.add_padding(self._hit_state_margin.unwrap_or_default()));
-        match event.hits_finger(cx, self.component_id, rect) {
-            Event::FingerDown(fe) => {
+        match event.hits_pointer(cx, self.component_id, rect) {
+            Event::PointerDown(pe) => {
                 self._is_moving = true;
                 self.animator.play_anim(cx, ANIM_DOWN);
                 match self.axis {
@@ -122,17 +122,17 @@ impl Splitter {
                 };
                 self._drag_pos_start = self.pos;
                 self._drag_point = match self.axis {
-                    Axis::Horizontal => fe.rel.y,
-                    Axis::Vertical => fe.rel.x,
+                    Axis::Horizontal => pe.rel.y,
+                    Axis::Vertical => pe.rel.x,
                 }
             }
-            Event::FingerHover(fe) => {
+            Event::PointerHover(pe) => {
                 match self.axis {
                     Axis::Horizontal => cx.set_hover_mouse_cursor(MouseCursor::RowResize),
                     Axis::Vertical => cx.set_hover_mouse_cursor(MouseCursor::ColResize),
                 };
                 if !self._is_moving {
-                    match fe.hover_state {
+                    match pe.hover_state {
                         HoverState::In => {
                             self.animator.play_anim(cx, ANIM_OVER);
                         }
@@ -143,10 +143,10 @@ impl Splitter {
                     }
                 }
             }
-            Event::FingerUp(fe) => {
+            Event::PointerUp(pe) => {
                 self._is_moving = false;
-                if fe.is_over {
-                    if fe.input_type.has_hovers() {
+                if pe.is_over {
+                    if pe.input_type.has_hovers() {
                         self.animator.play_anim(cx, ANIM_OVER);
                     } else {
                         self.animator.play_anim(cx, ANIM_DEFAULT);
@@ -170,10 +170,10 @@ impl Splitter {
 
                 return SplitterEvent::MovingEnd { new_align: self.align.clone(), new_pos: self.pos };
             }
-            Event::FingerMove(fe) => {
+            Event::PointerMove(pe) => {
                 let delta = match self.axis {
-                    Axis::Horizontal => fe.abs_start.y - fe.abs.y,
-                    Axis::Vertical => fe.abs_start.x - fe.abs.x,
+                    Axis::Horizontal => pe.abs_start.y - pe.abs.y,
+                    Axis::Vertical => pe.abs_start.x - pe.abs.x,
                 };
                 let mut pos = match self.align {
                     SplitterAlign::First => self._drag_pos_start - delta,
@@ -272,6 +272,7 @@ impl Splitter {
                     Vec4::default(),
                 );
                 self.split_view.end_view(cx);
+                cx.set_draw_pos(Vec2 { x: origin.x + self._calc_pos + self.split_size, y: origin.y });
             }
         };
         cx.begin_row(Width::Fill, Height::Fill);

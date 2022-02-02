@@ -8,11 +8,39 @@ use crate::axis::*;
 use crate::scrollbar::*;
 use wrflib::*;
 
+#[derive(Debug)]
+pub struct ScrollBarConfig {
+    pub(crate) smoothing: Option<f32>,
+    pub(crate) bar_size: f32,
+    pub(crate) use_vertical_pointer_scroll: bool,
+}
+
+impl Default for ScrollBarConfig {
+    fn default() -> Self {
+        Self { bar_size: 12.0, smoothing: None, use_vertical_pointer_scroll: false }
+    }
+}
+
+impl ScrollBarConfig {
+    #[must_use]
+    pub fn with_bar_size(self, bar_size: f32) -> Self {
+        Self { bar_size, ..self }
+    }
+    #[must_use]
+    pub fn with_smoothing(self, s: f32) -> Self {
+        Self { smoothing: Some(s), ..self }
+    }
+    #[must_use]
+    pub fn with_use_vertical_pointer_scroll(self, use_vertical_pointer_scroll: bool) -> Self {
+        Self { use_vertical_pointer_scroll, ..self }
+    }
+}
+
 #[derive(Default)]
 pub struct ScrollView {
-    pub view: View,
-    pub scroll_h: Option<ScrollBar>,
-    pub scroll_v: Option<ScrollBar>,
+    view: View,
+    scroll_h: Option<ScrollBar>,
+    scroll_v: Option<ScrollBar>,
 }
 
 impl ScrollView {
@@ -20,19 +48,19 @@ impl ScrollView {
     pub fn new_standard_vh() -> Self {
         Self {
             scroll_h: Some(ScrollBar::default()),
-            scroll_v: Some(ScrollBar::default().with_smoothing(0.15)),
+            scroll_v: Some(ScrollBar::new(ScrollBarConfig::default().with_smoothing(0.15))),
             ..Self::default()
         }
     }
 
     #[must_use]
-    pub fn with_scroll_h(self, s: ScrollBar) -> Self {
-        Self { scroll_h: Some(s), ..self }
+    pub fn with_scroll_h(self, config: ScrollBarConfig) -> Self {
+        Self { scroll_h: Some(ScrollBar::new(config)), ..self }
     }
 
     #[must_use]
-    pub fn with_scroll_v(self, s: ScrollBar) -> Self {
-        Self { scroll_v: Some(s), ..self }
+    pub fn with_scroll_v(self, config: ScrollBarConfig) -> Self {
+        Self { scroll_v: Some(ScrollBar::new(config)), ..self }
     }
 
     pub fn begin_view(&mut self, cx: &mut Cx, layout_size: LayoutSize) {

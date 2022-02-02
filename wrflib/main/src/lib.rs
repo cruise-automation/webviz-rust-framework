@@ -1,4 +1,4 @@
-//! 🐢⚡ This crate is the core of Wrf. It contains all the
+//! 🐢⚡ This crate is the core of Wrflib. It contains all the
 //! fundamental rendering primitives.
 //!
 //! Internally it depends on [`wrflib_shader_compiler`] and [`wrflib_vector`],
@@ -133,7 +133,7 @@ pub use std_shader::*;
 pub use text_ins::*;
 pub use texture::*;
 pub use window::*;
-pub use wrflib_shader_compiler::generate_shader_ast::CodeFragment;
+pub use wrflib_shader_compiler::code_fragment::CodeFragment;
 pub use wrflib_shader_compiler::math::*;
 pub use wrflib_shader_compiler::ty::Ty;
 

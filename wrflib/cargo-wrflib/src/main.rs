@@ -42,6 +42,7 @@ fn main() {
                         .help("Build artifacts in release mode, with optimizations"),
                 )
                 .arg(Arg::new("package").short('p').long("package").takes_value(true).help("Build only the specified package."))
+                .arg(Arg::new("features").long("features").takes_value(true).help("Specify feature flags."))
                 .arg(Arg::new("all-targets").long("all-targets").takes_value(false).help("Build all targets."))
                 .arg(Arg::new("workspace").long("workspace").takes_value(false).help("Build all members in the workspace."))
                 .arg(Arg::new("simd128").long("simd128").takes_value(false).help("Use 128-bit SIMD instruction set for WASM")),
@@ -54,6 +55,7 @@ fn main() {
             use_simd128: cmd.is_present("simd128"),
             all_targets: cmd.is_present("all-targets"),
             workspace: cmd.is_present("workspace"),
+            features: cmd.value_of("features").unwrap_or("").to_string(),
             package: cmd.value_of("package").unwrap_or("").to_string(),
         });
     }
@@ -75,6 +77,7 @@ struct BuildOpts {
     all_targets: bool,
     workspace: bool,
     package: String,
+    features: String,
 }
 
 fn build(opts: BuildOpts) {
@@ -97,6 +100,11 @@ fn build(opts: BuildOpts) {
     if !opts.package.is_empty() {
         args.push("-p");
         args.push(&opts.package);
+    }
+
+    if !opts.features.is_empty() {
+        args.push("--features");
+        args.push(&opts.features);
     }
 
     let rust_flags = {

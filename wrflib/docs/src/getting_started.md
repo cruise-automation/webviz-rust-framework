@@ -14,6 +14,7 @@ Now you're ready to run a simple example natively. Here are some fun ones to pla
 * `cargo run -p example_charts`
 * `cargo run -p example_text`
 * `cargo run -p example_bigedit` (heavy; best to do a release build; see below)
+* `cargo run -p example_lightning` (heavy; best to do a release build; see below)
 
 For a more performant build, add the `--release` flag, e.g.:
 * `cargo run -p example_single_button --release`

@@ -5,8 +5,8 @@
 // You may not use this file except in compliance with the License.
 
 use crate::background::*;
-use crate::buttonlogic::*;
 use crate::desktopbutton::*;
+use crate::ButtonEvent;
 use wrflib::*;
 
 pub struct DesktopWindow {
@@ -19,11 +19,11 @@ pub struct DesktopWindow {
     pub main_view: View,    // we have a root view otherwise is_overlay subviews can't attach topmost
     pub inner_view: View,
     //pub caption_bg_color: ColorId,
-    pub min_btn: DesktopButton,
-    pub max_btn: DesktopButton,
-    pub close_btn: DesktopButton,
-    pub xr_btn: DesktopButton,
-    pub fullscreen_btn: DesktopButton,
+    min_btn: DesktopButton,
+    max_btn: DesktopButton,
+    close_btn: DesktopButton,
+    xr_btn: DesktopButton,
+    fullscreen_btn: DesktopButton,
     pub caption_bg: Background,
     pub caption_size: Vec2,
     pub caption: String,
@@ -137,11 +137,11 @@ impl DesktopWindow {
                     }
                     true
                 }
-                Event::FingerDown(ev) => ev.window_id != window_id,
-                Event::FingerMove(ev) => ev.window_id != window_id,
-                Event::FingerHover(ev) => ev.window_id != window_id,
-                Event::FingerUp(ev) => ev.window_id != window_id,
-                Event::FingerScroll(ev) => ev.window_id != window_id,
+                Event::PointerDown(ev) => ev.window_id != window_id,
+                Event::PointerMove(ev) => ev.window_id != window_id,
+                Event::PointerHover(ev) => ev.window_id != window_id,
+                Event::PointerUp(ev) => ev.window_id != window_id,
+                Event::PointerScroll(ev) => ev.window_id != window_id,
                 _ => false,
             };
             if is_for_other_window {

@@ -42,7 +42,7 @@ pub(crate) struct CocoaWindow {
     pub(crate) ime_spot: Vec2,
     pub(crate) time_start: Instant,
     pub(crate) is_fullscreen: bool,
-    pub(crate) fingers_down: Vec<bool>,
+    pub(crate) pointers_down: Vec<bool>,
     pub(crate) last_mouse_pos: Vec2,
 }
 
@@ -627,7 +627,7 @@ impl CocoaWindow {
                 last_window_geom: None,
                 #[cfg(not(feature = "cef"))]
                 ime_spot: Vec2::default(),
-                fingers_down: Vec::new(),
+                pointers_down: Vec::new(),
                 last_mouse_pos: Vec2::default(),
             }
         }
@@ -637,7 +637,7 @@ impl CocoaWindow {
     pub(crate) fn init(&mut self, title: &str, size: Vec2, position: Option<Vec2>, add_drop_target_for_app_open_files: bool) {
         unsafe {
             //(*self.cocoa_app).init_app_after_first_window();
-            self.fingers_down.resize(NUM_FINGERS, false);
+            self.pointers_down.resize(NUM_POINTERS, false);
 
             let pool: id = msg_send![class!(NSAutoreleasePool), new];
 
@@ -889,9 +889,9 @@ impl CocoaWindow {
         false
     }
 
-    pub(crate) fn send_finger_down(&mut self, digit: usize, button: MouseButton, modifiers: KeyModifiers) {
-        self.fingers_down[digit] = true;
-        self.do_callback(&mut vec![Event::FingerDown(FingerDownEvent {
+    pub(crate) fn send_pointer_down(&mut self, digit: usize, button: MouseButton, modifiers: KeyModifiers) {
+        self.pointers_down[digit] = true;
+        self.do_callback(&mut vec![Event::PointerDown(PointerDownEvent {
             window_id: self.window_id,
             abs: self.last_mouse_pos,
             rel: self.last_mouse_pos,
@@ -899,16 +899,16 @@ impl CocoaWindow {
             digit,
             button,
             handled: false,
-            input_type: FingerInputType::Mouse,
+            input_type: PointerInputType::Mouse,
             modifiers,
             tap_count: 0,
             time: self.time_now(),
         })]);
     }
 
-    pub(crate) fn send_finger_up(&mut self, digit: usize, button: MouseButton, modifiers: KeyModifiers) {
-        self.fingers_down[digit] = false;
-        self.do_callback(&mut vec![Event::FingerUp(FingerUpEvent {
+    pub(crate) fn send_pointer_up(&mut self, digit: usize, button: MouseButton, modifiers: KeyModifiers) {
+        self.pointers_down[digit] = false;
+        self.do_callback(&mut vec![Event::PointerUp(PointerUpEvent {
             window_id: self.window_id,
             abs: self.last_mouse_pos,
             rel: self.last_mouse_pos,
@@ -918,13 +918,13 @@ impl CocoaWindow {
             digit,
             button,
             is_over: false,
-            input_type: FingerInputType::Mouse,
+            input_type: PointerInputType::Mouse,
             modifiers,
             time: self.time_now(),
         })]);
     }
 
-    pub(crate) fn send_finger_hover_and_move(&mut self, pos: Vec2, modifiers: KeyModifiers) {
+    pub(crate) fn send_pointer_hover_and_move(&mut self, pos: Vec2, modifiers: KeyModifiers) {
         self.last_mouse_pos = pos;
         let mut events = Vec::new();
 
@@ -932,9 +932,9 @@ impl CocoaWindow {
             (*self.cocoa_app).startup_focus_hack();
         }
 
-        for (digit, down) in self.fingers_down.iter().enumerate() {
+        for (digit, down) in self.pointers_down.iter().enumerate() {
             if *down {
-                events.push(Event::FingerMove(FingerMoveEvent {
+                events.push(Event::PointerMove(PointerMoveEvent {
                     window_id: self.window_id,
                     abs: pos,
                     rel: pos,
@@ -943,13 +943,13 @@ impl CocoaWindow {
                     abs_start: Vec2::default(),
                     rel_start: Vec2::default(),
                     is_over: false,
-                    input_type: FingerInputType::Mouse,
+                    input_type: PointerInputType::Mouse,
                     modifiers: modifiers.clone(),
                     time: self.time_now(),
                 }));
             }
         }
-        events.push(Event::FingerHover(FingerHoverEvent {
+        events.push(Event::PointerHover(PointerHoverEvent {
             digit: 0,
             window_id: self.window_id,
             abs: pos,
@@ -986,14 +986,14 @@ impl CocoaWindow {
         let scroll =
             if has_prec { Vec2 { x: -dx as f32, y: -dy as f32 } } else { Vec2 { x: -dx as f32 * 32., y: -dy as f32 * 32. } };
 
-        self.do_callback(&mut vec![Event::FingerScroll(FingerScrollEvent {
+        self.do_callback(&mut vec![Event::PointerScroll(PointerScrollEvent {
             digit: 0,
             window_id: self.window_id,
             scroll,
             abs: self.last_mouse_pos,
             rel: self.last_mouse_pos,
             rect: Rect::default(),
-            input_type: FingerInputType::Mouse,
+            input_type: PointerInputType::Mouse,
             modifiers,
             handled_x: false,
             handled_y: false,
@@ -1671,31 +1671,31 @@ pub(crate) fn define_cocoa_window_class() -> *const Class {
 
                 // mouse_motion
                 let modifiers = get_event_key_modifier(ns_event);
-                cocoa_window.send_finger_hover_and_move(pos, modifiers);
+                cocoa_window.send_pointer_hover_and_move(pos, modifiers);
             },
             NSEventType::NSLeftMouseDown => {
                 let modifiers = get_event_key_modifier(ns_event);
-                cocoa_window.send_finger_down(0, MouseButton::Left, modifiers);
+                cocoa_window.send_pointer_down(0, MouseButton::Left, modifiers);
             }
             NSEventType::NSLeftMouseUp => {
                 let modifiers = get_event_key_modifier(ns_event);
-                cocoa_window.send_finger_up(0, MouseButton::Left, modifiers);
+                cocoa_window.send_pointer_up(0, MouseButton::Left, modifiers);
             }
             NSEventType::NSRightMouseDown => {
                 let modifiers = get_event_key_modifier(ns_event);
-                cocoa_window.send_finger_down(1, MouseButton::Right, modifiers);
+                cocoa_window.send_pointer_down(1, MouseButton::Right, modifiers);
             }
             NSEventType::NSRightMouseUp => {
                 let modifiers = get_event_key_modifier(ns_event);
-                cocoa_window.send_finger_up(1, MouseButton::Right, modifiers);
+                cocoa_window.send_pointer_up(1, MouseButton::Right, modifiers);
             }
             NSEventType::NSOtherMouseDown => {
                 let modifiers = get_event_key_modifier(ns_event);
-                cocoa_window.send_finger_down(2, MouseButton::Other, modifiers);
+                cocoa_window.send_pointer_down(2, MouseButton::Other, modifiers);
             }
             NSEventType::NSOtherMouseUp => {
                 let modifiers = get_event_key_modifier(ns_event);
-                cocoa_window.send_finger_up(2, MouseButton::Other, modifiers);
+                cocoa_window.send_pointer_up(2, MouseButton::Other, modifiers);
             }
             NSEventType::NSScrollWheel => {
                 let dx: f64 = unsafe { msg_send![ns_event, scrollingDeltaX] };

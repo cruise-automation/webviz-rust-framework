@@ -12,6 +12,8 @@ The idea is to start with your existing web-based codebase, and incrementally mo
 
 Over time, you could port your entire codebase over to Rust, or you might keep JavaScript and Rust code side-by-side.
 
+At this point Wrflib should be considered in an "alpha" state. It still has quite a few issues, but it's rapidly improving. If you want to use this library in production, please [contact us](/).
+
 ## Structure
 
 Wrflib roughly consists of these parts:
@@ -31,6 +33,21 @@ Wrflib runs on the following platforms:
 4. **Linux / OpenGL.** Not well supported; some APIs missing; but should run.
 
 There is also a highly experimental feature where we embed a [Chromium](https://en.wikipedia.org/wiki/Chromium_(web_browser)) instance in a desktop build. This is similar to running Rust code alongside JavaScript in a browser using WebAssembly, except that your Rust code runs completely natively instead of in WebAssembly. Rendering is also done natively instead of using WebGL. This is generally more performant, and makes it easier to attach debuggers and profilers. We do not recommend using this in production yet, but it can be useful for debugging.
+
+## Team
+
+The open source core team consists of:
+
+<table>
+    <tr style="vertical-align: top">
+        <td><a href="https://github.com/janpaul123"><img style="width: 150px; max-width: 150px" src="./img/jp.jpg"><br>JP Posma (Cruise)</a></td>
+        <td><a href="https://github.com/disambiguator"><img style="width: 150px; max-width: 150px" src="./img/paras.jpg"><br>Paras Sanghavi (Cruise)</a></td>
+        <td><a href="https://github.com/hhsaez"><img style="width: 150px; max-width: 150px" src="./img/hernan.png"><br>Hernan Saez (Cruise)</a></td>
+        <td><a href="https://github.com/pankdm"><img style="width: 150px; max-width: 150px" src="./img/dmitry.jpg"><br>Dmitry Panin (Cruise)</a></td>
+    </tr>
+</table>
+
+Also a big shoutout to the <a href="https://github.com/makepad/makepad">Makepad</a> folks, whose open source framework we originally forked and with whom we've had a fruitful collaboration ever since.
 
 ## License
 

@@ -24,7 +24,7 @@ Let's break it down a bit. The app must be a `struct` that implement three metho
 * `fn handle()` — An entrypoint into Wrflib's event handling system.
 * `fn draw()` — Called when a draw has been requested, e.g. on startup, during resizing, or on [`cx.request_draw()`](/target/doc/wrflib/struct.Cx.html#method.request_draw).
 
-### Draw tree
+## Draw tree
 
 Under the hood, the core data structure is a **"draw tree"**. This contains all information that we need to tell the GPU what to draw on the screen. There are two phases of rendering:
 * **Drawing**: this is the process of generating a new draw tree. It might share data with the previous draw tree for caching purposes, but conceptually it's useful to think of it as producing a new draw tree.
@@ -33,15 +33,15 @@ Under the hood, the core data structure is a **"draw tree"**. This contains all 
 Here is how the two main top-level functions interact with these two phases:
 * `fn handle()`
   * Called when an event is fired, such as a mouse movement.
-  * By default doesn't trigger drawing or painting.
-  * A redraw can be requested using [`cx.request_draw()`](/target/doc/wrflib/struct.Cx.html#method.request_draw). This will cause `fn draw()` to get called (once `fn handle()` has finished).
+  * Events do not trigger drawing or painting, but a redraw can be requested using [`cx.request_draw()`](/target/doc/wrflib/struct.Cx.html#method.request_draw). This will cause `fn draw()` to get called (once `fn handle()` has finished).
     * You'd typically call this whenever you update application state.
   * It is possible to directly access the draw tree here, e.g. by calling functions on [`Area`](/target/doc/wrflib/enum.Area.html) (which is a pointer into the draw tree).
   * When modifying the draw tree in place (e.g. with [`Area::get_slice_mut`](/target/doc/wrflib/enum.Area.html#method.get_slice_mut)), the modified draw tree gets painted afterwards.
     * Be careful with this, since your changes to the draw tree will get blown away the next we do drawing. Be sure to keep a single source of truth in both cases.
     * This can be useful for cheap, local modifications, like animations.
+  * See [Events](./rendering_api_events_overview.md) for more details on handling events.
 * `fn draw()`
-  * Gets called when we're doing proper drawing.
+  * Gets called when a draw is requested, either internally by the framework or by [`cx.request_draw()`](/target/doc/wrflib/struct.Cx.html#method.request_draw).
   * At the start, the entire draw tree is cleared out, except for some caching information.
   * Within this function, you make API calls to rebuild the draw tree again.
   * Afterwards, painting always happens.
@@ -76,3 +76,12 @@ There is somewhat of a tree structure to the draw tree. Here is an example:
 * `Texture`
 
 Since at a minimum we need a `Window`, a `Pass`, and a `View`, there is a bit of boilerplate to get started with rendering. See [Tutorial: Hello World Canvas](./tutorial_hello_world_canvas.md) for an example.
+
+## Painting
+
+When painting, we traverse the draw tree down, creating commands for the GPU in the process. Typically it looks something like this:
+1. Compiling shaders.
+2. Computing which `Pass`es should be painted. For example, if a pass A renders a texture that is produced by pass B, and pass B has changed, then both passes will be painted. Under the hood we keep a dependency graph to figure this out.
+3. For each `Pass`, render the main `View`. Rendering a `View` is a recursive process. We start off without any scrolling offsets, and no `zbias`. Then, we draw the children in order:
+    * For each `DrawCall`, set the total scroll offset, clipping region, and `zbias` that we have accumulated so far. Then, queue up a paint command. When done, increment `zbias` by a small amount.
+    * For each nested `View`, read out the local scroll position, add that to the accumulated total, and then recursively paint that `View`.

@@ -4,6 +4,7 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
+use crate::button::*;
 use crate::buttonlogic::*;
 use wrflib::*;
 
@@ -118,9 +119,9 @@ static SHADER: Shader = Shader {
                 df.clear(#2);
                 // we have 3 points, and need to rotate around its center
                 df.rotate(open*0.5*PI+0.5*PI, c);
-                df.move_to(c.x - sz, c.y + sz);
-                df.line_to(c.x, c.y - sz);
-                df.line_to(c.x + sz, c.y + sz);
+                df.move_to(c + vec2(-sz, sz));
+                df.line_to(c + vec2(0, -sz));
+                df.line_to(c + sz);
                 df.close_path();
                 df.fill(mix(#a,#f,hover));
 
@@ -194,7 +195,7 @@ impl FoldCaption {
 
         let animator = &mut self.animator;
         let open_state = &mut self.open_state;
-        let hit_event = event.hits_finger(cx, self.component_id, self.bg_area.get_rect_for_first_instance(cx));
+        let hit_event = event.hits_pointer(cx, self.component_id, self.bg_area.get_rect_for_first_instance(cx));
         handle_button_logic(cx, hit_event, |cx, logic_event| match logic_event {
             ButtonLogicEvent::Down => {
                 // lets toggle our anim state

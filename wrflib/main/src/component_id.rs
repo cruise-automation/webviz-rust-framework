@@ -12,7 +12,7 @@ use crate::*;
 /// Identifier that represents a particular "component" on the screen, even if it
 /// gets moved around or disappears temporarily.
 ///
-/// This identity gets used mostly in eventing, e.g. [`Event::hits_finger`],
+/// This identity gets used mostly in eventing, e.g. [`Event::hits_pointer`],
 /// [`Event::hits_keyboard`], and [`Cx::set_key_focus`].
 ///
 /// It's 32-bit, so you can use it in instance data and then read it out again,

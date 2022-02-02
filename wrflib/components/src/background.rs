@@ -34,7 +34,7 @@ static SHADER: Shader = Shader {
                 }
 
                 let df = Df::viewport(pos * rect_size);
-                df.box(0., 0., rect_size.x, rect_size.y, radius);
+                df.box(vec2(0.), rect_size, radius);
                 return df.fill(color);
             }"#
         ),

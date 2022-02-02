@@ -21,12 +21,12 @@ const MSG_TYPE_END: u32 = 0;
 const MSG_TYPE_INIT: u32 = 1;
 const MSG_TYPE_RESIZE: u32 = 4;
 const MSG_TYPE_ANIMATION_FRAME: u32 = 5;
-const MSG_TYPE_FINGER_DOWN: u32 = 6;
-const MSG_TYPE_FINGER_UP: u32 = 7;
-const MSG_TYPE_FINGER_MOVE: u32 = 8;
-const MSG_TYPE_FINGER_HOVER: u32 = 9;
-const MSG_TYPE_FINGER_SCROLL: u32 = 10;
-const MSG_TYPE_FINGER_OUT: u32 = 11;
+const MSG_TYPE_POINTER_DOWN: u32 = 6;
+const MSG_TYPE_POINTER_UP: u32 = 7;
+const MSG_TYPE_POINTER_MOVE: u32 = 8;
+const MSG_TYPE_POINTER_HOVER: u32 = 9;
+const MSG_TYPE_POINTER_SCROLL: u32 = 10;
+const MSG_TYPE_POINTER_OUT: u32 = 11;
 const MSG_TYPE_KEY_DOWN: u32 = 12;
 const MSG_TYPE_KEY_UP: u32 = 13;
 const MSG_TYPE_TEXT_INPUT: u32 = 14;
@@ -73,13 +73,6 @@ impl Cx {
     /// only allocators and init. Note that we do have other outgoing functions for synchronous
     /// operations.
     fn event_loop_core(&mut self, msg: u64) -> u64 {
-        if self.platform.is_initialized == false {
-            self.platform.is_initialized = true;
-            for _i in 0..10 {
-                self.platform.fingers_down.push(false);
-            }
-        }
-
         let mut zerde_parser = ZerdeParser::from(msg);
         self.last_event_time = zerde_parser.parse_f64();
         let mut is_animation_frame = false;
@@ -90,6 +83,12 @@ impl Cx {
                     break;
                 }
                 MSG_TYPE_INIT => {
+                    assert!(!self.platform.is_initialized);
+                    self.platform.is_initialized = true;
+                    for _i in 0..10 {
+                        self.platform.pointers_down.push(false);
+                    }
+
                     self.platform.window_geom = WindowGeom {
                         is_fullscreen: false,
                         is_topmost: false,
@@ -150,15 +149,15 @@ impl Cx {
                         self.call_next_frame_event();
                     }
                 }
-                MSG_TYPE_FINGER_DOWN => {
+                MSG_TYPE_POINTER_DOWN => {
                     let abs = Vec2 { x: zerde_parser.parse_f32(), y: zerde_parser.parse_f32() };
                     let button = zerde_parser.parse_u32() as usize;
                     let digit = zerde_parser.parse_u32() as usize;
-                    self.platform.fingers_down[digit] = true;
+                    self.platform.pointers_down[digit] = true;
                     let is_touch = zerde_parser.parse_u32() > 0;
                     let modifiers = unpack_key_modifier(zerde_parser.parse_u32());
                     let time = zerde_parser.parse_f64();
-                    self.wasm_event_handler(Event::FingerDown(FingerDownEvent {
+                    self.wasm_event_handler(Event::PointerDown(PointerDownEvent {
                         window_id: 0,
                         abs,
                         rel: abs,
@@ -166,21 +165,21 @@ impl Cx {
                         handled: false,
                         digit,
                         button: get_mouse_button(button),
-                        input_type: if is_touch { FingerInputType::Touch } else { FingerInputType::Mouse },
+                        input_type: if is_touch { PointerInputType::Touch } else { PointerInputType::Mouse },
                         modifiers,
                         time,
                         tap_count: 0,
                     }));
                 }
-                MSG_TYPE_FINGER_UP => {
+                MSG_TYPE_POINTER_UP => {
                     let abs = Vec2 { x: zerde_parser.parse_f32(), y: zerde_parser.parse_f32() };
                     let button = zerde_parser.parse_u32() as usize;
                     let digit = zerde_parser.parse_u32() as usize;
-                    self.platform.fingers_down[digit] = false;
+                    self.platform.pointers_down[digit] = false;
                     let is_touch = zerde_parser.parse_u32() > 0;
                     let modifiers = unpack_key_modifier(zerde_parser.parse_u32());
                     let time = zerde_parser.parse_f64();
-                    self.wasm_event_handler(Event::FingerUp(FingerUpEvent {
+                    self.wasm_event_handler(Event::PointerUp(PointerUpEvent {
                         window_id: 0,
                         abs,
                         rel: abs,
@@ -190,18 +189,18 @@ impl Cx {
                         digit,
                         button: get_mouse_button(button),
                         is_over: false,
-                        input_type: if is_touch { FingerInputType::Touch } else { FingerInputType::Mouse },
+                        input_type: if is_touch { PointerInputType::Touch } else { PointerInputType::Mouse },
                         modifiers,
                         time,
                     }));
                 }
-                MSG_TYPE_FINGER_MOVE => {
+                MSG_TYPE_POINTER_MOVE => {
                     let abs = Vec2 { x: zerde_parser.parse_f32(), y: zerde_parser.parse_f32() };
                     let digit = zerde_parser.parse_u32() as usize;
                     let is_touch = zerde_parser.parse_u32() > 0;
                     let modifiers = unpack_key_modifier(zerde_parser.parse_u32());
                     let time = zerde_parser.parse_f64();
-                    self.wasm_event_handler(Event::FingerMove(FingerMoveEvent {
+                    self.wasm_event_handler(Event::PointerMove(PointerMoveEvent {
                         window_id: 0,
                         abs,
                         rel: abs,
@@ -210,16 +209,16 @@ impl Cx {
                         rel_start: Vec2::default(),
                         is_over: false,
                         digit,
-                        input_type: if is_touch { FingerInputType::Touch } else { FingerInputType::Mouse },
+                        input_type: if is_touch { PointerInputType::Touch } else { PointerInputType::Mouse },
                         modifiers,
                         time,
                     }));
                 }
-                MSG_TYPE_FINGER_HOVER => {
+                MSG_TYPE_POINTER_HOVER => {
                     let abs = Vec2 { x: zerde_parser.parse_f32(), y: zerde_parser.parse_f32() };
                     let modifiers = unpack_key_modifier(zerde_parser.parse_u32());
                     let time = zerde_parser.parse_f64();
-                    self.wasm_event_handler(Event::FingerHover(FingerHoverEvent {
+                    self.wasm_event_handler(Event::PointerHover(PointerHoverEvent {
                         any_down: false,
                         digit: 0,
                         window_id: 0,
@@ -232,13 +231,13 @@ impl Cx {
                         time,
                     }));
                 }
-                MSG_TYPE_FINGER_SCROLL => {
+                MSG_TYPE_POINTER_SCROLL => {
                     let abs = Vec2 { x: zerde_parser.parse_f32(), y: zerde_parser.parse_f32() };
                     let scroll = Vec2 { x: zerde_parser.parse_f32(), y: zerde_parser.parse_f32() };
                     let is_wheel = zerde_parser.parse_u32() != 0;
                     let modifiers = unpack_key_modifier(zerde_parser.parse_u32());
                     let time = zerde_parser.parse_f64();
-                    self.wasm_event_handler(Event::FingerScroll(FingerScrollEvent {
+                    self.wasm_event_handler(Event::PointerScroll(PointerScrollEvent {
                         window_id: 0,
                         digit: 0,
                         abs,
@@ -247,16 +246,16 @@ impl Cx {
                         handled_x: false,
                         handled_y: false,
                         scroll,
-                        input_type: if is_wheel { FingerInputType::Mouse } else { FingerInputType::Touch },
+                        input_type: if is_wheel { PointerInputType::Mouse } else { PointerInputType::Touch },
                         modifiers,
                         time,
                     }));
                 }
-                MSG_TYPE_FINGER_OUT => {
+                MSG_TYPE_POINTER_OUT => {
                     let abs = Vec2 { x: zerde_parser.parse_f32(), y: zerde_parser.parse_f32() };
                     let modifiers = unpack_key_modifier(zerde_parser.parse_u32());
                     let time = zerde_parser.parse_f64();
-                    self.wasm_event_handler(Event::FingerHover(FingerHoverEvent {
+                    self.wasm_event_handler(Event::PointerHover(PointerHoverEvent {
                         window_id: 0,
                         digit: 0,
                         any_down: false,
@@ -408,6 +407,7 @@ impl Cx {
                 }
             };
         }
+        assert!(self.platform.is_initialized);
 
         self.call_signals();
 
@@ -645,7 +645,7 @@ pub(crate) struct CxPlatform {
     pub(crate) vertex_buffers: usize,
     pub(crate) index_buffers: usize,
     pub(crate) vaos: usize,
-    pub(crate) fingers_down: Vec<bool>,
+    pub(crate) pointers_down: Vec<bool>,
     call_rust_in_same_thread_sync_fn: RwLock<Option<CallRustInSameThreadSyncFn>>,
     // pub(crate) xr_last_left_input: XRInput,
     // pub(crate) xr_last_right_input: XRInput,
@@ -660,7 +660,7 @@ impl Default for CxPlatform {
             vertex_buffers: 0,
             index_buffers: 0,
             vaos: 0,
-            fingers_down: Vec::new(),
+            pointers_down: Vec::new(),
             call_rust_in_same_thread_sync_fn: RwLock::new(None),
             // xr_last_left_input: XRInput::default(),
             // xr_last_right_input: XRInput::default(),

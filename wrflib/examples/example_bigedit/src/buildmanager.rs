@@ -253,13 +253,13 @@ impl BuildManager {
         }
     }
 
-    pub fn artifact_run(&mut self, makepad_storage: &mut MakepadStorage) {
-        if self.is_any_cargo_running() {
-            self.exec_when_done = true;
-        } else {
-            self.run_all_artifacts(makepad_storage)
-        }
-    }
+    // pub fn artifact_run(&mut self, makepad_storage: &mut MakepadStorage) {
+    //     if self.is_any_cargo_running() {
+    //         self.exec_when_done = true;
+    //     } else {
+    //         self.run_all_artifacts(makepad_storage)
+    //     }
+    // }
 
     // Current version of BigEdit doesn't support Log Messages, so we are adding some fake data to still render this UI element
     fn add_fake_log_messages(&mut self) {

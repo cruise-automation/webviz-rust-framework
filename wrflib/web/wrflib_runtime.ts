@@ -4,7 +4,7 @@
 // found in the LICENSE-APACHE file in the root directory of this source tree.
 // You may not use this file except in compliance with the License.
 
-// This is the universal Wrf Runtime which will work on both CEF and WebAssembly environments,
+// This is the universal Wrflib Runtime which will work on both CEF and WebAssembly environments,
 // doing runtime detection of which modules to load. No other file besides this one should conditionally
 // branch based on environments, such that cef/wasm runtimes can work without including unnecessary code.
 

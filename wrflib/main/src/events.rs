@@ -18,36 +18,36 @@ pub struct KeyModifiers {
     pub logo: bool,
 }
 
-/// The type of input that was used to trigger a finger event.
+/// The type of input that was used to trigger a pointer event.
 #[derive(Clone, Debug, PartialEq)]
-pub enum FingerInputType {
+pub enum PointerInputType {
     Mouse,
     Touch,
     XR,
 }
 
-impl FingerInputType {
+impl PointerInputType {
     pub fn is_touch(&self) -> bool {
-        *self == FingerInputType::Touch
+        *self == PointerInputType::Touch
     }
     pub fn is_mouse(&self) -> bool {
-        *self == FingerInputType::Mouse
+        *self == PointerInputType::Mouse
     }
     pub fn is_xr(&self) -> bool {
-        *self == FingerInputType::XR
+        *self == PointerInputType::XR
     }
     pub fn has_hovers(&self) -> bool {
-        *self == FingerInputType::Mouse || *self == FingerInputType::XR
+        *self == PointerInputType::Mouse || *self == PointerInputType::XR
     }
 }
 
-impl Default for FingerInputType {
+impl Default for PointerInputType {
     fn default() -> Self {
         Self::Mouse
     }
 }
 
-/// The type of input that was used to trigger a finger event.
+/// The type of input that was used to trigger a pointer event.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum MouseButton {
     Left,
@@ -61,33 +61,30 @@ impl Default for MouseButton {
     }
 }
 
-/// A conceptual "finger" (mouse, actual finger, etc) was pressed down.
-///
-/// Someone has to call [`Cx::set_key_focus`] or [`Cx::keep_key_focus`] when handling `FingerDown`, otherwise
-/// the key focus will be reset.
+/// See [`Event::PointerDown`].
 #[derive(Clone, Default, Debug, PartialEq)]
-pub struct FingerDownEvent {
+pub struct PointerDownEvent {
     pub window_id: usize,
     pub abs: Vec2,
     pub rel: Vec2,
     pub rect: Rect,
-    // Digit based system is supposed to track finger interactions, where each finger is a digit.
-    // Its doesn't exactly work in the way its supposed to work in terms of finger tracking.
+    // Digit based system is supposed to track pointer interactions, where each pointer is a digit.
+    // Its doesn't exactly work in the way its supposed to work in terms of pointer tracking.
     // Our needs currently require us to have sure shot Mouse interaction events.
     // Hence we are adding `button: MouseButton` in addition to existing digits.
-    // TODO(Shobhit): Refresh the digit based finger tracking system someday.
+    // TODO(Shobhit): Refresh the digit based pointer tracking system someday.
     pub digit: usize,
     pub button: MouseButton,
     pub tap_count: u32,
     pub(crate) handled: bool,
-    pub input_type: FingerInputType,
+    pub input_type: PointerInputType,
     pub modifiers: KeyModifiers,
     pub time: f64,
 }
 
-/// A conceptual "finger" (mouse, actual finger, etc) was moved.
+/// See [`Event::PointerMove`].
 #[derive(Clone, Default, Debug, PartialEq)]
-pub struct FingerMoveEvent {
+pub struct PointerMoveEvent {
     pub window_id: usize,
     pub abs: Vec2,
     pub abs_start: Vec2,
@@ -96,20 +93,20 @@ pub struct FingerMoveEvent {
     pub rect: Rect,
     pub is_over: bool,
     pub digit: usize,
-    pub input_type: FingerInputType,
+    pub input_type: PointerInputType,
     pub modifiers: KeyModifiers,
     pub time: f64,
 }
 
-impl FingerMoveEvent {
+impl PointerMoveEvent {
     pub fn move_distance(&self) -> f32 {
         ((self.abs_start.x - self.abs.x).powf(2.) + (self.abs_start.y - self.abs.y).powf(2.)).sqrt()
     }
 }
 
-/// A conceptual "finger" (mouse, actual finger, etc) was released.
+/// See [`Event::PointerUp`].
 #[derive(Clone, Default, Debug, PartialEq)]
-pub struct FingerUpEvent {
+pub struct PointerUpEvent {
     pub window_id: usize,
     pub abs: Vec2,
     pub abs_start: Vec2,
@@ -119,12 +116,12 @@ pub struct FingerUpEvent {
     pub digit: usize,
     pub button: MouseButton,
     pub is_over: bool,
-    pub input_type: FingerInputType,
+    pub input_type: PointerInputType,
     pub modifiers: KeyModifiers,
     pub time: f64,
 }
 
-/// The type of [`FingerHoverEvent`].
+/// The type of [`PointerHoverEvent`].
 #[derive(Clone, Debug, PartialEq)]
 pub enum HoverState {
     In,
@@ -138,9 +135,9 @@ impl Default for HoverState {
     }
 }
 
-/// A conceptual "finger" (mouse, actual finger, etc) was hovered over the screen.
+/// See [`Event::PointerHover`].
 #[derive(Clone, Default, Debug, PartialEq)]
-pub struct FingerHoverEvent {
+pub struct PointerHoverEvent {
     pub window_id: usize,
     pub digit: usize,
     pub abs: Vec2,
@@ -153,16 +150,16 @@ pub struct FingerHoverEvent {
     pub time: f64,
 }
 
-/// A conceptual "finger" (mouse, actual finger, etc) triggered a scroll.
+/// See [`Event::PointerScroll`].
 #[derive(Clone, Default, Debug, PartialEq)]
-pub struct FingerScrollEvent {
+pub struct PointerScrollEvent {
     pub window_id: usize,
     pub digit: usize,
     pub abs: Vec2,
     pub rel: Vec2,
     pub rect: Rect,
     pub scroll: Vec2,
-    pub input_type: FingerInputType,
+    pub input_type: PointerInputType,
     //pub is_wheel: bool,
     pub handled_x: bool,
     pub handled_y: bool,
@@ -170,7 +167,7 @@ pub struct FingerScrollEvent {
     pub time: f64,
 }
 
-/// Geometry of a [`Window`] changed (position, size, etc).
+/// See [`Event::WindowGeomChange`].
 #[derive(Clone, Default, Debug, PartialEq)]
 pub struct WindowGeomChangeEvent {
     pub window_id: usize,
@@ -178,15 +175,13 @@ pub struct WindowGeomChangeEvent {
     pub new_geom: WindowGeom,
 }
 
-/// A [`Timer`] that was requested using [`Cx::start_timer`] has fired.
+/// See [`Event::Timer`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct TimerEvent {
     pub timer_id: u64,
 }
 
-/// Represents a signal that was fired from [`Cx::send_signal`]. Can be captured
-/// with [`Signal`].
-///
+/// See [`Event::Signal`].
 /// TODO(JP): Is this a bit too complicated of an API? What about if we just
 /// send `pub signal: u64`, or even a `Box`? Then you can use it for anything.
 #[derive(Clone, Debug, PartialEq)]
@@ -204,20 +199,20 @@ pub struct KeyEvent {
     pub time: f64,
 }
 
-/// Called when [`Cx::key_focus`] changes.
+/// See [`Event::KeyFocus`] and [`Event::KeyFocusLost`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct KeyFocusEvent {
     pub(crate) prev: Option<ComponentId>,
     pub(crate) focus: Option<ComponentId>,
 }
 
-/// When a file is being dragged and the mouse position changes
+/// See [`Event::FileDragUpdate`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct FileDragUpdateEvent {
     pub abs: Vec2,
 }
 
-/// Some text was inputted. Rely on this for text input instead of [`KeyEvent`]s.
+/// See [`Event::TextInput`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextInputEvent {
     pub input: String,
@@ -225,23 +220,20 @@ pub struct TextInputEvent {
     pub was_paste: bool,
 }
 
-/// The user requested to close the [`Window`].
+/// See [`Event::WindowCloseRequested`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct WindowCloseRequestedEvent {
     pub window_id: usize,
     pub accept_close: bool,
 }
 
-/// The [`Window`] actually closed.
+/// See [`Event::WindowClosed`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct WindowClosedEvent {
     pub window_id: usize,
 }
 
-/// The user started or ended resizing the [`Window`].
-///
-/// TODO(JP): Mostly for internal use in Windows; we might not want to expose this
-/// to end users?
+/// See [`Event::WindowResizeLoop`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct WindowResizeLoopEvent {
     pub was_started: bool,
@@ -257,7 +249,8 @@ pub enum WindowDragQueryResponse {
     SysMenu, // windows only
 }
 
-/// The operating system inquired if a [`Window`] can be dragged.
+/// See [`Event::WindowDragQuery`].
+/// To respond, set `response` field to a variant of [`WindowDragQueryResponse`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct WindowDragQueryEvent {
     pub window_id: usize,
@@ -265,7 +258,7 @@ pub struct WindowDragQueryEvent {
     pub response: WindowDragQueryResponse,
 }
 
-/// A websocket message was received.
+/// See [`Event::WebSocketMessage`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct WebSocketMessageEvent {
     pub url: String,
@@ -298,17 +291,13 @@ pub struct WebRustCallEvent {
     pub callback_id: u32,
 }
 
-/// This is an application-level event intended for platforms that can register a file type to an application.
-/// Fires:
-/// - when application starts with a file
-/// - when `Window::create_add_drop_target_for_app_open_files` is set and a file is dragged and released onto the window
-/// - when the application is already started and an associated file is double-clicked
+/// See [`Event::AppOpenFiles`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct AppOpenFilesEvent {
     pub user_files: Vec<UserFile>,
 }
 
-/// Events that are handled internally and are not propagated to an application `handle` method.
+/// See [`Event::SystemEvent`].
 #[derive(Debug, Clone)]
 pub enum SystemEvent {
     /// See [`WebRustCallEvent`]. This event must have a handler registered through [`Cx::on_call_rust`].
@@ -323,12 +312,12 @@ pub enum SystemEvent {
     CefDoMessageLoopWork,
 }
 
-/// Global event that gets passed into `handle`, and which you can pass down to your own widgets.
+/// Global event passed into an application's `handle` function. See contained structs for more details.
 #[derive(Clone, Debug)]
 pub enum Event {
-    /// No event, to avoid `[Option<Event>]` all over the place.
+    /// No event, to avoid unwrapping `Option<Event>` all over the place.
     None,
-    /// App gets started. Should be the very first event that gets fired.
+    /// App starts up; should be the very first event that gets fired.
     Construct,
     /// App gained focus.
     ///
@@ -336,58 +325,67 @@ pub enum Event {
     AppFocus,
     /// App lost focus.
     AppFocusLost,
-    /// We're going to paint a new frame. Useful for animations; you can request this using [`Cx::request_next_frame`].
+    /// New frame requested. Useful for animations; you can request this using [`Cx::request_next_frame`].
     NextFrame,
-    /// See [`WindowDragQueryEvent`]
+    /// The operating system inquired if a [`Window`] can be dragged.
     WindowDragQuery(WindowDragQueryEvent),
-    /// See [`WindowCloseRequestedEvent`]
+    /// The user requested to close the [`Window`].
     WindowCloseRequested(WindowCloseRequestedEvent),
-    /// See [`WindowClosedEvent`]
+    /// The [`Window`] actually closed.
     WindowClosed(WindowClosedEvent),
-    /// See [`WindowGeomChangeEvent`]
+    /// Geometry of a [`Window`] changed (position, size, etc).
     WindowGeomChange(WindowGeomChangeEvent),
-    /// See [`WindowResizeLoopEvent`]
+    /// The user started or ended resizing the [`Window`].
+    ///
+    /// TODO(JP): Mostly for internal use in Windows; we might not want to expose this
+    /// to end users?
     WindowResizeLoop(WindowResizeLoopEvent),
-    /// See [`FingerDownEvent`]
-    FingerDown(FingerDownEvent),
-    /// See [`FingerMoveEvent`]
-    FingerMove(FingerMoveEvent),
-    /// See [`FingerHoverEvent`]
-    FingerHover(FingerHoverEvent),
-    /// See [`FingerUpEvent`]
-    FingerUp(FingerUpEvent),
-    /// See [`FingerScrollEvent`]
-    FingerScroll(FingerScrollEvent),
-    /// See [`TimerEvent`]
+    /// A pointer (mouse, touch, etc) was pressed down.
+    ///
+    /// Someone has to call [`Cx::set_key_focus`] or [`Cx::keep_key_focus`] when handling, otherwise
+    /// the key focus will be reset.
+    PointerDown(PointerDownEvent),
+    /// A pointer (mouse, touch, etc) was moved.
+    PointerMove(PointerMoveEvent),
+    /// The mouse was hovered over the screen. This cannot fire from touch input.
+    PointerHover(PointerHoverEvent),
+    /// A pointer (mouse, touch, etc) was released.
+    PointerUp(PointerUpEvent),
+    /// A pointer (mouse, touch, etc) triggered a scroll.
+    PointerScroll(PointerScrollEvent),
+    /// A [`Timer`] was requested using [`Cx::start_timer`].
     Timer(TimerEvent),
-    /// See [`SignalEvent`]
+    /// A signal was fired using [`Cx::send_signal`].
     Signal(SignalEvent),
-    /// See [`CommandId`]
     Command(CommandId),
-    /// See [`KeyFocusEvent`]
+    /// Leyboard focus changed between components.
     KeyFocus(KeyFocusEvent),
-    /// See [`KeyFocusEvent`]
+    /// Keyboard focus was lost by a component. Returned from [`Event::hits_keyboard`].
     KeyFocusLost(KeyFocusEvent),
-    /// User pressed down a key. See also [`KeyEvent`]
+    /// A key was pressed down. Rely on [`Event::TextInput`] for text input instead of this.
     KeyDown(KeyEvent),
-    /// User released a key. See also [`KeyEvent`]
+    /// A key was released. Rely on [`Event::TextInput`] for text input instead of this.
     KeyUp(KeyEvent),
-    /// See [`TextInputEvent`]
+    /// Some text was inputted. Rely on this for text input instead of [`KeyEvent`].
     TextInput(TextInputEvent),
-    /// The user requested text to be copied to the clipboard.
+    /// Text was requested to be copied to the clipboard.
     TextCopy,
-    /// See [`WebSocketMessageEvent`]
+    /// A websocket message was received.
     WebSocketMessage(WebSocketMessageEvent),
-    /// See [`AppOpenFilesEvent`]
+    /// Intended for platforms that can register a file type to an application.
+    /// Fires:
+    /// - when application starts with a file
+    /// - when `Window::create_add_drop_target_for_app_open_files` is set and a file is dragged and released onto the window
+    /// - when the application is already started and an associated file is double-clicked
     AppOpenFiles(AppOpenFilesEvent),
     /// When `Window::create_add_drop_target_for_app_open_files` is set and a file is dragged (without being released)
     /// onto the window
     FileDragBegin,
-    /// See [`FileDragUpdateEvent`]
+    /// When a file is being dragged and the mouse position changes
     FileDragUpdate(FileDragUpdateEvent),
     /// When a file is being dragged and the mouse moves out of the window
     FileDragCancel,
-    /// See [`SystemEvent`]. These events are not passed to `handle`.
+    /// Events that are handled internally and are not propagated to an application `handle` method.
     SystemEvent(SystemEvent),
 }
 
@@ -398,120 +396,125 @@ impl Default for Event {
 }
 
 impl Event {
-    /// Checks if an [`Event`] is a finger-event with coordinates falling inside
+    /// Checks if an [`Event`] is a pointer-event with coordinates falling inside
     /// [`Rect`], or already has an associated [`ComponentId`] that matches the given one.
     ///
-    /// For unhandled [`Event::FingerDown`] and [`Event::FingerHover`] events, the given
-    /// [`ComponentId`] will be associated with that finger (if the event falls in [`Rect`]).
+    /// For unhandled [`Event::PointerDown`] and [`Event::PointerHover`] events, the given
+    /// [`ComponentId`] will be associated with that pointer (if the event falls in [`Rect`]).
     ///
-    /// For [`Event::FingerUp`] (and [`Event::FingerHover`] with [`HoverState::Out`]) it's
-    /// the other way around: if the finger is associated with the given [`ComponentId`], it
+    /// For [`Event::PointerUp`] (and [`Event::PointerHover`] with [`HoverState::Out`]) it's
+    /// the other way around: if the pointer is associated with the given [`ComponentId`], it
     /// will be returned regardless of [`Rect`].
     ///
     /// We pass in [`Option<Rect>`] instead of [`Rect`] for convenience, since it often comes
     /// from [`Area::get_rect_for_first_instance`], which returns [`Option<Rect>`]. When passing
     /// in [`None`], we always return [`Event::None`].
     #[must_use]
-    pub fn hits_finger(&mut self, cx: &mut Cx, component_id: ComponentId, rect: Option<Rect>) -> Event {
+    pub fn hits_pointer(&mut self, cx: &mut Cx, component_id: ComponentId, rect: Option<Rect>) -> Event {
         if let Some(rect) = rect {
             match self {
-                Event::FingerScroll(fe) => {
-                    if rect.contains(fe.abs) {
-                        //fe.handled = true;
-                        return Event::FingerScroll(FingerScrollEvent { rel: fe.abs - rect.pos, rect, ..fe.clone() });
+                Event::PointerScroll(pe) => {
+                    if rect.contains(pe.abs) {
+                        //pe.handled = true;
+                        return Event::PointerScroll(PointerScrollEvent { rel: pe.abs - rect.pos, rect, ..pe.clone() });
                     }
                 }
-                Event::FingerHover(fe) => {
-                    if cx.fingers[fe.digit]._over_last == Some(component_id) {
+                Event::PointerHover(pe) => {
+                    if cx.pointers[pe.digit]._over_last == Some(component_id) {
                         let mut any_down = false;
-                        for finger in &cx.fingers {
-                            if finger.captured == Some(component_id) {
+                        for pointer in &cx.pointers {
+                            if pointer.captured == Some(component_id) {
                                 any_down = true;
                                 break;
                             }
                         }
-                        if !fe.handled && rect.contains(fe.abs) {
-                            fe.handled = true;
-                            if let HoverState::Out = fe.hover_state {
-                                //    cx.finger_over_last_area = Area::Empty;
+                        if !pe.handled && rect.contains(pe.abs) {
+                            pe.handled = true;
+                            if let HoverState::Out = pe.hover_state {
+                                //    cx.pointer_over_last_area = Area::Empty;
                             } else {
-                                cx.fingers[fe.digit].over_last = Some(component_id);
+                                cx.pointers[pe.digit].over_last = Some(component_id);
                             }
-                            return Event::FingerHover(FingerHoverEvent { rel: fe.abs - rect.pos, rect, any_down, ..fe.clone() });
+                            return Event::PointerHover(PointerHoverEvent {
+                                rel: pe.abs - rect.pos,
+                                rect,
+                                any_down,
+                                ..pe.clone()
+                            });
                         } else {
                             //self.was_over_last_call = false;
-                            return Event::FingerHover(FingerHoverEvent {
-                                rel: fe.abs - rect.pos,
+                            return Event::PointerHover(PointerHoverEvent {
+                                rel: pe.abs - rect.pos,
                                 rect,
                                 any_down,
                                 hover_state: HoverState::Out,
-                                ..fe.clone()
+                                ..pe.clone()
                             });
                         }
-                    } else if !fe.handled && rect.contains(fe.abs) {
+                    } else if !pe.handled && rect.contains(pe.abs) {
                         let mut any_down = false;
-                        for finger in &cx.fingers {
-                            if finger.captured == Some(component_id) {
+                        for pointer in &cx.pointers {
+                            if pointer.captured == Some(component_id) {
                                 any_down = true;
                                 break;
                             }
                         }
-                        cx.fingers[fe.digit].over_last = Some(component_id);
-                        fe.handled = true;
+                        cx.pointers[pe.digit].over_last = Some(component_id);
+                        pe.handled = true;
                         //self.was_over_last_call = true;
-                        return Event::FingerHover(FingerHoverEvent {
-                            rel: fe.abs - rect.pos,
+                        return Event::PointerHover(PointerHoverEvent {
+                            rel: pe.abs - rect.pos,
                             rect,
                             any_down,
                             hover_state: HoverState::In,
-                            ..fe.clone()
+                            ..pe.clone()
                         });
                     }
                 }
-                Event::FingerMove(fe) => {
+                Event::PointerMove(pe) => {
                     // check wether our digit is captured, otherwise don't send
-                    if cx.fingers[fe.digit].captured == Some(component_id) {
-                        let abs_start = cx.fingers[fe.digit].down_abs_start;
-                        let rel_start = cx.fingers[fe.digit].down_rel_start;
-                        return Event::FingerMove(FingerMoveEvent {
+                    if cx.pointers[pe.digit].captured == Some(component_id) {
+                        let abs_start = cx.pointers[pe.digit].down_abs_start;
+                        let rel_start = cx.pointers[pe.digit].down_rel_start;
+                        return Event::PointerMove(PointerMoveEvent {
                             abs_start,
-                            rel: fe.abs - rect.pos,
+                            rel: pe.abs - rect.pos,
                             rel_start,
                             rect,
-                            is_over: rect.contains(fe.abs),
-                            ..fe.clone()
+                            is_over: rect.contains(pe.abs),
+                            ..pe.clone()
                         });
                     }
                 }
-                Event::FingerDown(fe) => {
-                    if !fe.handled && rect.contains(fe.abs) {
-                        // Scan if any of the fingers already captured this area.
+                Event::PointerDown(pe) => {
+                    if !pe.handled && rect.contains(pe.abs) {
+                        // Scan if any of the pointers already captured this area.
                         // TODO(JP): We might want to skip this in cases where we want to support multi-touch.
-                        for finger in &cx.fingers {
-                            if finger.captured == Some(component_id) {
+                        for pointer in &cx.pointers {
+                            if pointer.captured == Some(component_id) {
                                 return Event::None;
                             }
                         }
-                        cx.fingers[fe.digit].captured = Some(component_id);
-                        let rel = fe.abs - rect.pos;
-                        cx.fingers[fe.digit].down_abs_start = fe.abs;
-                        cx.fingers[fe.digit].down_rel_start = rel;
-                        fe.handled = true;
-                        return Event::FingerDown(FingerDownEvent { rel, rect, ..fe.clone() });
+                        cx.pointers[pe.digit].captured = Some(component_id);
+                        let rel = pe.abs - rect.pos;
+                        cx.pointers[pe.digit].down_abs_start = pe.abs;
+                        cx.pointers[pe.digit].down_rel_start = rel;
+                        pe.handled = true;
+                        return Event::PointerDown(PointerDownEvent { rel, rect, ..pe.clone() });
                     }
                 }
-                Event::FingerUp(fe) => {
-                    if cx.fingers[fe.digit].captured == Some(component_id) {
-                        cx.fingers[fe.digit].captured = None;
-                        let abs_start = cx.fingers[fe.digit].down_abs_start;
-                        let rel_start = cx.fingers[fe.digit].down_rel_start;
-                        return Event::FingerUp(FingerUpEvent {
-                            is_over: rect.contains(fe.abs),
+                Event::PointerUp(pe) => {
+                    if cx.pointers[pe.digit].captured == Some(component_id) {
+                        cx.pointers[pe.digit].captured = None;
+                        let abs_start = cx.pointers[pe.digit].down_abs_start;
+                        let rel_start = cx.pointers[pe.digit].down_rel_start;
+                        return Event::PointerUp(PointerUpEvent {
+                            is_over: rect.contains(pe.abs),
                             abs_start,
                             rel_start,
-                            rel: fe.abs - rect.pos,
+                            rel: pe.abs - rect.pos,
                             rect,
-                            ..fe.clone()
+                            ..pe.clone()
                         });
                     }
                 }

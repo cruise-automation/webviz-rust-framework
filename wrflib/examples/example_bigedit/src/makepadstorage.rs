@@ -148,7 +148,7 @@ impl MakepadStorage {
                 // create default settings file
                 let def_settings = MakepadSettings::initial();
                 let ron = def_settings.serialize_ron();
-                cx.file_write("bigedit_settings.ron", ron.as_bytes());
+                // cx.file_write("bigedit_settings.ron", ron.as_bytes());
                 self.load_settings(cx, &ron);
             }
 
@@ -301,7 +301,7 @@ impl MakepadStorage {
                 if let Some(tb_id) = self.text_buffer_path_to_id.get(path) {
                     let atb = &self.text_buffers[tb_id.as_index()];
                     let utf8_data = atb.text_buffer.get_as_string();
-                    cx.file_write(path, utf8_data.as_bytes());
+                    // cx.file_write(path, utf8_data.as_bytes());
                     // if its the settings, load it
                     if path == "bigedit_settings.ron" {
                         self.load_settings(cx, &utf8_data);

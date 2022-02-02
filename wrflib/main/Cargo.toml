@@ -15,6 +15,7 @@ readme = "README.md"
 description = "🐢⚡ Wrflib is a fast, cross-platform (web+native), GPU-based application framework, written in Rust."
 
 [features]
+disable-fonts=[]
 tls=["ureq/tls"] # TLS (for HTTPS) doesn't currently work with cross-compilation, so we allow disabling it.
 cef=["wrflib_cef"] # Ship a Chromium browser using CEF in the native app.
 cef-dev-tools=["cef"] # Show the Chrome DevTools on startup. TODO(JP): should we move this to a keyboard shortcut or so at some point?

@@ -38,12 +38,12 @@ static SHADER: Shader = Shader {
             fn pixel() -> vec4 {
                 let df = Df::viewport(pos * rect_size);
 
-                df.rect(0., 0., rect_size.x, rect_size.y);
+                df.rect(vec2(0.), rect_size);
                 df.fill(mix(vec4(0.,0.,0.,0.), vec4(1.,1.,1.,0.3), hover));
                 df.new_path();
 
                 let circle_size = 7. - stroke_width / 2. + down * 3.;
-                df.circle(rect_size.y / 2., rect_size.y / 2., circle_size);
+                df.circle(vec2(rect_size.y / 2.), circle_size);
                 if checked > 0. {
                     if errored > 0. {
                         df.stroke(error_color, stroke_width);
@@ -65,7 +65,7 @@ static SHADER: Shader = Shader {
                         }
                         df.stroke(inactive_color, stroke_width);
                         df.new_path();
-                        df.arc(rect_size.y / 2., rect_size.y / 2., circle_size, angle_start, angle_end);
+                        df.arc(vec2(rect_size.y / 2.), circle_size, angle_start, angle_end);
                         df.stroke(inactive_color, stroke_width);
                         df.fill(inactive_color);
                     }
@@ -148,17 +148,17 @@ impl Checkbox {
             self.animator_animate(cx);
         }
 
-        match event.hits_finger(cx, self.component_id, self.area.get_rect_for_first_instance(cx)) {
-            Event::FingerDown(_fe) => {
+        match event.hits_pointer(cx, self.component_id, self.area.get_rect_for_first_instance(cx)) {
+            Event::PointerDown(_pe) => {
                 let checkbox = self.area.get_first::<CheckboxIns>(cx);
                 if checkbox.checked < 1.0 {
                     self.animator.play_anim(cx, ANIM_DOWN);
                 }
                 return CheckboxEvent::Toggled;
             }
-            Event::FingerHover(fe) => {
+            Event::PointerHover(pe) => {
                 cx.set_hover_mouse_cursor(MouseCursor::Hand);
-                match fe.hover_state {
+                match pe.hover_state {
                     HoverState::In => {
                         self.animator.play_anim(cx, ANIM_HOVER);
                     }

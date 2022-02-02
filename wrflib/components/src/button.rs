@@ -7,6 +7,14 @@
 use crate::buttonlogic::*;
 use wrflib::*;
 
+#[derive(Clone, PartialEq)]
+pub enum ButtonEvent {
+    None,
+    Clicked,
+    Down,
+    Up,
+}
+
 #[derive(Clone, Default)]
 #[repr(C)]
 struct BgIns {
@@ -30,12 +38,12 @@ static SHADER: Shader = Shader {
 
             fn pixel() -> vec4 {
                 let df = Df::viewport(pos * rect_size);
-                df.box(shadow, shadow, rect_size.x - shadow * (1. + down), rect_size.y - shadow * (1. + down), border_radius);
+                df.box(vec2(shadow), rect_size - shadow * (1. + down), border_radius);
                 df.blur = 6.0;
                 df.fill(mix(#0007, #0, hover));
                 df.new_path();
                 df.blur = 0.001;
-                df.box(shadow, shadow, rect_size.x - shadow * 2., rect_size.y - shadow * 2., border_radius);
+                df.box(vec2(shadow), rect_size - shadow * 2., border_radius);
                 return df.fill(mix(mix(#3, #4, hover), #2a, down));
             }"#
         ),
@@ -103,7 +111,7 @@ impl Button {
             self.animate(cx);
         }
         let animator = &mut self.animator;
-        let hit_event = event.hits_finger(cx, self.component_id, self.bg_area.get_rect_for_first_instance(cx));
+        let hit_event = event.hits_pointer(cx, self.component_id, self.bg_area.get_rect_for_first_instance(cx));
         handle_button_logic(cx, hit_event, |cx, logic_event| match logic_event {
             ButtonLogicEvent::Down => animator.play_anim(cx, ANIM_DOWN),
             ButtonLogicEvent::Default => animator.play_anim(cx, ANIM_DEFAULT),

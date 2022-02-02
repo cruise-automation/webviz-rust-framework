@@ -18,10 +18,10 @@ Wrflib provides a cargo extension that can be used to perform different tasks. T
 Optionally, you can use the tool directly like so `cargo run -p cargo-wrflib`, as any other project.
 
 ## Docs
-
 * [Install Rust](https://www.rust-lang.org/tools/install)
-* Run `cargo install mdbook && mdbook watch wrflib/docs --open` to view the full set of docs.
-* `wrflib/scripts/build_rustdoc.sh` is useful for automatically generated API documentation. It prints a URL that you can open in a browser.
+* Run `wrflib/scripts/build_website_dev.sh` to generate our docs website. Follow the instructions on how to view them.
+* When developing docs, use `wrflib/scripts/watch_website_dev.sh` to watch for changes.
+* When publishing the docs, run `wrflib/scripts/build_website_prod.sh` which copies only the relevant files.
 
 ## Makepad repo
 

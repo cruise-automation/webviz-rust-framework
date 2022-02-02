@@ -130,41 +130,41 @@ impl Default for Viewport3D {
 
 impl Viewport3D {
     pub fn handle(&mut self, cx: &mut Cx, event: &mut Event) -> Option<PassMatrixMode> {
-        match event.hits_finger(cx, self.component_id, self.area.get_rect_for_first_instance(cx)) {
-            Event::FingerHover(_fe) => {
+        match event.hits_pointer(cx, self.component_id, self.area.get_rect_for_first_instance(cx)) {
+            Event::PointerHover(_pe) => {
                 // cx.set_hover_mouse_cursor(MouseCursor::Move);
             }
             // traditional mouse down
-            Event::FingerDown(fe) => {
+            Event::PointerDown(pe) => {
                 // cx.set_down_mouse_cursor(MouseCursor::Move);
-                if self.props.panning_enabled && fe.button == MouseButton::Left {
+                if self.props.panning_enabled && pe.button == MouseButton::Left {
                     self.camera_target_offset_start = Some(self.camera_target_offset);
-                } else if fe.button == MouseButton::Right {
+                } else if pe.button == MouseButton::Right {
                     self.camera_position_start = Some(self.camera_position);
                 }
             }
             // traditional mouse up
-            Event::FingerUp(_fe) => {
+            Event::PointerUp(_pe) => {
                 self.camera_position_start = None;
                 self.camera_target_offset_start = None;
             }
-            Event::FingerScroll(fe) => {
+            Event::PointerScroll(pe) => {
                 let min_distance = 1.0; // a little more than near
                 let max_distance = 900.; // a little less than far
                 let zoom_speed = (self.camera_position.radius * (PI / 4.) / max_distance).sin().abs() / 2.0;
                 self.camera_position.radius =
-                    (self.camera_position.radius + fe.scroll.y * zoom_speed).max(min_distance).min(max_distance);
+                    (self.camera_position.radius + pe.scroll.y * zoom_speed).max(min_distance).min(max_distance);
                 return Some(self.pass_set_matrix_mode(cx));
             }
-            Event::FingerMove(fe) => {
+            Event::PointerMove(pe) => {
                 // Using standard makeSafe approach to clamp to slightly less than the limits for phi/theta
                 // Concept borrowed from ThreeJS:
                 // https://github.com/mrdoob/three.js/blob/342946c8392639028da439b6dc0597e58209c696/src/math/Spherical.js#L43
                 if let Some(SphericalAngles { phi, theta, radius }) = self.camera_position_start {
                     let rotate_speed = 1. / 175.;
                     self.camera_position = SphericalAngles {
-                        theta: (theta - (fe.abs.x - fe.abs_start.x) * rotate_speed) % (PI * 2.),
-                        phi: (phi - (fe.abs.y - fe.abs_start.y) * rotate_speed).clamp(EPSILON, PI - EPSILON),
+                        theta: (theta - (pe.abs.x - pe.abs_start.x) * rotate_speed) % (PI * 2.),
+                        phi: (phi - (pe.abs.y - pe.abs_start.y) * rotate_speed).clamp(EPSILON, PI - EPSILON),
                         radius,
                     };
                     return Some(self.pass_set_matrix_mode(cx));
@@ -178,7 +178,7 @@ impl Viewport3D {
                     let pan_speed = 0.8;
                     // Normalize using the height of the viewport and the camera distance, since those determine the field of view
                     // intersecting with the camera target.
-                    let mouse_offset = (fe.rel - fe.rel_start) / self.measured_size.y * self.camera_position.radius * pan_speed;
+                    let mouse_offset = (pe.rel - pe.rel_start) / self.measured_size.y * self.camera_position.radius * pan_speed;
 
                     let vertical_offset =
                         if self.props.vertical_panning_enabled { self.camera_position.phi.to_degrees() } else { 0. };

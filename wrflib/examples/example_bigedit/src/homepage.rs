@@ -108,7 +108,7 @@ impl HomePage {
         TextIns::draw_walk(
             cx,
             "\
-            Bigedit is an example application for Wrf. It's the original Makepad editor, but with a lot of features removed. \
+            Bigedit is an example application for Wrflib. It's the original Makepad editor, but with a lot of features removed. \
              It's mostly used as an example to make sure you don't break stuff when you edit the framework code.\n",
             &TEXT_BODY,
         );

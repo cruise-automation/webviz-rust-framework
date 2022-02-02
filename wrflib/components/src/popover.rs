@@ -33,13 +33,13 @@ pub struct Popover {
 impl Popover {
     /// Handle events for the [`Popover`] widget.
     ///
-    /// Always marks events like [`FingerDownEvent`] and [`FingerHoverEvent`] as "handled".
+    /// Always marks events like [`PointerDownEvent`] and [`PointerHoverEvent`] as "handled".
     /// This way, we don't leak those events to whatever is sitting in the background.
     /// This does require this function to get called before any other event handlers!
     ///
     /// TODO(JP): This might actually be a place where our eventing system breaks
     /// down a bit. If you instantiate a [`Popover`] deep inside your application
-    /// inside some widget, then any events (e.g. [`FingerMoveEvent`]) might already
+    /// inside some widget, then any events (e.g. [`PointerMoveEvent`]) might already
     /// get handled earlier in the application. There are a few ways we can fix
     /// this:
     /// - We could do all of this in user space, by having some notion of a
@@ -56,7 +56,7 @@ impl Popover {
     ///   it might be better to start in user space though, since that's more
     ///   flexible, and then we can "graduate" it when we're happy with it.
     pub fn handle(&mut self, _cx: &mut Cx, _event: &mut Event) {
-        // event.hits_finger(cx, self.component_id, self.background.area().get_rect_for_first_instance(cx));
+        // event.hits_pointer(cx, self.component_id, self.background.area().get_rect_for_first_instance(cx));
     }
 
     /// Draw the popover.

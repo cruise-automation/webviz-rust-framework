@@ -113,10 +113,6 @@ impl Default for Direction {
 
 /// Different ways in which a [`LayoutSize`] can get a width.
 ///
-/// TODO(JP): Something like `FillUpTo(f32)` or `FillMax(f32)` might be useful here, to mimic
-/// CSS'es `max-width`. For now you can manually use `Cx::get_width_left` with
-/// `Width::Fix` as a workaround.
-///
 /// TODO(JP): See [`Height::DEFAULT`] for a related TODO.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Width {
@@ -130,7 +126,7 @@ pub enum Width {
     /// TODO(JP): This can also be passed into [`Cx::add_box`] but there it
     /// makes no sense!
     Compute,
-    // Fill up as much of the available space as possible up to provided width
+    /// Fill up as much of the available space as possible up to provided width
     FillUntil(f32),
 }
 impl Width {
@@ -149,13 +145,13 @@ impl Default for Width {
 /// See [`Width`] for more documentation, since it's analogous.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Height {
-    // See [`Width::Fill`].
+    /// See [`Width::Fill`].
     Fill,
-    // See [`Width::Fix`].
+    /// See [`Width::Fix`].
     Fix(f32),
-    // See [`Width::Compute`].
+    /// See [`Width::Compute`].
     Compute,
-    // See [`Width::FillUntil`],
+    /// See [`Width::FillUntil`],
     FillUntil(f32),
 }
 impl Height {

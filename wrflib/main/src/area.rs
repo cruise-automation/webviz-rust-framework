@@ -18,7 +18,7 @@ use crate::*;
 /// You can use an [`Area`] pointer to write fields, e.g. using [`Area::get_slice_mut`],
 /// [`Area::write_user_uniforms`], and so on. You
 /// can also use it for checking if an event was fired on a certain part
-/// of the draw tree (using [`Event::hits_finger`], [`Cx::key_focus`], etc), and more.
+/// of the draw tree (using [`Event::hits_pointer`], [`Cx::key_focus`], etc), and more.
 ///
 /// TODO(JP): this can currently point to a [`View`]/[`CxView`] that isn't
 /// actually in the draw tree anymore (ie. there the corresponding [`CxView`] is

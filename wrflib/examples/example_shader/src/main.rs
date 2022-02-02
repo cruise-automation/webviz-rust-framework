@@ -237,10 +237,10 @@ impl ShaderEditor {
             cx.request_draw();
         }
 
-        match event.hits_finger(cx, self.component_id, self.quad_area.get_rect_for_first_instance(cx)) {
-            Event::FingerMove(fm) => {
+        match event.hits_pointer(cx, self.component_id, self.quad_area.get_rect_for_first_instance(cx)) {
+            Event::PointerMove(pm) => {
                 self.quad.counter += 0.001;
-                self.quad.mouse = fm.rel / self.quad.base.rect_size;
+                self.quad.mouse = pm.rel / self.quad.base.rect_size;
                 cx.request_draw();
             }
             _ => (),

@@ -25,7 +25,7 @@ where
     pub drop_quad: Background,
     pub drop_quad_view: View,
     //pub drop_quad_color: ColorId,
-    pub _drag_move: Option<FingerMoveEvent>,
+    pub _drag_move: Option<PointerMoveEvent>,
     pub _drag_end: Option<DockDragEnd<TItem>>,
     pub _close_tab: Option<DockTabIdent>,
     pub _tab_select: Option<(usize, usize)>,
@@ -43,8 +43,8 @@ pub enum DockDragEnd<TItem>
 where
     TItem: Clone,
 {
-    OldTab { fe: FingerUpEvent, ident: DockTabIdent },
-    NewItems { fe: FingerUpEvent, items: Vec<DockTab<TItem>> },
+    OldTab { pe: PointerUpEvent, ident: DockTabIdent },
+    NewItems { pe: PointerUpEvent, items: Vec<DockTab<TItem>> },
 }
 
 #[derive(Clone)]
@@ -91,7 +91,7 @@ where
     // forwards for Dock
     splitters: &'a mut Elements<usize, Splitter>,
     tab_controls: &'a mut Elements<usize, TabControl>,
-    _drag_move: &'a mut Option<FingerMoveEvent>,
+    _drag_move: &'a mut Option<PointerMoveEvent>,
     _drag_end: &'a mut Option<DockDragEnd<TItem>>,
     _close_tab: &'a mut Option<DockTabIdent>,
     _tab_select: &'a mut Option<(usize, usize)>,
@@ -200,15 +200,15 @@ where
                                         defocus = true;
                                     }
                                 }
-                                TabControlEvent::TabDragMove { fe, .. } => {
-                                    *self._drag_move = Some(fe);
+                                TabControlEvent::TabDragMove { pe, .. } => {
+                                    *self._drag_move = Some(pe);
                                     *self._drag_end = None;
                                     cx.request_draw();
                                 }
-                                TabControlEvent::TabDragEnd { fe, tab_id } => {
+                                TabControlEvent::TabDragEnd { pe, tab_id } => {
                                     *self._drag_move = None;
                                     *self._drag_end = Some(DockDragEnd::OldTab {
-                                        fe,
+                                        pe,
 
                                         ident: DockTabIdent { tab_control_id: stack_top.uid, tab_id },
                                     });
@@ -608,8 +608,8 @@ where
         cx.request_draw();
     }
 
-    pub fn dock_drag_move(&mut self, cx: &mut Cx, fe: FingerMoveEvent) {
-        self._drag_move = Some(fe);
+    pub fn dock_drag_move(&mut self, cx: &mut Cx, pe: PointerMoveEvent) {
+        self._drag_move = Some(pe);
         cx.request_draw();
     }
 
@@ -618,9 +618,9 @@ where
         cx.request_draw();
     }
 
-    pub fn dock_drag_end(&mut self, _cx: &mut Cx, fe: FingerUpEvent, new_items: Vec<DockTab<TItem>>) {
+    pub fn dock_drag_end(&mut self, _cx: &mut Cx, pe: PointerUpEvent, new_items: Vec<DockTab<TItem>>) {
         self._drag_move = None;
-        self._drag_end = Some(DockDragEnd::NewItems { fe, items: new_items });
+        self._drag_end = Some(DockDragEnd::NewItems { pe, items: new_items });
     }
 
     pub fn handle(&mut self, cx: &mut Cx, _event: &mut Event, dock_items: &mut DockItem<TItem>) -> DockEvent<TItem> {
@@ -635,18 +635,18 @@ where
         if let Some(drag_end) = self._drag_end.clone() {
             self._drag_end = None;
             let mut tab_clone_ident = None;
-            let fe = match &drag_end {
-                DockDragEnd::OldTab { fe, .. } => fe,
-                DockDragEnd::NewItems { fe, .. } => fe,
+            let pe = match &drag_end {
+                DockDragEnd::OldTab { pe, .. } => pe,
+                DockDragEnd::NewItems { pe, .. } => pe,
             };
             for (target_id, tab_control) in self.tab_controls.enumerate() {
                 let cdr = tab_control.get_content_drop_rect(cx);
                 let tvr = tab_control.get_tabs_view_rect(cx);
-                if tvr.contains(fe.abs) || cdr.contains(fe.abs) {
+                if tvr.contains(pe.abs) || cdr.contains(pe.abs) {
                     // we might got dropped elsewhere
                     // ok now, we ask the tab_controls rect
                     let tab_rects = tab_control.get_tab_rects(cx);
-                    let (kind, _rect) = Self::get_drop_kind(fe.abs, self.drop_size, tvr, cdr, tab_rects);
+                    let (kind, _rect) = Self::get_drop_kind(pe.abs, self.drop_size, tvr, cdr, tab_rects);
 
                     // alright our drag_end is an enum
                     // its either a previous tabs index
@@ -655,7 +655,7 @@ where
                     let mut do_tab_clone = false;
                     let items = match &drag_end {
                         DockDragEnd::OldTab { ident, .. } => {
-                            if fe.modifiers.control || fe.modifiers.logo {
+                            if pe.modifiers.control || pe.modifiers.logo {
                                 do_tab_clone = true;
                             }
                             let item = Self::recur_remove_tab(
@@ -700,7 +700,7 @@ where
 
     pub fn draw(&mut self, cx: &mut Cx) {
         // lets draw our hover layer if need be
-        if let Some(fe) = &self._drag_move {
+        if let Some(pe) = &self._drag_move {
             cx.begin_absolute_box();
             self.drop_quad_view.begin_view(cx, LayoutSize::FILL);
 
@@ -708,9 +708,9 @@ where
             for (_id, tab_control) in self.tab_controls.enumerate() {
                 let cdr = tab_control.get_content_drop_rect(cx);
                 let tvr = tab_control.get_tabs_view_rect(cx);
-                if tvr.contains(fe.abs) || cdr.contains(fe.abs) {
+                if tvr.contains(pe.abs) || cdr.contains(pe.abs) {
                     let tab_rects = tab_control.get_tab_rects(cx);
-                    let (_kind, rect) = Self::get_drop_kind(fe.abs, self.drop_size, tvr, cdr, tab_rects);
+                    let (_kind, rect) = Self::get_drop_kind(pe.abs, self.drop_size, tvr, cdr, tab_rects);
 
                     //found_drop_zone = true;
                     self.drop_quad.draw(cx, rect.translate(cx.get_box_origin()), vec4(0.67, 0.67, 0.67, 0.8));

@@ -6,7 +6,7 @@
 
 use wrflib::*;
 
-use crate::{ButtonEvent, TabClose};
+use crate::{internal::tabclose::TabClose, ButtonEvent};
 
 #[derive(Clone, Default)]
 #[repr(C)]
@@ -29,13 +29,13 @@ static SHADER: Shader = Shader {
 
             fn pixel() -> vec4 {
                 let df = Df::viewport(pos * rect_size);
-                df.rect(-1., -1., rect_size.x + 2., rect_size.y + 2.);
+                df.rect(vec2(-1.), rect_size + 2.);
                 df.fill(color);
                 df.new_path();
-                df.move_to(rect_size.x, 0.);
-                df.line_to(rect_size.x, rect_size.y);
-                df.move_to(0., 0.);
-                df.line_to(0., rect_size.y);
+                df.move_to(vec2(rect_size.x, 0.));
+                df.line_to(rect_size);
+                df.move_to(vec2(0.));
+                df.line_to(vec2(0., rect_size.y));
                 return df.stroke(border_color, 1.);
             }"#
         ),
@@ -63,8 +63,8 @@ pub struct Tab {
 #[derive(Clone, PartialEq)]
 pub enum TabEvent {
     None,
-    DragMove(FingerMoveEvent),
-    DragEnd(FingerUpEvent),
+    DragMove(PointerMoveEvent),
+    DragEnd(PointerUpEvent),
     Closing,
     Close,
     Select,
@@ -196,8 +196,8 @@ impl Tab {
             _ => (),
         }
 
-        match event.hits_finger(cx, self.component_id, self.bg_area.get_rect_for_first_instance(cx)) {
-            Event::FingerDown(_fe) => {
+        match event.hits_pointer(cx, self.component_id, self.bg_area.get_rect_for_first_instance(cx)) {
+            Event::PointerDown(_pe) => {
                 cx.set_down_mouse_cursor(MouseCursor::Hand);
                 self.is_down = true;
                 self.is_drag = false;
@@ -206,24 +206,24 @@ impl Tab {
                 self.play_anim(cx);
                 return TabEvent::Select;
             }
-            Event::FingerHover(_fe) => {
+            Event::PointerHover(_pe) => {
                 cx.set_hover_mouse_cursor(MouseCursor::Hand);
             }
-            Event::FingerUp(fe) => {
+            Event::PointerUp(pe) => {
                 self.is_down = false;
 
                 if self.is_drag {
                     self.is_drag = false;
-                    return TabEvent::DragEnd(fe);
+                    return TabEvent::DragEnd(pe);
                 }
             }
-            Event::FingerMove(fe) => {
-                if !self.is_drag && fe.move_distance() > 50. {
+            Event::PointerMove(pe) => {
+                if !self.is_drag && pe.move_distance() > 50. {
                     //cx.set_down_mouse_cursor(MouseCursor::Hidden);
                     self.is_drag = true;
                 }
                 if self.is_drag {
-                    return TabEvent::DragMove(fe);
+                    return TabEvent::DragMove(pe);
                 }
             }
             _ => (),

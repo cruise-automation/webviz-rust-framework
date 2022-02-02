@@ -102,7 +102,7 @@ impl<'a> TokenizerState<'a> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TokenChunk {
     pub token_type: TokenType,
     pub offset: usize,

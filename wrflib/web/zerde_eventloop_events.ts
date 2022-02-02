@@ -5,7 +5,7 @@
 // You may not use this file except in compliance with the License.
 
 import { createWasmBuffer, getWrfParamType, makeZerdeBuilder } from "./common";
-import { Finger, FingerScroll, WasmApp } from "./main_worker";
+import { Pointer, PointerScroll, WasmApp } from "./main_worker";
 import {
   TextareaEventKeyDown,
   TextareaEventKeyUp,
@@ -25,12 +25,12 @@ const MSG_TYPE_END = 0;
 const MSG_TYPE_INIT = 1;
 const MSG_TYPE_RESIZE = 4;
 const MSG_TYPE_ANIMATION_FRAME = 5;
-const MSG_TYPE_FINGER_DOWN = 6;
-const MSG_TYPE_FINGER_UP = 7;
-const MSG_TYPE_FINGER_MOVE = 8;
-const MSG_TYPE_FINGER_HOVER = 9;
-const MSG_TYPE_FINGER_SCROLL = 10;
-const MSG_TYPE_FINGER_OUT = 11;
+const MSG_TYPE_POINTER_DOWN = 6;
+const MSG_TYPE_POINTER_UP = 7;
+const MSG_TYPE_POINTER_MOVE = 8;
+const MSG_TYPE_POINTER_HOVER = 9;
+const MSG_TYPE_POINTER_SCROLL = 10;
+const MSG_TYPE_POINTER_OUT = 11;
 const MSG_TYPE_TIMER_FIRED = 18;
 const MSG_TYPE_WINDOW_FOCUS = 19;
 const MSG_TYPE_PAINT_DIRTY = 21;
@@ -111,63 +111,63 @@ export class ZerdeEventloopEvents {
     this._zerdeBuilder.sendU32(MSG_TYPE_ANIMATION_FRAME);
   }
 
-  fingerDown(finger: Finger): void {
-    this._zerdeBuilder.sendU32(MSG_TYPE_FINGER_DOWN);
-    this._zerdeBuilder.sendF32(finger.x);
-    this._zerdeBuilder.sendF32(finger.y);
-    this._zerdeBuilder.sendU32(finger.button);
-    this._zerdeBuilder.sendU32(finger.digit);
-    this._zerdeBuilder.sendU32(finger.touch ? 1 : 0);
-    this._zerdeBuilder.sendU32(finger.modifiers);
-    this._zerdeBuilder.sendF64(finger.time);
+  pointerDown(pointer: Pointer): void {
+    this._zerdeBuilder.sendU32(MSG_TYPE_POINTER_DOWN);
+    this._zerdeBuilder.sendF32(pointer.x);
+    this._zerdeBuilder.sendF32(pointer.y);
+    this._zerdeBuilder.sendU32(pointer.button);
+    this._zerdeBuilder.sendU32(pointer.digit);
+    this._zerdeBuilder.sendU32(pointer.touch ? 1 : 0);
+    this._zerdeBuilder.sendU32(pointer.modifiers);
+    this._zerdeBuilder.sendF64(pointer.time);
   }
 
-  fingerUp(finger: Finger): void {
-    this._zerdeBuilder.sendU32(MSG_TYPE_FINGER_UP);
-    this._zerdeBuilder.sendF32(finger.x);
-    this._zerdeBuilder.sendF32(finger.y);
-    this._zerdeBuilder.sendU32(finger.button);
-    this._zerdeBuilder.sendU32(finger.digit);
-    this._zerdeBuilder.sendU32(finger.touch ? 1 : 0);
-    this._zerdeBuilder.sendU32(finger.modifiers);
-    this._zerdeBuilder.sendF64(finger.time);
+  pointerUp(pointer: Pointer): void {
+    this._zerdeBuilder.sendU32(MSG_TYPE_POINTER_UP);
+    this._zerdeBuilder.sendF32(pointer.x);
+    this._zerdeBuilder.sendF32(pointer.y);
+    this._zerdeBuilder.sendU32(pointer.button);
+    this._zerdeBuilder.sendU32(pointer.digit);
+    this._zerdeBuilder.sendU32(pointer.touch ? 1 : 0);
+    this._zerdeBuilder.sendU32(pointer.modifiers);
+    this._zerdeBuilder.sendF64(pointer.time);
   }
 
-  fingerMove(finger: Finger): void {
-    this._zerdeBuilder.sendU32(MSG_TYPE_FINGER_MOVE);
-    this._zerdeBuilder.sendF32(finger.x);
-    this._zerdeBuilder.sendF32(finger.y);
-    this._zerdeBuilder.sendU32(finger.digit);
-    this._zerdeBuilder.sendU32(finger.touch ? 1 : 0);
-    this._zerdeBuilder.sendU32(finger.modifiers);
-    this._zerdeBuilder.sendF64(finger.time);
+  pointerMove(pointer: Pointer): void {
+    this._zerdeBuilder.sendU32(MSG_TYPE_POINTER_MOVE);
+    this._zerdeBuilder.sendF32(pointer.x);
+    this._zerdeBuilder.sendF32(pointer.y);
+    this._zerdeBuilder.sendU32(pointer.digit);
+    this._zerdeBuilder.sendU32(pointer.touch ? 1 : 0);
+    this._zerdeBuilder.sendU32(pointer.modifiers);
+    this._zerdeBuilder.sendF64(pointer.time);
   }
 
-  fingerHover(finger: Finger): void {
-    this._zerdeBuilder.sendU32(MSG_TYPE_FINGER_HOVER);
-    this._zerdeBuilder.sendF32(finger.x);
-    this._zerdeBuilder.sendF32(finger.y);
-    this._zerdeBuilder.sendU32(finger.modifiers);
-    this._zerdeBuilder.sendF64(finger.time);
+  pointerHover(pointer: Pointer): void {
+    this._zerdeBuilder.sendU32(MSG_TYPE_POINTER_HOVER);
+    this._zerdeBuilder.sendF32(pointer.x);
+    this._zerdeBuilder.sendF32(pointer.y);
+    this._zerdeBuilder.sendU32(pointer.modifiers);
+    this._zerdeBuilder.sendF64(pointer.time);
   }
 
-  fingerScroll(finger: FingerScroll): void {
-    this._zerdeBuilder.sendU32(MSG_TYPE_FINGER_SCROLL);
-    this._zerdeBuilder.sendF32(finger.x);
-    this._zerdeBuilder.sendF32(finger.y);
-    this._zerdeBuilder.sendF32(finger.scrollX);
-    this._zerdeBuilder.sendF32(finger.scrollY);
-    this._zerdeBuilder.sendU32(finger.isWheel ? 1 : 0);
-    this._zerdeBuilder.sendU32(finger.modifiers);
-    this._zerdeBuilder.sendF64(finger.time);
+  pointerScroll(pointer: PointerScroll): void {
+    this._zerdeBuilder.sendU32(MSG_TYPE_POINTER_SCROLL);
+    this._zerdeBuilder.sendF32(pointer.x);
+    this._zerdeBuilder.sendF32(pointer.y);
+    this._zerdeBuilder.sendF32(pointer.scrollX);
+    this._zerdeBuilder.sendF32(pointer.scrollY);
+    this._zerdeBuilder.sendU32(pointer.isWheel ? 1 : 0);
+    this._zerdeBuilder.sendU32(pointer.modifiers);
+    this._zerdeBuilder.sendF64(pointer.time);
   }
 
-  fingerOut(finger: Finger): void {
-    this._zerdeBuilder.sendU32(MSG_TYPE_FINGER_OUT);
-    this._zerdeBuilder.sendF32(finger.x);
-    this._zerdeBuilder.sendF32(finger.y);
-    this._zerdeBuilder.sendU32(finger.modifiers);
-    this._zerdeBuilder.sendF64(finger.time);
+  pointerOut(pointer: Pointer): void {
+    this._zerdeBuilder.sendU32(MSG_TYPE_POINTER_OUT);
+    this._zerdeBuilder.sendF32(pointer.x);
+    this._zerdeBuilder.sendF32(pointer.y);
+    this._zerdeBuilder.sendU32(pointer.modifiers);
+    this._zerdeBuilder.sendF64(pointer.time);
   }
 
   keyDown(data: TextareaEventKeyDown): void {

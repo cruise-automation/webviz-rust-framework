@@ -1,7 +1,0 @@
-// cargo-watch ignore file
-// Prevents re-compiling Rust assets when unrelated files change
-// See https://github.com/watchexec/cargo-watch#ignore-files
-
-*.ts
-*.tsx
-*.js

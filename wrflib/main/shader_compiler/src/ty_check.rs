@@ -370,6 +370,7 @@ impl<'a> TyChecker<'a> {
             Ty::Mat2 => Ty::Vec2,
             Ty::Mat3 => Ty::Vec3,
             Ty::Mat4 => Ty::Vec4,
+            Ty::Array { elem_ty, len: _ } => elem_ty.as_ref().clone(),
             _ => return Err(ParseError { span, message: format!("can't index into value of type `{}`", ty) }),
         };
         if index_ty != Ty::Int {

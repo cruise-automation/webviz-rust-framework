@@ -56,7 +56,7 @@ pub(crate) struct Win32Window {
 
     pub(crate) ime_spot: Vec2,
     pub(crate) last_mouse_pos: Vec2,
-    pub(crate) fingers_down: Vec<bool>,
+    pub(crate) pointers_down: Vec<bool>,
     pub(crate) hwnd: Option<HWND>,
     pub(crate) track_mouse_event: bool,
 }
@@ -366,8 +366,8 @@ impl Win32App {
 
 impl Win32Window {
     pub(crate) fn new(win32_app: &mut Win32App, window_id: usize) -> Win32Window {
-        let mut fingers_down = Vec::new();
-        fingers_down.resize(NUM_FINGERS, false);
+        let mut pointers_down = Vec::new();
+        pointers_down.resize(NUM_POINTERS, false);
 
         Win32Window {
             window_id,
@@ -376,7 +376,7 @@ impl Win32Window {
             time_start: win32_app.time_start,
             ime_spot: Vec2::default(),
             last_mouse_pos: Vec2::default(),
-            fingers_down,
+            pointers_down,
             hwnd: None,
             track_mouse_event: false,
         }
@@ -556,11 +556,11 @@ impl Win32Window {
                     };
                     winuser::TrackMouseEvent(&mut tme);
                 }
-                window.send_finger_hover_and_move(window.get_mouse_pos_from_lparam(lparam), Self::get_key_modifiers())
+                window.send_pointer_hover_and_move(window.get_mouse_pos_from_lparam(lparam), Self::get_key_modifiers())
             }
             winuser::WM_MOUSELEAVE => {
                 window.track_mouse_event = false;
-                window.do_callback(&mut vec![Event::FingerHover(FingerHoverEvent {
+                window.do_callback(&mut vec![Event::PointerHover(PointerHoverEvent {
                     digit: 0,
                     window_id: window.window_id,
                     any_down: false,
@@ -576,26 +576,26 @@ impl Win32Window {
             }
             winuser::WM_MOUSEWHEEL => {
                 let delta = (wparam >> 16) as u16 as i16 as f32;
-                window.do_callback(&mut vec![Event::FingerScroll(FingerScrollEvent {
+                window.do_callback(&mut vec![Event::PointerScroll(PointerScrollEvent {
                     digit: 0,
                     window_id: window.window_id,
                     scroll: Vec2 { x: 0.0, y: -delta },
                     abs: window.last_mouse_pos,
                     rel: window.last_mouse_pos,
                     rect: Rect::default(),
-                    input_type: FingerInputType::Mouse,
+                    input_type: PointerInputType::Mouse,
                     modifiers: Self::get_key_modifiers(),
                     handled_x: false,
                     handled_y: false,
                     time: window.time_now(),
                 })]);
             }
-            winuser::WM_LBUTTONDOWN => window.send_finger_down(0, MouseButton::Left, Self::get_key_modifiers()),
-            winuser::WM_LBUTTONUP => window.send_finger_up(0, MouseButton::Left, Self::get_key_modifiers()),
-            winuser::WM_RBUTTONDOWN => window.send_finger_down(1, MouseButton::Right, Self::get_key_modifiers()),
-            winuser::WM_RBUTTONUP => window.send_finger_up(1, MouseButton::Right, Self::get_key_modifiers()),
-            winuser::WM_MBUTTONDOWN => window.send_finger_down(2, MouseButton::Other, Self::get_key_modifiers()),
-            winuser::WM_MBUTTONUP => window.send_finger_up(2, MouseButton::Other, Self::get_key_modifiers()),
+            winuser::WM_LBUTTONDOWN => window.send_pointer_down(0, MouseButton::Left, Self::get_key_modifiers()),
+            winuser::WM_LBUTTONUP => window.send_pointer_up(0, MouseButton::Left, Self::get_key_modifiers()),
+            winuser::WM_RBUTTONDOWN => window.send_pointer_down(1, MouseButton::Right, Self::get_key_modifiers()),
+            winuser::WM_RBUTTONUP => window.send_pointer_up(1, MouseButton::Right, Self::get_key_modifiers()),
+            winuser::WM_MBUTTONDOWN => window.send_pointer_down(2, MouseButton::Other, Self::get_key_modifiers()),
+            winuser::WM_MBUTTONUP => window.send_pointer_up(2, MouseButton::Other, Self::get_key_modifiers()),
             winuser::WM_KEYDOWN | winuser::WM_SYSKEYDOWN => {
                 // detect control/cmd - c / v / x
                 let modifiers = Self::get_key_modifiers();
@@ -924,9 +924,9 @@ impl Win32Window {
         ]);
     }
 
-    pub(crate) fn send_finger_down(&mut self, digit: usize, button: MouseButton, modifiers: KeyModifiers) {
+    pub(crate) fn send_pointer_down(&mut self, digit: usize, button: MouseButton, modifiers: KeyModifiers) {
         let mut down_count = 0;
-        for is_down in &self.fingers_down {
+        for is_down in &self.pointers_down {
             if *is_down {
                 down_count += 1;
             }
@@ -936,8 +936,8 @@ impl Win32Window {
                 winuser::SetCapture(self.hwnd.unwrap());
             }
         }
-        self.fingers_down[digit] = true;
-        self.do_callback(&mut vec![Event::FingerDown(FingerDownEvent {
+        self.pointers_down[digit] = true;
+        self.do_callback(&mut vec![Event::PointerDown(PointerDownEvent {
             window_id: self.window_id,
             abs: self.last_mouse_pos,
             rel: self.last_mouse_pos,
@@ -945,17 +945,17 @@ impl Win32Window {
             digit,
             button,
             handled: false,
-            input_type: FingerInputType::Mouse,
+            input_type: PointerInputType::Mouse,
             modifiers,
             tap_count: 0,
             time: self.time_now(),
         })]);
     }
 
-    pub(crate) fn send_finger_up(&mut self, digit: usize, button: MouseButton, modifiers: KeyModifiers) {
-        self.fingers_down[digit] = false;
+    pub(crate) fn send_pointer_up(&mut self, digit: usize, button: MouseButton, modifiers: KeyModifiers) {
+        self.pointers_down[digit] = false;
         let mut down_count = 0;
-        for is_down in &self.fingers_down {
+        for is_down in &self.pointers_down {
             if *is_down {
                 down_count += 1;
             }
@@ -965,7 +965,7 @@ impl Win32Window {
                 winuser::ReleaseCapture();
             }
         }
-        self.do_callback(&mut vec![Event::FingerUp(FingerUpEvent {
+        self.do_callback(&mut vec![Event::PointerUp(PointerUpEvent {
             window_id: self.window_id,
             abs: self.last_mouse_pos,
             rel: self.last_mouse_pos,
@@ -975,18 +975,18 @@ impl Win32Window {
             digit,
             button,
             is_over: false,
-            input_type: FingerInputType::Mouse,
+            input_type: PointerInputType::Mouse,
             modifiers,
             time: self.time_now(),
         })]);
     }
 
-    pub(crate) fn send_finger_hover_and_move(&mut self, pos: Vec2, modifiers: KeyModifiers) {
+    pub(crate) fn send_pointer_hover_and_move(&mut self, pos: Vec2, modifiers: KeyModifiers) {
         self.last_mouse_pos = pos;
         let mut events = Vec::new();
-        for (digit, down) in self.fingers_down.iter().enumerate() {
+        for (digit, down) in self.pointers_down.iter().enumerate() {
             if *down {
-                events.push(Event::FingerMove(FingerMoveEvent {
+                events.push(Event::PointerMove(PointerMoveEvent {
                     window_id: self.window_id,
                     abs: pos,
                     rel: pos,
@@ -995,13 +995,13 @@ impl Win32Window {
                     abs_start: Vec2::default(),
                     rel_start: Vec2::default(),
                     is_over: false,
-                    input_type: FingerInputType::Mouse,
+                    input_type: PointerInputType::Mouse,
                     modifiers: modifiers.clone(),
                     time: self.time_now(),
                 }));
             }
         }
-        events.push(Event::FingerHover(FingerHoverEvent {
+        events.push(Event::PointerHover(PointerHoverEvent {
             digit: 0,
             window_id: self.window_id,
             abs: pos,

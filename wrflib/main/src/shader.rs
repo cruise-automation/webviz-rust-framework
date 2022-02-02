@@ -8,6 +8,8 @@
 
 use crate::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use wrflib_shader_compiler::error::ParseError;
+use wrflib_shader_compiler::span::{CodeFragmentId, Span};
 use wrflib_shader_compiler::ty::Ty;
 use wrflib_shader_compiler::{Decl, ShaderAst};
 
@@ -51,12 +53,29 @@ impl Shader {
         Shader { build_geom: None, code_to_concatenate: &[], shader_id: AtomicUsize::new(Self::UNCOMPILED_SHADER_ID) };
 
     const UNCOMPILED_SHADER_ID: usize = usize::MAX;
+
+    pub fn update(&'static self, cx: &mut Cx, new_code_to_concatenate: &[CodeFragment]) -> Result<(), ParseError> {
+        let shader_id = cx.get_shader_id(self);
+
+        let shader = &mut cx.shaders[shader_id];
+        let shader_ast = cx.shader_ast_generator.generate_shader_ast(new_code_to_concatenate)?;
+        if shader.mapping != CxShaderMapping::from_shader_ast(shader_ast.clone()) {
+            return Err(ParseError {
+                span: Span { code_fragment_id: CodeFragmentId(0), start: 0, end: 0 },
+                message: "Mismatch in shader mapping".to_string(),
+            });
+        }
+        shader.shader_ast = Some(shader_ast);
+        cx.shader_recompile_ids.push(shader_id);
+
+        Ok(())
+    }
 }
 
 /// Contains information of a [`CxShader`] of what instances, instances, textures
 /// and so on it contains. That information can then be used to modify a [`Shader`
 /// or [`DrawCall`].
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct CxShaderMapping {
     /// Contains information about the special "rect_pos" and "rect_size" fields.
     /// See [`RectInstanceProps`].
@@ -171,7 +190,7 @@ pub(crate) struct PropDef {
 /// of rectangles at the same time, e.g. for alignment in [`CxLayoutBox`].
 /// TODO(JP): We might want to consider instead doing bulk moves using [`DrawCall`-
 /// or [`View`]-level uniforms.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct RectInstanceProps {
     pub(crate) rect_pos: Option<usize>,
     pub(crate) rect_size: Option<usize>,
@@ -196,7 +215,7 @@ impl RectInstanceProps {
 /// Represents an "instance" GPU input in a [`Shader`].
 ///
 /// TODO(JP): Merge this into [`NamedProp`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct InstanceProp {
     pub(crate) name: String,
     pub(crate) slots: usize,
@@ -205,7 +224,7 @@ pub(crate) struct InstanceProp {
 /// Represents all "instance" GPU inputs in a [`Shader`].
 ///
 /// TODO(JP): Merge this into [`NamedProps`].
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct InstanceProps {
     pub(crate) props: Vec<InstanceProp>,
     pub(crate) total_slots: usize,
@@ -214,7 +233,7 @@ pub(crate) struct InstanceProps {
 /// Represents all "uniform" GPU inputs in a [`Shader`].
 ///
 /// TODO(JP): Merge this into [`NamedProps`].
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct UniformProps {
     pub(crate) total_slots: usize,
 }
@@ -296,24 +315,26 @@ impl Cx {
         } else {
             // Use the last code fragment as the shader name.
             let main_code_fragment = shader.code_to_concatenate.last().expect("No code fragments found");
-            let shader_name = format!("{}:{}:{}", main_code_fragment.filename, main_code_fragment.line, main_code_fragment.col);
-            let shader_ast = self.shader_ast_generator.generate_shader_ast(&shader_name, shader.code_to_concatenate);
+            match self.shader_ast_generator.generate_shader_ast(shader.code_to_concatenate) {
+                Err(err) => panic!("{}", err.format_for_console(shader.code_to_concatenate)),
+                Ok(shader_ast) => {
+                    let gpu_geometry = shader.build_geom.map(|build_geom| GpuGeometry::new(self, (build_geom)()));
 
-            let gpu_geometry = shader.build_geom.map(|build_geom| GpuGeometry::new(self, (build_geom)()));
+                    let shader_id = self.shaders.len();
+                    self.shaders.push(CxShader {
+                        name: main_code_fragment.name_line_col_at_offset(0),
+                        gpu_geometry,
+                        mapping: CxShaderMapping::from_shader_ast(shader_ast.clone()),
+                        platform: None,
+                        shader_ast: Some(shader_ast),
+                    });
+                    self.shader_recompile_ids.push(shader_id);
 
-            let shader_id = self.shaders.len();
-            self.shaders.push(CxShader {
-                name: shader_name,
-                gpu_geometry,
-                mapping: CxShaderMapping::from_shader_ast(shader_ast.clone()),
-                platform: None,
-                shader_ast: Some(shader_ast),
-            });
-            self.shader_recompile_ids.push(shader_id);
+                    shader.shader_id.store(shader_id, Ordering::Relaxed);
 
-            shader.shader_id.store(shader_id, Ordering::Relaxed);
-
-            shader_id
+                    shader_id
+                }
+            }
         }
     }
 }

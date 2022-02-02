@@ -15,7 +15,7 @@ use wrflib_components::*;
 pub struct LogList {
     view: ScrollView,
     item_draw: LogItemDraw,
-    list: ListLogic,
+    list: List,
 }
 
 #[derive(Clone)]
@@ -35,7 +35,7 @@ impl LogList {
     pub fn new() -> Self {
         Self {
             item_draw: LogItemDraw::default(),
-            list: ListLogic::default().with_multi_select(true),
+            list: List::default().with_multi_select(true),
             view: ScrollView::new_standard_vh(),
         }
     }

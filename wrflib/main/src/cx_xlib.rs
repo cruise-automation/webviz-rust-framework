@@ -86,7 +86,7 @@ pub(crate) struct XlibWindow {
     pub(crate) ime_spot: Vec2,
     pub(crate) current_cursor: MouseCursor,
     pub(crate) last_mouse_pos: Vec2,
-    pub(crate) fingers_down: Vec<bool>,
+    pub(crate) pointers_down: Vec<bool>,
 }
 
 #[derive(Clone)]
@@ -384,7 +384,7 @@ impl XlibApp {
                             if crossing.detail == 4 {
                                 if let Some(window_ptr) = self.window_map.get(&crossing.window) {
                                     let window = &mut (**window_ptr);
-                                    window.do_callback(&mut vec![Event::FingerHover(FingerHoverEvent {
+                                    window.do_callback(&mut vec![Event::PointerHover(PointerHoverEvent {
                                         digit: 0,
                                         window_id: window.window_id,
                                         any_down: false,
@@ -434,7 +434,7 @@ impl XlibApp {
                                 window.do_callback(&mut drag_query_events);
                                 // otherwise lets check if we are hover the window edge to resize the window
                                 //println!("{} {}", window.last_window_geom.inner_size.x, pos.x);
-                                window.send_finger_hover_and_move(pos, KeyModifiers::default());
+                                window.send_pointer_hover_and_move(pos, KeyModifiers::default());
                                 let window_size = window.last_window_geom.inner_size;
                                 if pos.x >= 0.0 && pos.x < 10.0 && pos.y >= 0.0 && pos.y < 10.0 {
                                     window.last_nc_mode = Some(_NET_WM_MOVERESIZE_SIZE_TOPLEFT);
@@ -509,7 +509,7 @@ impl XlibApp {
                                     self.last_scroll_time = time_now;
                                     // completely arbitrary scroll acceleration curve.
                                     let speed = 1200.0 * (0.2 - 2. * (self.last_scroll_time - last_scroll_time)).max(0.01);
-                                    self.do_callback(&mut vec![Event::FingerScroll(FingerScrollEvent {
+                                    self.do_callback(&mut vec![Event::PointerScroll(PointerScrollEvent {
                                         digit: 0,
                                         window_id: window.window_id,
                                         scroll: Vec2 {
@@ -531,7 +531,7 @@ impl XlibApp {
                                         abs: window.last_mouse_pos,
                                         rel: window.last_mouse_pos,
                                         rect: Rect::default(),
-                                        input_type: FingerInputType::Mouse,
+                                        input_type: PointerInputType::Mouse,
                                         modifiers: self.xkeystate_to_modifiers(button.state),
                                         handled_x: false,
                                         handled_y: false,
@@ -580,7 +580,8 @@ impl XlibApp {
                                             );
                                         }
                                     } else {
-                                        window.send_finger_down(button.button as usize, self.xkeystate_to_modifiers(button.state))
+                                        window
+                                            .send_pointer_down(button.button as usize, self.xkeystate_to_modifiers(button.state))
                                     }
                                 }
                             }
@@ -592,7 +593,7 @@ impl XlibApp {
                             let button = event.xbutton;
                             if let Some(window_ptr) = self.window_map.get(&button.window) {
                                 let window = &mut (**window_ptr);
-                                window.send_finger_up(button.button as usize, self.xkeystate_to_modifiers(button.state))
+                                window.send_pointer_up(button.button as usize, self.xkeystate_to_modifiers(button.state))
                             }
                         }
                         X11_sys::KeyPress => {
@@ -1073,8 +1074,8 @@ fn get_mouse_button_from_digit(digit: usize) -> MouseButton {
 
 impl XlibWindow {
     pub(crate) fn new(xlib_app: &mut XlibApp, window_id: usize) -> XlibWindow {
-        let mut fingers_down = Vec::new();
-        fingers_down.resize(NUM_FINGERS, false);
+        let mut pointers_down = Vec::new();
+        pointers_down.resize(NUM_POINTERS, false);
 
         XlibWindow {
             window: None,
@@ -1090,7 +1091,7 @@ impl XlibWindow {
             ime_spot: Vec2::default(),
             current_cursor: MouseCursor::Default,
             last_mouse_pos: Vec2::default(),
-            fingers_down,
+            pointers_down,
         }
     }
 
@@ -1520,9 +1521,9 @@ impl XlibWindow {
         self.do_callback(&mut vec![Event::AppFocusLost]);
     }
 
-    pub(crate) fn send_finger_down(&mut self, digit: usize, modifiers: KeyModifiers) {
+    pub(crate) fn send_pointer_down(&mut self, digit: usize, modifiers: KeyModifiers) {
         let mut down_count = 0;
-        for is_down in &self.fingers_down {
+        for is_down in &self.pointers_down {
             if *is_down {
                 down_count += 1;
             }
@@ -1530,8 +1531,8 @@ impl XlibWindow {
         if down_count == 0 {
             //unsafe {winuser::SetCapture(self.hwnd.unwrap());}
         }
-        self.fingers_down[digit] = true;
-        self.do_callback(&mut vec![Event::FingerDown(FingerDownEvent {
+        self.pointers_down[digit] = true;
+        self.do_callback(&mut vec![Event::PointerDown(PointerDownEvent {
             window_id: self.window_id,
             abs: self.last_mouse_pos,
             rel: self.last_mouse_pos,
@@ -1539,17 +1540,17 @@ impl XlibWindow {
             digit,
             button: get_mouse_button_from_digit(digit),
             handled: false,
-            input_type: FingerInputType::Mouse,
+            input_type: PointerInputType::Mouse,
             modifiers,
             tap_count: 0,
             time: self.time_now(),
         })]);
     }
 
-    pub(crate) fn send_finger_up(&mut self, digit: usize, modifiers: KeyModifiers) {
-        self.fingers_down[digit] = false;
+    pub(crate) fn send_pointer_up(&mut self, digit: usize, modifiers: KeyModifiers) {
+        self.pointers_down[digit] = false;
         let mut down_count = 0;
-        for is_down in &self.fingers_down {
+        for is_down in &self.pointers_down {
             if *is_down {
                 down_count += 1;
             }
@@ -1557,7 +1558,7 @@ impl XlibWindow {
         if down_count == 0 {
             // unsafe {winuser::ReleaseCapture();}
         }
-        self.do_callback(&mut vec![Event::FingerUp(FingerUpEvent {
+        self.do_callback(&mut vec![Event::PointerUp(PointerUpEvent {
             window_id: self.window_id,
             abs: self.last_mouse_pos,
             rel: self.last_mouse_pos,
@@ -1567,18 +1568,18 @@ impl XlibWindow {
             digit,
             button: get_mouse_button_from_digit(digit),
             is_over: false,
-            input_type: FingerInputType::Mouse,
+            input_type: PointerInputType::Mouse,
             modifiers,
             time: self.time_now(),
         })]);
     }
 
-    pub(crate) fn send_finger_hover_and_move(&mut self, pos: Vec2, modifiers: KeyModifiers) {
+    pub(crate) fn send_pointer_hover_and_move(&mut self, pos: Vec2, modifiers: KeyModifiers) {
         self.last_mouse_pos = pos;
         let mut events = Vec::new();
-        for (digit, down) in self.fingers_down.iter().enumerate() {
+        for (digit, down) in self.pointers_down.iter().enumerate() {
             if *down {
-                events.push(Event::FingerMove(FingerMoveEvent {
+                events.push(Event::PointerMove(PointerMoveEvent {
                     window_id: self.window_id,
                     abs: pos,
                     rel: pos,
@@ -1587,13 +1588,13 @@ impl XlibWindow {
                     abs_start: Vec2::default(),
                     rel_start: Vec2::default(),
                     is_over: false,
-                    input_type: FingerInputType::Mouse,
+                    input_type: PointerInputType::Mouse,
                     modifiers: modifiers.clone(),
                     time: self.time_now(),
                 }));
             }
         }
-        events.push(Event::FingerHover(FingerHoverEvent {
+        events.push(Event::PointerHover(PointerHoverEvent {
             digit: 0,
             window_id: self.window_id,
             abs: pos,

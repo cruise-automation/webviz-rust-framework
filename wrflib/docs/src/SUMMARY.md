@@ -1,9 +1,7 @@
 # Summary
-
 - [Introduction](./introduction.md)
 - [Getting Started](./getting_started.md)
 - [Basic Tooling](./basic_tooling.md)
-
 
 # Basic APIs
 - [Tutorial: Hello World Console](./tutorial_hello_world_console.md)
@@ -24,6 +22,7 @@
 - [Tutorial: Rendering 3D Meshes](./tutorial_3d_rendering.md)
 - [API Overview](./rendering_api_overview.md)
   - [Rendering model](./rendering_api_overview_model.md)
+  - [Events](./rendering_api_events_overview.md)
   - [Geometry](./rendering_api_overview_geometry.md)
   - [Shaders](./rendering_api_shaders.md)
   - [Drawing](./rendering_api_drawing.md)
@@ -31,3 +30,9 @@
 # UI
 - [Tutorial: UI Components](./tutorial_ui_components.md)
 - [Tutorial: UI Layout](./tutorial_ui_layout.md)
+- [API Overview](./ui_api_overview.md)
+  - [UI Components](./ui_api_overview_components.md)
+  - [Layout](./ui_api_overview_layout.md)
+
+# Misc
+- [Known Issues](./known_issues.md)

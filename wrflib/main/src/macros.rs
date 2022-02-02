@@ -171,7 +171,7 @@ macro_rules! location_hash {
 #[macro_export]
 macro_rules! code_fragment {
     ( $ code: expr ) => {
-        CodeFragment { filename: file!(), line: line!() as usize + 1, col: column!() as usize + 7, code: $code }
+        CodeFragment::Static { filename: file!(), line: line!() as usize + 1, col: column!() as usize + 7, code: $code }
     };
 }
 

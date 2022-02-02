@@ -47,7 +47,7 @@ const isFirefox =
 
 type Timer = { id: number; repeats: number; sysId: number };
 
-export type Finger = {
+export type Pointer = {
   x: number;
   y: number;
   button: number;
@@ -57,7 +57,7 @@ export type Finger = {
   touch: boolean;
 };
 
-export type FingerScroll = Finger & {
+export type PointerScroll = Pointer & {
   scrollX: number;
   scrollY: number;
   isWheel: boolean;
@@ -252,10 +252,7 @@ export class WasmApp {
 
     // create initial zerdeEventloopEvents
     this.zerdeEventloopEvents = new ZerdeEventloopEvents(this);
-
-    // Introduce a frame delay before initializing the application.
-    // This ensures WasmApp is initialized correctly before using it.
-    setTimeout(() => this.initApp(), 0);
+    this.initApp();
   }
 
   private initApp(): void {
@@ -303,7 +300,7 @@ export class WasmApp {
   }
 
   private bindMouseAndTouch(): void {
-    let lastMouseFinger;
+    let lastMousePointer;
     // TODO(JP): Some day bring back touch scroll support..
     // let use_touch_scroll_overlay = window.ontouchstart === null;
     // if (use_touch_scroll_overlay) {
@@ -355,18 +352,18 @@ export class WasmApp {
     //             last_scroll_left = ts.scrollLeft;
     //         }, 200);
 
-    //         let finger = last_mouse_finger;
-    //         if (finger) {
-    //             finger.scroll_x = dx;
-    //             finger.scroll_y = dy;
-    //             finger.is_wheel = true;
-    //             this.zerdeEventloopEvents.finger_scroll(finger);
+    //         let pointer = last_mouse_pointer;
+    //         if (pointer) {
+    //             pointer.scroll_x = dx;
+    //             pointer.scroll_y = dy;
+    //             pointer.is_wheel = true;
+    //             this.zerdeEventloopEvents.pointer_scroll(pointer);
     //             this.do_wasm_io();
     //         }
     //     })
     // }
 
-    const mouseFingers: {
+    const mousePointers: {
       x: number;
       y: number;
       button: number;
@@ -375,9 +372,9 @@ export class WasmApp {
       modifiers: number;
       touch: boolean;
     }[] = [];
-    function mouseToFinger(e: RpcMouseEvent | RpcWheelEvent): Finger {
+    function mouseToPointer(e: RpcMouseEvent | RpcWheelEvent): Pointer {
       // @ts-ignore; TypeScript does not like the empty object declaration below, but we immediately fill every field
-      const mf = mouseFingers[e.button] || (mouseFingers[e.button] = {});
+      const mf = mousePointers[e.button] || (mousePointers[e.button] = {});
       mf.x = e.pageX;
       mf.y = e.pageY;
       mf.button = e.button;
@@ -391,28 +388,28 @@ export class WasmApp {
     const mouseButtonsDown: boolean[] = [];
     rpc.receive(WorkerEvent.CanvasMouseDown, (event: RpcMouseEvent) => {
       mouseButtonsDown[event.button] = true;
-      this.zerdeEventloopEvents.fingerDown(mouseToFinger(event));
+      this.zerdeEventloopEvents.pointerDown(mouseToPointer(event));
       this.doWasmIo();
     });
     rpc.receive(WorkerEvent.WindowMouseUp, (event: RpcMouseEvent) => {
       mouseButtonsDown[event.button] = false;
-      this.zerdeEventloopEvents.fingerUp(mouseToFinger(event));
+      this.zerdeEventloopEvents.pointerUp(mouseToPointer(event));
       this.doWasmIo();
     });
     rpc.receive(WorkerEvent.WindowMouseMove, (event: RpcMouseEvent) => {
       for (let i = 0; i < mouseButtonsDown.length; i++) {
         if (mouseButtonsDown[i]) {
-          const mf = mouseToFinger(event);
+          const mf = mouseToPointer(event);
           mf.digit = i;
-          this.zerdeEventloopEvents.fingerMove(mf);
+          this.zerdeEventloopEvents.pointerMove(mf);
         }
       }
-      lastMouseFinger = mouseToFinger(event);
-      this.zerdeEventloopEvents.fingerHover(lastMouseFinger);
+      lastMousePointer = mouseToPointer(event);
+      this.zerdeEventloopEvents.pointerHover(lastMousePointer);
       this.doWasmIo();
     });
     rpc.receive(WorkerEvent.WindowMouseOut, (event: RpcMouseEvent) => {
-      this.zerdeEventloopEvents.fingerOut(mouseToFinger(event));
+      this.zerdeEventloopEvents.pointerOut(mouseToPointer(event));
       this.doWasmIo();
     });
 
@@ -425,7 +422,7 @@ export class WasmApp {
         }
         touchIdsByDigit[digit] = touch.identifier;
 
-        this.zerdeEventloopEvents.fingerDown({
+        this.zerdeEventloopEvents.pointerDown({
           x: touch.pageX,
           y: touch.pageY,
           button: 0,
@@ -444,7 +441,7 @@ export class WasmApp {
           console.error("Unrecognized digit in WorkerEvent.WindowTouchMove");
           continue;
         }
-        this.zerdeEventloopEvents.fingerMove({
+        this.zerdeEventloopEvents.pointerMove({
           x: touch.pageX,
           y: touch.pageY,
           button: 0,
@@ -466,7 +463,7 @@ export class WasmApp {
             continue;
           }
           touchIdsByDigit[digit] = undefined;
-          this.zerdeEventloopEvents.fingerUp({
+          this.zerdeEventloopEvents.pointerUp({
             x: touch.pageX,
             y: touch.pageY,
             button: 0,
@@ -483,7 +480,7 @@ export class WasmApp {
     let lastWheelTime: number;
     let lastWasWheel: boolean;
     rpc.receive(WorkerEvent.CanvasWheel, (event: RpcWheelEvent) => {
-      const finger = mouseToFinger(event);
+      const pointer = mouseToPointer(event);
       const delta = event.timeStamp - lastWheelTime;
       lastWheelTime = event.timeStamp;
       // typical web bullshit. this reliably detects mousewheel or touchpad on mac in safari
@@ -513,13 +510,13 @@ export class WasmApp {
         const offsetHeight = 800;
         fac = offsetHeight;
       }
-      const fingerScroll = {
-        ...finger,
+      const pointerScroll = {
+        ...pointer,
         scrollX: event.deltaX * fac,
         scrollY: event.deltaY * fac,
         isWheel: lastWasWheel,
       };
-      this.zerdeEventloopEvents.fingerScroll(fingerScroll);
+      this.zerdeEventloopEvents.pointerScroll(pointerScroll);
       this.doWasmIo();
     });
 

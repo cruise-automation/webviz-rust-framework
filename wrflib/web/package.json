@@ -1,6 +1,6 @@
 {
     "name": "wrflib",
-    "version": "0.0.6",
+    "version": "0.0.7",
     "license": "MIT",
     "main": "dist/wrflib_runtime.js",
     "files": [
@@ -24,7 +24,7 @@
         "worker-loader": "^3.0.8"
     },
     "scripts": {
-        "prepublish": "yarn run build",
+        "prepack": "yarn run build",
         "build": "webpack --mode production",
         "watch": "webpack --watch --mode development",
         "lint": "eslint . --ext .js,.jsx,.ts,.tsx"

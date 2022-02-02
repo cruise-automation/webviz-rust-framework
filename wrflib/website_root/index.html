@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<!--
+Copyright (c) 2021-present, Cruise LLC
+
+This source code is licensed under the Apache License, Version 2.0,
+found in the LICENSE-APACHE file in the root directory of this source tree.
+You may not use this file except in compliance with the License.
+-->
+<html style="margin: 0; padding: 0">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="Cache-Control" content="no-cache">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Wrflib</title>
+
+    <style>
+        @media (max-width: 750px) {
+            #lightning-container {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body style="margin: 0; padding: 0">
+    <div id="lightning-container" style="width: 100%; height: 650px; text-align: center; background: black">
+        <iframe style="width: 100%; max-width: 1100px; height: 650px; display: inline-block; border: none" src="example_lightning.html?release"></iframe>
+    </div>
+
+    <div style="padding: 3em">
+        Welcome to Wrflib! Check out the <a href="docs">main docs</a> or the <a href="target/doc/wrflib">generated API
+            reference</a>.
+
+        Examples:
+        <ul>
+            <li><a href="example_bigedit.html?release">example_bigedit</a></a></li>
+            <li><a href="example_charts.html?release">example_charts</a></a></li>
+            <li><a href="example_lightning.html?release">example_lightning</a></a></li>
+            <li><a href="example_lots_of_buttons.html?release">example_lots_of_buttons</a></a></li>
+            <li><a href="example_shader.html?release">example_shader</a></a></li>
+            <li><a href="example_single_button.html?release">example_single_button</a></a></li>
+            <li><a href="example_text.html?release">example_text</a></a></li>
+        </ul>
+    </div>
+
+    <script>
+        try {
+            new window.SharedArrayBuffer();
+        } catch(e) {
+            document.body.removeChild(document.getElementById("lightning-container"));
+        }
+    </script>
+</body>
+
+</html>

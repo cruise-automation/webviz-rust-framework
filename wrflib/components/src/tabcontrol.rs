@@ -7,7 +7,6 @@
 use wrflib::*;
 
 use crate::background::*;
-use crate::scrollbar::*;
 use crate::scrollview::*;
 use crate::tab::*;
 
@@ -21,7 +20,7 @@ pub struct TabControl {
     //pub tab_fill_color: ColorId,
     pub tab_fill: Background,
 
-    pub _dragging_tab: Option<(FingerMoveEvent, usize)>,
+    pub _dragging_tab: Option<(PointerMoveEvent, usize)>,
     pub _tab_id_alloc: usize,
     pub _tab_now_selected: Option<usize>,
     pub _tab_last_selected: Option<usize>,
@@ -31,8 +30,8 @@ pub struct TabControl {
 #[derive(Clone, PartialEq)]
 pub enum TabControlEvent {
     None,
-    TabDragMove { fe: FingerMoveEvent, tab_id: usize },
-    TabDragEnd { fe: FingerUpEvent, tab_id: usize },
+    TabDragMove { pe: PointerMoveEvent, tab_id: usize },
+    TabDragEnd { pe: PointerUpEvent, tab_id: usize },
     TabSelect { tab_id: usize },
     TabClose { tab_id: usize },
 }
@@ -43,7 +42,7 @@ impl TabControl {
     pub fn new() -> Self {
         Self {
             tabs_view: ScrollView::default().with_scroll_h(
-                ScrollBar::default().with_bar_size(8.0).with_smoothing(0.15).with_use_vertical_finger_scroll(true),
+                ScrollBarConfig::default().with_bar_size(8.0).with_smoothing(0.15).with_use_vertical_pointer_scroll(true),
             ),
 
             page_view: View::default(),
@@ -77,19 +76,19 @@ impl TabControl {
                     // deselect the other tabs
                     tab_control_event = TabControlEvent::TabSelect { tab_id }
                 }
-                TabEvent::DragMove(fe) => {
-                    self._dragging_tab = Some((fe.clone(), tab_id));
+                TabEvent::DragMove(pe) => {
+                    self._dragging_tab = Some((pe.clone(), tab_id));
                     // flag our view as dirty, to trigger
                     //cx.request_draw();
                     cx.request_draw();
 
-                    tab_control_event = TabControlEvent::TabDragMove { fe, tab_id };
+                    tab_control_event = TabControlEvent::TabDragMove { pe, tab_id };
                 }
-                TabEvent::DragEnd(fe) => {
+                TabEvent::DragEnd(pe) => {
                     self._dragging_tab = None;
                     cx.request_draw();
 
-                    tab_control_event = TabControlEvent::TabDragEnd { fe, tab_id };
+                    tab_control_event = TabControlEvent::TabDragEnd { pe, tab_id };
                 }
                 TabEvent::Closing => {
                     // this tab is closing. select the visible one
@@ -198,11 +197,11 @@ impl TabControl {
         self.tab_fill.end_draw(cx);
 
         self.tabs.truncate(self._tab_id_alloc);
-        if let Some((fe, id)) = &self._dragging_tab {
+        if let Some((pe, id)) = &self._dragging_tab {
             cx.begin_absolute_box();
             self.drag_tab_view.begin_view(cx, LayoutSize::FILL);
 
-            self.drag_tab.abs_origin = Some(Vec2 { x: fe.abs.x - fe.rel_start.x, y: fe.abs.y - fe.rel_start.y });
+            self.drag_tab.abs_origin = Some(Vec2 { x: pe.abs.x - pe.rel_start.x, y: pe.abs.y - pe.rel_start.y });
             let origin_tab = &mut self.tabs[*id];
             self.drag_tab.label = origin_tab.label.clone();
             self.drag_tab.is_closeable = origin_tab.is_closeable;

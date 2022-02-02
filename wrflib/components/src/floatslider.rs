@@ -26,7 +26,7 @@ static BACKGROUND_SHADER: Shader = Shader {
                 let df = Df::viewport(pos * rect_size);
                 let x1 = hor_pad + (rect_size.x-hor_pad*2.) * min_norm;
                 let x2 = hor_pad + (rect_size.x-hor_pad*2.) * max_norm;
-                df.rect(x1, rect_size.y/2. - height_pixels/2., x2 - x1, height_pixels);
+                df.rect(vec2(x1, rect_size.y/2. - height_pixels/2.), vec2(x2 - x1, height_pixels));
                 return df.fill(color);
             }"#
         ),
@@ -51,10 +51,15 @@ static KNOB_SHADER: Shader = Shader {
             fn pixel() -> vec4 {
                 let df = Df::viewport(pos * rect_size);
 
-                let width = 7.;
-                let height = 15.;
-                df.box(hor_pad + (rect_size.x-hor_pad*2.) * norm_value -
-                    width*0.5, rect_size.y/2. - height/2., width, height, 1.);
+                let dim = vec2(7., 15.);
+                df.box(
+                    vec2(
+                        hor_pad + (rect_size.x - hor_pad * 2.) * norm_value,
+                        rect_size.y / 2.
+                    ) - dim / 2.,
+                    dim,
+                    1.
+                );
 
                 let color = mix(mix(#7, #B, hover), #F, down);
                 df.fill(color);
@@ -177,7 +182,7 @@ impl FloatSlider {
         slider.down = self.animator.get_float(1);
     }
 
-    pub fn handle_finger(&mut self, cx: &mut Cx, rel: Vec2) -> FloatSliderEvent {
+    pub fn handle_pointer(&mut self, cx: &mut Cx, rel: Vec2) -> FloatSliderEvent {
         let slider = self.area.get_first_mut::<FloatSliderIns>(cx);
         let rect = slider.base.rect();
 
@@ -203,10 +208,10 @@ impl FloatSlider {
             self.animate(cx);
         }
 
-        match event.hits_finger(cx, self.component_id, self.area.get_rect_for_first_instance(cx)) {
-            Event::FingerHover(fe) => {
+        match event.hits_pointer(cx, self.component_id, self.area.get_rect_for_first_instance(cx)) {
+            Event::PointerHover(pe) => {
                 cx.set_hover_mouse_cursor(MouseCursor::Arrow);
-                match fe.hover_state {
+                match pe.hover_state {
                     HoverState::In => {
                         self.animator.play_anim(cx, ANIM_HOVER);
                     }
@@ -216,16 +221,16 @@ impl FloatSlider {
                     _ => (),
                 }
             }
-            Event::FingerDown(fe) => {
+            Event::PointerDown(pe) => {
                 self.animator.play_anim(cx, ANIM_DOWN);
                 cx.set_down_mouse_cursor(MouseCursor::Arrow);
                 self.dragging = true;
-                return self.handle_finger(cx, fe.rel);
+                return self.handle_pointer(cx, pe.rel);
                 // lets check where we clicked!
             }
-            Event::FingerUp(fe) => {
-                if fe.is_over {
-                    if fe.input_type.has_hovers() {
+            Event::PointerUp(pe) => {
+                if pe.is_over {
+                    if pe.input_type.has_hovers() {
                         self.animator.play_anim(cx, ANIM_HOVER);
                     } else {
                         self.animator.play_anim(cx, ANIM_DEFAULT);
@@ -236,9 +241,9 @@ impl FloatSlider {
                 self.dragging = false;
                 return FloatSliderEvent::DoneChanging;
             }
-            Event::FingerMove(fe) => return self.handle_finger(cx, fe.rel),
-            Event::FingerScroll(fs) => {
-                self.norm_value += fs.scroll.x / 1000.0;
+            Event::PointerMove(pe) => return self.handle_pointer(cx, pe.rel),
+            Event::PointerScroll(ps) => {
+                self.norm_value += ps.scroll.x / 1000.0;
                 self.norm_value = self.norm_value.min(1.0).max(0.0);
                 self.scaled_value = self.norm_value * (self.max - self.min) + self.min;
                 let slider = self.area.get_first_mut::<FloatSliderIns>(cx);

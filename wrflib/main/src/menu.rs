@@ -37,6 +37,7 @@ impl Cx {
 
 /// An alias over LocationHash so we have a semantic type
 /// but can change the underlying implementation whenever.
+/// See [`Event::Command`].
 pub type CommandId = LocationHash;
 
 impl CommandId {

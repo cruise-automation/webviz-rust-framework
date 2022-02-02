@@ -38,13 +38,13 @@ static SHADER: Shader = Shader {
                 let w = rect_size.x;
                 let h = rect_size.y;
                 if anim_pos< -0.5 {
-                    df.move_to(0.5 * w, line_vec.x * h);
-                    df.line_to(0.5 * w, line_vec.y * h);
+                    df.move_to(vec2(0.5 * w, line_vec.x * h));
+                    df.line_to(vec2(0.5 * w, line_vec.y * h));
                     return df.stroke(color * 0.5, 1.);
                 }
                 else { // its a folder
-                    df.box(0. * w, 0.35 * h, 0.87 * w, 0.39 * h, 0.75);
-                    df.box(0. * w, 0.28 * h, 0.5 * w, 0.3 * h, 1.);
+                    df.box(vec2(0. * w, 0.35 * h), vec2(0.87 * w, 0.39 * h), 0.75);
+                    df.box(vec2(0. * w, 0.28 * h), vec2(0.5 * w, 0.3 * h), 1.);
                     df.union();
                     // ok so.
                     return df.fill(color);
@@ -58,7 +58,7 @@ static SHADER: Shader = Shader {
 pub struct FileTree {
     pub view: ScrollView,
     drag_view: View,
-    _drag_move: Option<FingerMoveEvent>,
+    _drag_move: Option<PointerMoveEvent>,
     pub root_node: FileNode,
     drag_bg: Background,
 
@@ -75,9 +75,9 @@ pub struct FileTree {
 #[derive(Clone, PartialEq)]
 pub enum FileTreeEvent {
     None,
-    DragMove { fe: FingerMoveEvent, paths: Vec<String> },
+    DragMove { pe: PointerMoveEvent, paths: Vec<String> },
     DragCancel,
-    DragEnd { fe: FingerUpEvent, paths: Vec<String> },
+    DragEnd { pe: PointerUpEvent, paths: Vec<String> },
     SelectFile { path: String },
     SelectFolder { path: String },
 }
@@ -106,7 +106,7 @@ impl FileTree {
 
             drag_bg: Background::default().with_radius(2.),
 
-            view: ScrollView::default().with_scroll_v(ScrollBar::default().with_smoothing(0.15)),
+            view: ScrollView::default().with_scroll_v(ScrollBarConfig::default().with_smoothing(0.15)),
 
             drag_view: View::default().with_is_overlay(true),
 
@@ -178,7 +178,7 @@ impl FileTree {
         // but filtered out somewhat based on a bounding rect
         let mut unmark_nodes = false;
         let mut drag_nodes = false;
-        let mut drag_end: Option<FingerUpEvent> = None;
+        let mut drag_end: Option<PointerUpEvent> = None;
         let mut select_node = 0;
         while let Some((_depth, _index, _len, node)) = file_walker.walk() {
             // alright we haz a node. so now what.
@@ -195,8 +195,8 @@ impl FileTree {
                 self.node_bg.set_color(cx, node_draw.animator.get_vec4(0));
             }
 
-            match event.hits_finger(cx, node_draw.component_id, node_draw.area.get_rect_for_first_instance(cx)) {
-                Event::FingerDown(_fe) => {
+            match event.hits_pointer(cx, node_draw.component_id, node_draw.area.get_rect_for_first_instance(cx)) {
+                Event::PointerDown(_pe) => {
                     // mark ourselves, unmark others
                     if is_filenode {
                         select_node = 1;
@@ -219,30 +219,30 @@ impl FileTree {
                         cx.request_draw();
                     }
                 }
-                Event::FingerUp(fe) => {
+                Event::PointerUp(pe) => {
                     if self._drag_move.is_some() {
-                        drag_end = Some(fe);
+                        drag_end = Some(pe);
                         // we now have to do the drop....
                         cx.request_draw();
                         //self._drag_move = None;
                     }
                 }
-                Event::FingerMove(fe) => {
+                Event::PointerMove(pe) => {
                     cx.set_down_mouse_cursor(MouseCursor::Hand);
                     if self._drag_move.is_none() {
-                        if fe.move_distance() > 50. {
-                            self._drag_move = Some(fe);
+                        if pe.move_distance() > 50. {
+                            self._drag_move = Some(pe);
                             cx.request_draw();
                         }
                     } else {
-                        self._drag_move = Some(fe);
+                        self._drag_move = Some(pe);
                         cx.request_draw();
                     }
                     drag_nodes = true;
                 }
-                Event::FingerHover(fe) => {
+                Event::PointerHover(pe) => {
                     cx.set_hover_mouse_cursor(MouseCursor::Hand);
-                    match fe.hover_state {
+                    match pe.hover_state {
                         HoverState::In => {
                             node_draw.animator.play_anim(cx, Self::get_over_anim(counter, node_draw.marked != 0));
                         }
@@ -273,20 +273,20 @@ impl FileTree {
                 }
             }
         }
-        if let Some(fe) = drag_end {
+        if let Some(pe) = drag_end {
             self._drag_move = None;
             let paths = Self::get_marked_paths(&mut self.root_node);
-            if !self.view.area().get_rect_for_first_instance(cx).unwrap_or_default().contains(fe.abs) {
-                return FileTreeEvent::DragEnd { fe, paths };
+            if !self.view.area().get_rect_for_first_instance(cx).unwrap_or_default().contains(pe.abs) {
+                return FileTreeEvent::DragEnd { pe, paths };
             }
         }
         if drag_nodes {
-            if let Some(fe) = &self._drag_move {
+            if let Some(pe) = &self._drag_move {
                 // lets check if we are over our own filetree
                 // ifso, we need to support moving files with directories
                 let paths = Self::get_marked_paths(&mut self.root_node);
-                if !self.view.area().get_rect_for_first_instance(cx).unwrap_or_default().contains(fe.abs) {
-                    return FileTreeEvent::DragMove { fe: fe.clone(), paths };
+                if !self.view.area().get_rect_for_first_instance(cx).unwrap_or_default().contains(pe.abs) {
+                    return FileTreeEvent::DragMove { pe: pe.clone(), paths };
                 } else {
                     return FileTreeEvent::DragCancel;
                 }

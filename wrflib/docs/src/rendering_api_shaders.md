@@ -121,7 +121,7 @@ return #f;</code></pre></td></tr>
         break;
     }
 }</code></pre></td></tr>
-<tr><td>?</td><td>In-line conditional</td><td><code>let pos = is_left ? start : end;</code></td></tr>
+<tr><td>?</td><td>Ternary operator</td><td><code>let pos = is_left ? start : end;</code></td></tr>
 </table>
 
 The following built-in functions are available: [abs](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/abs.xhtml), [acos](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/acos.xhtml), [acos](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/acos.xhtml), [all](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/all.xhtml), [any](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/any.xhtml), [asin](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/asin.xhtml), [atan](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/atan.xhtml), [ceil](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/ceil.xhtml), [clamp](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/clamp.xhtml), [cos](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/cos.xhtml), [cross](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/cross.xhtml), [degrees](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/degrees.xhtml), [dFdx](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/dFdx.xhtml), [dFdy](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/dFdy.xhtml), [distance](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/distance.xhtml), [dot](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/dot.xhtml), [equal](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/equal.xhtml), [exp](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/exp.xhtml), [exp2](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/exp2.xhtml), [faceforward](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/faceforward.xhtml), [floor](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/floor.xhtml), [fract](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/fract.xhtml), [greaterThan](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/greaterThan.xhtml), [greaterThanEqual](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/greaterThanEqual.xhtml), [inversesqrt](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/inversesqrt.xhtml), [inverse](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/inverse.xhtml), [length](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/length.xhtml), [lessThan](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/lessThan.xhtml), [lessThanEqual](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/lessThanEqual.xhtml), [log](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/log.xhtml), [log2](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/log2.xhtml), [matrixCompMult](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/matrixCompMult.xhtml), [max](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/max.xhtml), [min](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/min.xhtml), [mix](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/mix.xhtml), [mod](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/mod.xhtml), [normalize](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/normalize.xhtml), [not](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/not.xhtml), [notEqual](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/notEqual.xhtml), [pow](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/pow.xhtml), [radians](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/radians.xhtml), [reflect](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/reflect.xhtml), [refract](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/refract.xhtml), [sample2d](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/sample2d.xhtml), [sign](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/sign.xhtml), [sin](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/sin.xhtml), [smoothstep](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/smoothstep.xhtml), [sqrt](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/sqrt.xhtml), [step](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/step.xhtml), [tan](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/tan.xhtml), [transpose](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/transpose.xhtml).
@@ -187,21 +187,39 @@ These values get set by a combination of [`Pass::set_matrix_mode`](/target/doc/w
 ### Distance fields
 Wrflib contains many functions for [Signed Distance Fields (SDFs)](https://jasmcole.com/2019/10/03/signed-distance-fields/) under the `Df` namespace. SDFs are a comprehensive way to define flexible shapes on the GPU. While applicable in 2D and 3D contexts, Wrflib uses this only for 2D rendering.
 
+To create a distance field, use either:
+
 | Name | Type | Description |
 |-|-|-|
 | Df::viewport | (pos: vec2) -> Df | Creates a distance field with the current position |
 | Df::viewport_px | (pos: vec2) -> Df | Creates a distance field with the current position, factoring in `dpi_factor` |
-| Df::add_field | (inout self, field: float) | Adds a new field value to the current distance field |
-| Df::add_clip | (inout self, d: float) -> void | Adds a clip mask to the current distance field |
-| Df::antialias | (p: vec2) -> float | Distance-based antialiasing |
-| Df::translate | (inout self, offset: vec2) -> vec2 | Translate a specified offset |
-| Df::rotate | (inout self, a: float, pivot: vec2) -> void | Rotate by `a` radians around `pivot` |
-| Df::scale | (inout self, f: float, pivot: vec2) -> void | Uniformly scale by factor `f` around `pivot` |
-| Df::clear | (inout self, src: vec4)  -> void | Sets clear color. Useful for specifying background colors before rendering a path. |
-| Df::new_path | (inout self) -> void | Clears path in current distance field. |
-| Df::fill | (inout self, color: vec4) -> vec4 | Fills the current path with `color`. |
-| Df::stroke | (inout self, color: vec4, width: float) -> vec4 | Strokes the current path with `color` with a pixel width of `width`. |
-| Df::glow | (inout self, color: vec4, width: float) -> vec4 | Updates the current path by summing colors in `width` with the provided one. |
-| Df::union | (inout self) -> void | Set field to the union of the current and previous field. |
-| Df::intersect | (inout self) -> void | Set field to the intersection of the current and previous field. |
-| Df::subtract | (inout self) -> void | Subtract current field from previous. |
+
+The following methods are available on the instantiated `Df` struct.
+
+| Name | Type | Description |
+|-|-|-|
+| df.add_field | (field: float) -> void | Adds a new field value to the current distance field |
+| df.add_clip | (d: float) -> void | Adds a clip mask to the current distance field |
+| df.antialias | (p: vec2) -> float | Distance-based antialiasing |
+| df.translate | (offset: vec2) -> vec2 | Translate a specified offset |
+| df.rotate | (a: float, pivot: vec2) -> void | Rotate by `a` radians around `pivot` |
+| df.scale | (f: float, pivot: vec2) -> void | Uniformly scale by factor `f` around `pivot` |
+| df.clear | (src: vec4)  -> void | Sets clear color. Useful for specifying background colors before rendering a path. |
+| df.new_path | () -> void | Clears path in current distance field. |
+| df.fill | (color: vec4) -> vec4 | Fills the current path with `color`. |
+| df.stroke | (color: vec4, width: float) -> vec4 | Strokes the current path with `color` with a pixel width of `width`. |
+| df.glow | (color: vec4, width: float) -> vec4 | Updates the current path by summing colors in `width` with the provided one. |
+| df.union | () -> void | Set field to the union of the current and previous field. |
+| df.intersect | () -> void | Set field to the intersection of the current and previous field. |
+| df.subtract | () -> void | Subtract current field from previous. |
+| df.blend | (k: float) -> void | Interpolate current field and previous with factor `k`. |
+| df.circle | (p: vec2, r: float) -> void | Render a circle at `p` with radius `r`. |
+| df.arc | (p: vec2, r: float, angle_start: float, angle_end: float) -> void | Render an arc at `p` with radius `r` between angles `angle_start` and `angle_end`. |
+| df.rect | (p: vec2, d: vec2) -> void | Render a rectangle at `p` with dimensions `d`. |
+| df.box | (p: vec2, d: vec2, r: float) -> void | Render a box with rounded corners at `p` with dimensions `d`. Use `r` to indicate the corner radius - if `r` is less than 1, render a basic rectangle. If `r` is bigger than `min(w, h)`, the result will be a circle. |
+| df.triangle | (p0: vec2, p1: vec2, p2: vec2) -> void | Render a triangle between points  `p0`, `p1`, `p2`. |
+| df.hexagon | (p: vec2, r: float) -> void | Render a hexagon at p with side length `r`. |
+| df.move_to | (p: vec2) -> void | Move to `p` in current path, not drawing from current position. |
+| df.line_to | (p: vec2) -> void | Render a line to `p` from current position. |
+| df.close_path | () -> void | End the current field by rendering a line back to the start point. |
+

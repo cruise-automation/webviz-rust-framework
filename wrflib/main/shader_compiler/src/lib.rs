@@ -16,11 +16,12 @@
 
 mod analyse;
 mod builtin;
+pub mod code_fragment;
 mod const_eval;
 mod dep_analyse;
 mod detok;
 mod env;
-mod error;
+pub mod error;
 mod generate;
 pub mod generate_glsl;
 pub mod generate_hlsl;
@@ -33,7 +34,7 @@ mod lit;
 pub mod math;
 mod shaderast;
 mod shaderparser;
-mod span;
+pub mod span;
 mod swizzle;
 mod token;
 pub mod ty;

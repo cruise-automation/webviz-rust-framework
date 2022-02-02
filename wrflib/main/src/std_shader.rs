@@ -211,49 +211,47 @@ impl Cx {
                 self.old_shape = self.shape = max(-self.field, self.old_shape);
             }
 
-            fn gloop(inout self, k: float) {
-                let h = clamp(0.5 + 0.5 * (self.old_shape - self.field) / k, 0.0, 1.0);
-                self.old_shape = self.shape = mix(self.old_shape, self.field, h) - k * h * (1.0 - h);
-            }
-
+            // Interpolate current field and previous with factor k
             fn blend(inout self, k: float) {
                 self.old_shape = self.shape = mix(self.old_shape, self.field, k);
             }
 
-            // Renders a circle at point (x, y) with radius r
-            fn circle(inout self, x: float, y: float, r: float) {
-                let c = self.pos - vec2(x, y);
+            // Renders a circle at p with radius r
+            fn circle(inout self, p: vec2, r: float) {
+                let c = self.pos - p;
                 self.add_field(length(c) - r);
             }
 
-            fn arc(inout self, x: float, y: float, r: float, angle_start: float, angle_end: float) {
-                let c = self.pos - vec2(x, y);
+            // Render an arc at p with radius r between angles angle_start and angle_end.
+            fn arc(inout self, p: vec2, r: float, angle_start: float, angle_end: float) {
+                let c = self.pos - p;
                 let angle = mod(atan(c.x, -c.y) + 2.*PI, 2.*PI);
                 let d = max( angle_start - angle, angle - angle_end );
                 let len = max(length(c) * d, length(c) - r);
                 self.add_field(len / self.scale);
             }
 
-            // A box with rounded corners.
-            // Use `r` to indicate the corner radius. If the radius is less than 1,
-            // we just render a basic rectangle. If the value of radius is bigger than
-            // min(w, h), the result will be a circle.
-            fn box(inout self, x: float, y: float, w: float, h: float, r: float) {
-                let s = 0.5 * vec2(w, h);
-                let o = vec2(x, y) + s;
-                r = min(r, min(w, h));
+            // Render a box with rounded corners at p with dimensions d.
+            // Use `r` to indicate the corner radius - if r is less than 1, render a basic
+            // rectangle. If r is bigger than min(w, h), the result will be a circle.
+            fn box(inout self, p: vec2, d: vec2, r: float) {
+                let s = 0.5 * d;
+                let o = p + s;
+                r = min(r, min(d.x, d.y));
                 s -= r;
-                let d = abs(o - self.pos) - s;
-                let dmin = min(d, 0.);
-                let dmax = max(d, 0.);
+                let dist = abs(o - self.pos) - s;
+                let dmin = min(dist, 0.);
+                let dmax = max(dist, 0.);
                 let df = max(dmin.x, dmin.y) + length(dmax);
                 self.add_field(df - r);
             }
 
-            fn rect(inout self, x: float, y: float, w: float, h: float) {
-                self.box(x, y, w, h, 0.);
+            // Render a rectangle at p with dimensions d.
+            fn rect(inout self, p: vec2, d: vec2) {
+                self.box(p, d, 0.);
             }
 
+            // Render a triangle between points p0, p1, p2.
             fn triangle(inout self, p0: vec2, p1: vec2, p2: vec2) {
                 let e0 = p1 - p0;
                 let e1 = p2 - p1;
@@ -275,20 +273,21 @@ impl Cx {
                 self.add_field(-sqrt(d.x) * sign(d.y));
             }
 
-            fn hexagon(inout self, x: float, y: float, r: float) {
-                let dx = abs(x - self.pos.x) * 1.15;
-                let dy = abs(y - self.pos.y);
+            // Render a hexagon at p with side length r.
+            fn hexagon(inout self, p: vec2, r: float) {
+                let dx = abs(p.x - self.pos.x) * 1.15;
+                let dy = abs(p.y - self.pos.y);
                 self.add_field(max(dy + cos(60.0 * TORAD) * dx - r, dx - r));
             }
 
-            fn move_to(inout self, x: float, y: float) {
+            // Move to p in current path, not drawing from current position.
+            fn move_to(inout self, p: vec2) {
                 self.last_pos =
-                self.start_pos = vec2(x, y);
+                self.start_pos = p;
             }
 
-            fn line_to(inout self, x: float, y: float) {
-                let p = vec2(x, y);
-
+            // Render a line to p from current position.
+            fn line_to(inout self, p: vec2) {
                 let pa = self.pos - self.last_pos;
                 let ba = p - self.last_pos;
                 let h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
@@ -301,8 +300,9 @@ impl Cx {
                 self.last_pos = p;
             }
 
+            // End the current field by rendering a line back to the start point
             fn close_path(inout self) {
-                self.line_to(self.start_pos.x, self.start_pos.y);
+                self.line_to(self.start_pos);
             }
         }
     "#
